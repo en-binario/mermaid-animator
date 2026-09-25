@@ -195,12 +195,13 @@ describe('timeline', () => {
 
   it('snaps to the nearest step boundary', () => {
     expect(snapTime(timeline, 50)).toBe(0);
-    expect(snapTime(timeline, 300)).toBe(315);
+    expect(snapTime(timeline, 300)).toBe(stepEnd(timeline, 0));
+    expect(stepEnd(timeline, 0)).toBe(315 + 240);
     expect(snapTime(timeline, timeline.starts[1]! + 200)).toBe(stepEnd(timeline, 1));
   });
 
   it('builds an empty timeline for no steps', () => {
-    expect(buildTimeline([])).toEqual({ starts: [], transitions: [], dwells: [], holds: [], duration: 0 });
+    expect(buildTimeline([])).toEqual({ starts: [], transitions: [], settles: [], dwells: [], holds: [], duration: 0 });
   });
 });
 

@@ -11,6 +11,7 @@
 | **Status** | Approved for M0/M1 implementation |
 | **Review** | [vscode-extension-specification-review.md](vscode-extension-specification-review.md) — disposition in Appendix E |
 | **Delivery workflow** | OpenSpec (`openspec/`) — see §23.1 |
+| **Implementation status** | M0 and M1 delivered (2026-09-25); living requirements in `openspec/specs/` |
 | **Source material** | [ideas-exploration.md](ideas-exploration.md) |
 | **Working identifier** | `enbinario.mermaid-animator` *(publisher ID to be confirmed — see §25)* |
 
@@ -1974,8 +1975,8 @@ Budgets are enforced in CI (§21.5): bundle sizes by `size-limit`; runtime metri
 
 | Area | Measure |
 |---|---|
-| **Content Security Policy** | `default-src 'none'; script-src 'nonce-<random>' ${webview.cspSource}; style-src ${webview.cspSource} 'nonce-<random>'; img-src ${webview.cspSource} data: blob:; font-src ${webview.cspSource} data:; worker-src ${webview.cspSource} blob:; connect-src 'none';`. The native renderer sets styles via CSSOM and attributes only, which CSP permits. `${webview.cspSource}` in `script-src` is required for lazily imported chunks and for `importScripts` inside blob workers (§13.2); `blob:` in `worker-src` permits the blob shim. |
-| **Mermaid's inline styles** | Mermaid injects `<style>` elements into its SVG. For the `mermaid-overlay` and generic engines, those style elements are extracted and re-applied through a nonce'd stylesheet (or via CSSOM) so `'unsafe-inline'` is not required. If this proves infeasible for a Mermaid version, `'unsafe-inline'` may be enabled **for styles only**, never scripts — recorded as a decision (§25). |
+| **Content Security Policy** | `default-src 'none'; script-src 'nonce-<random>' ${webview.cspSource}; style-src ${webview.cspSource} 'nonce-<random>'; style-src-attr 'unsafe-inline'; img-src ${webview.cspSource} data: blob:; font-src ${webview.cspSource} data:; worker-src ${webview.cspSource} blob:; connect-src 'none';`. The native renderer sets styles via CSSOM and attributes only, which CSP permits. `${webview.cspSource}` in `script-src` is required for lazily imported chunks and for `importScripts` inside blob workers (§13.2); `blob:` in `worker-src` permits the blob shim. |
+| **Mermaid's inline styles** | Mermaid writes `style` *attributes* while it renders and injects `<style>` *elements* into its SVG. Style attributes are permitted with `style-src-attr 'unsafe-inline'` (decided in M1, ADR-015): scripts stay nonce-locked and `connect-src 'none'` leaves CSS no exfiltration channel. `<style>` elements remain blocked; their CSS is re-applied as a constructed stylesheet (`adoptedStyleSheets`). Because Mermaid measures labels while its own `<style>` is blocked, the generic engine renders twice with the same id — the first pass supplies the CSS that the measuring pass then sees — and uses SVG text labels (`htmlLabels: false`). The expected console messages about blocked `<style>` elements come from Mermaid and are harmless. |
 | **Mermaid configuration** | `securityLevel: "strict"`, `htmlLabels` sanitised by Mermaid's DOMPurify; user `%%{init}%%` cannot lower `securityLevel` (forced after merge). |
 | **Label rendering** | Native renderer uses `textContent` only; Mermaid `<br/>` handled by splitting into `<tspan>`s. Caption mini-markup is parsed by a whitelist parser into DOM nodes, never `innerHTML`. |
 | **Links** | Diagram links (`link`, `links`, `click`) are never followed automatically. Opening requires a confirmation dialog showing the full URL; only `http`, `https` and `mailto` are allowed; opened via `vscode.env.openExternal`. |
@@ -2188,6 +2189,8 @@ Each milestone is delivered as one or more **OpenSpec changes** under `openspec/
 | ADR-012 | Two-level step identity (`StepId` + `structuralId`) with optional `@step-id` (§13.6.3). | Accepted (review 3.2) |
 | ADR-013 | Webview workers via same-origin blob shim (§13.2). | Accepted (review 3.4) |
 | ADR-014 | OpenSpec change proposals as the delivery workflow (§23.1). | Accepted |
+| ADR-015 | `style-src-attr 'unsafe-inline'` for Mermaid's style attributes; `<style>` elements stay blocked and are re-applied as constructed stylesheets (§18). | Accepted (M1) |
+| ADR-016 | A step "rests" after its transition *and* a 240 ms settle (arrowhead, activation growth, receiver glow), so a paused frame is fully composed (§9.8.3, `stepEnd`). | Accepted (M1) |
 
 ---
 

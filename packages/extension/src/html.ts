@@ -17,6 +17,8 @@ export function buildCsp(cspSource: string, nonce: string): string {
     "default-src 'none'",
     `script-src 'nonce-${nonce}' ${cspSource}`,
     `style-src ${cspSource} 'nonce-${nonce}'`,
+    // Mermaid (generic fallback) writes style attributes; style elements still require the nonce.
+    "style-src-attr 'unsafe-inline'",
     `img-src ${cspSource} data: blob:`,
     `font-src ${cspSource} data:`,
     `worker-src ${cspSource} blob:`,

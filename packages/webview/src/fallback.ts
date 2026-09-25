@@ -1,0 +1,326 @@
+/**
+ * Generic engine (spec §10.12): Mermaid renders the diagram; its groups are revealed in order,
+ * one per step, with the same transport, camera and export as native diagrams.
+ */
+import type { Point, Rect } from '@mermaid-animator/core';
+import { buildTimeline, positionAt, type Step, type Timeline } from '@mermaid-animator/core';
+import type { WebviewSettings } from '@mermaid-animator/protocol';
+import { DURATION, EASE, SVG_NS, windowed } from '@mermaid-animator/renderer';
+import { orderGroups, type GroupInfo } from './fallbackOrder';
+
+import type mermaidDefault from 'mermaid';
+
+type MermaidApi = typeof mermaidDefault;
+
+let mermaidPromise: Promise<MermaidApi> | undefined;
+
+/** Text of every <style> element in an SVG string. */
+function extractCss(svgText: string): string {
+  const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+  return [...doc.querySelectorAll('style')].map((s) => s.textContent ?? '').join('\n');
+}
+
+let renderCount = 0;
+
+function loadMermaid(): Promise<MermaidApi> {
+  mermaidPromise ??= import('mermaid').then((m) => m.default);
+  return mermaidPromise;
+}
+
+const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(`--ma-${name}`).trim();
+
+/** Mermaid `base` theme variables derived from the active Ink & Ivory palette. */
+function themeVariables(): Record<string, string> {
+  return {
+    fontFamily: '"Inter Variable", system-ui, sans-serif',
+    fontSize: '13px',
+    background: token('canvas'),
+    primaryColor: token('surface'),
+    primaryBorderColor: token('rule'),
+    primaryTextColor: token('ink-1'),
+    secondaryColor: token('surface-sunken'),
+    secondaryBorderColor: token('rule'),
+    secondaryTextColor: token('ink-1'),
+    tertiaryColor: token('accent-muted'),
+    tertiaryBorderColor: token('rule'),
+    tertiaryTextColor: token('ink-1'),
+    lineColor: token('ink-2'),
+    textColor: token('ink-1'),
+    mainBkg: token('surface'),
+    nodeBorder: token('rule'),
+    clusterBkg: token('surface-sunken'),
+    clusterBorder: token('hairline'),
+    edgeLabelBackground: token('canvas'),
+    noteBkgColor: token('note-fill'),
+    noteBorderColor: token('note-rule'),
+    noteTextColor: token('ink-1'),
+    actorBkg: token('surface'),
+    actorBorder: token('rule'),
+    actorTextColor: token('ink-1'),
+    signalColor: token('ink-2'),
+    signalTextColor: token('ink-1'),
+    labelBoxBkgColor: token('surface-sunken'),
+    labelBoxBorderColor: token('hairline'),
+    labelTextColor: token('ink-1'),
+    loopTextColor: token('ink-2'),
+    activationBkgColor: token('accent-muted'),
+    activationBorderColor: token('accent'),
+    git0: token('accent'),
+    git1: token('brass'),
+    git2: token('sage'),
+    git3: token('viridian'),
+    pie1: token('accent'),
+    pie2: token('brass'),
+    pie3: token('sage'),
+    pie4: token('ink-3'),
+    pieSectionTextColor: token('surface'),
+    pieTitleTextColor: token('ink-1'),
+    pieLegendTextColor: token('ink-1'),
+    pieStrokeColor: token('canvas'),
+    pieStrokeWidth: '1.5px',
+    pieOuterStrokeColor: token('rule'),
+    pieOuterStrokeWidth: '1px',
+  };
+}
+
+/** Selectors for animatable groups, most specific first (nodes, then edges). */
+const NODE_SELECTORS = ['g.node', 'g.cluster', 'g.actor', 'g.stateGroup', 'g.classGroup', 'g.er.entityBox', 'g.commit-bullets > *', 'g.task', 'rect.task', 'g.pieCircle', 'path.pieCircle', 'g.section', 'g.mindmap-node', 'g.timeline-node', 'g.label-container'];
+const EDGE_SELECTORS = ['path.flowchart-link', 'g.edgePath', 'path.transition', 'path.relation', 'path.relationshipLine', 'path.messageLine0', 'path.messageLine1', 'line.messageLine0', 'line.messageLine1', 'path.commit-arrow', 'g.edge'];
+
+interface Group {
+  element: SVGGraphicsElement;
+  info: GroupInfo;
+  paths: { el: SVGGeometryElement; length: number; dashed: boolean }[];
+  label: string;
+  /** Elements revealed together with this group (edge labels). */
+  extra: SVGGraphicsElement[];
+}
+
+export class GenericDiagram {
+  private readonly holder: SVGGElement;
+  private groups: Group[] = [];
+  private sheet: CSSStyleSheet | undefined;
+  timeline: Timeline = { starts: [], transitions: [], settles: [], dwells: [], holds: [], duration: 0 };
+  bounds: Rect = { x: 0, y: 0, w: 100, h: 100 };
+
+  constructor(parent: SVGGElement) {
+    this.holder = document.createElementNS(SVG_NS, 'g');
+    this.holder.setAttribute('class', 'ma-generic');
+    parent.appendChild(this.holder);
+  }
+
+  static async canRender(source: string): Promise<boolean> {
+    try {
+      const mermaid = await loadMermaid();
+      mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+      await mermaid.parse(source);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  get stepCount(): number {
+    return this.groups.length;
+  }
+
+  get labels(): string[] {
+    return this.groups.map((g) => g.label);
+  }
+
+  async render(source: string, _settings: WebviewSettings): Promise<{ ok: true } | { ok: false; error: string }> {
+    let svgText: string;
+    try {
+      const mermaid = await loadMermaid();
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: 'strict',
+        theme: 'base',
+        themeVariables: themeVariables(),
+        fontFamily: '"Inter Variable", system-ui, sans-serif',
+        // SVG text labels are measured without depending on CSS (HTML labels are not).
+        htmlLabels: false,
+        flowchart: { htmlLabels: false },
+      });
+      // Mermaid's own <style> element is blocked by our CSP while it measures the diagram. Render once
+      // to obtain the CSS, adopt it as a constructed stylesheet, then render again with the same id so
+      // the measuring pass sees the real styles.
+      const id = `ma-generic-${++renderCount}`;
+      const first = (await mermaid.render(id, source)).svg;
+      this.adoptStyles(extractCss(first));
+      svgText = (await mermaid.render(id, source)).svg;
+    } catch (error) {
+      return { ok: false, error: String((error as Error)?.message ?? error).split('\n').slice(0, 3).join(' ') };
+    }
+    const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+    const svg = doc.documentElement as unknown as SVGSVGElement;
+    // Mermaid's <style> elements would be blocked by the CSP: apply them as a constructed stylesheet.
+    const css = [...svg.querySelectorAll('style')].map((s) => s.textContent ?? '').join('\n');
+    svg.querySelectorAll('style, script, foreignObject script').forEach((s) => s.remove());
+    this.adoptStyles(css);
+    const imported = document.importNode(svg, true) as SVGSVGElement;
+    const vb = imported.viewBox?.baseVal;
+    const width = vb && vb.width ? vb.width : Number.parseFloat(imported.getAttribute('width') ?? '400') || 400;
+    const height = vb && vb.height ? vb.height : Number.parseFloat(imported.getAttribute('height') ?? '300') || 300;
+    imported.removeAttribute('style');
+    imported.setAttribute('width', String(width));
+    imported.setAttribute('height', String(height));
+    imported.setAttribute('x', '0');
+    imported.setAttribute('y', '0');
+    this.holder.replaceChildren(imported);
+    this.bounds = { x: 0, y: 0, w: width, h: height };
+    const offset = { x: vb?.x ?? 0, y: vb?.y ?? 0 };
+    this.discover(imported, offset);
+    this.timeline = buildTimeline(this.groups.map((_, i) => ({ timing: { transitionMs: 420, dwellMs: 650, hold: false }, index: i }) as unknown as Step));
+    return { ok: true };
+  }
+
+  private adoptStyles(css: string): void {
+    const sheets = document.adoptedStyleSheets.filter((s) => s !== this.sheet);
+    if (!css) {
+      document.adoptedStyleSheets = sheets;
+      return;
+    }
+    this.sheet ??= new CSSStyleSheet();
+    this.sheet.replaceSync(css);
+    document.adoptedStyleSheets = [...sheets, this.sheet];
+  }
+
+  private discover(svg: SVGSVGElement, offset: Point): void {
+    const seen = new Set<Element>();
+    const candidates: { el: SVGGraphicsElement; kind: 'node' | 'edge' }[] = [];
+    const collect = (selectors: string[], kind: 'node' | 'edge') => {
+      for (const selector of selectors) {
+        for (const el of svg.querySelectorAll<SVGGraphicsElement>(selector)) {
+          if (seen.has(el) || [...seen].some((s) => s.contains(el) || el.contains(s))) continue;
+          seen.add(el);
+          candidates.push({ el, kind });
+        }
+      }
+    };
+    collect(NODE_SELECTORS, 'node');
+    collect(EDGE_SELECTORS, 'edge');
+    if (candidates.length === 0) {
+      const root = svg.querySelector(':scope > g') ?? svg;
+      for (const el of root.children) if (el instanceof SVGGraphicsElement) candidates.push({ el, kind: 'node' });
+    }
+    // Edge labels travel with the nearest edge.
+    const edgeLabels = [...svg.querySelectorAll<SVGGraphicsElement>('g.edgeLabel, g.edgeLabels > g')].filter((el) => !seen.has(el));
+
+    const toRect = (el: SVGGraphicsElement): Rect => {
+      try {
+        const b = el.getBBox();
+        const m = el.getCTM();
+        const root = svg.getCTM();
+        if (m && root) {
+          const inv = root.inverse().multiply(m);
+          return { x: b.x * inv.a + inv.e - offset.x, y: b.y * inv.d + inv.f - offset.y, w: b.width * inv.a, h: b.height * inv.d };
+        }
+        return { x: b.x - offset.x, y: b.y - offset.y, w: b.width, h: b.height };
+      } catch {
+        return { x: 0, y: 0, w: 0, h: 0 };
+      }
+    };
+    const pathsOf = (el: Element) =>
+      [...(el instanceof SVGGeometryElement ? [el] : []), ...el.querySelectorAll<SVGGeometryElement>('path, line, polyline')].map((p) => {
+        let length: number;
+        try {
+          length = p.getTotalLength();
+        } catch {
+          length = 0;
+        }
+        const dashed = !!getComputedStyle(p).strokeDasharray && getComputedStyle(p).strokeDasharray !== 'none';
+        return { el: p, length, dashed };
+      });
+
+    const infos = candidates.map(({ el, kind }, i) => {
+      const bbox = toRect(el);
+      let endpoints: Point[] | undefined;
+      if (kind === 'edge') {
+        const path = el instanceof SVGGeometryElement ? el : el.querySelector<SVGGeometryElement>('path');
+        try {
+          if (path) {
+            const len = path.getTotalLength();
+            const ctm = svg.getCTM()?.inverse().multiply(path.getCTM() ?? svg.createSVGMatrix());
+            const map = (p: DOMPoint) => (ctm ? p.matrixTransform(ctm) : p);
+            endpoints = [map(path.getPointAtLength(0)), map(path.getPointAtLength(len))].map((p) => ({ x: p.x - offset.x, y: p.y - offset.y }));
+          }
+        } catch {
+          endpoints = undefined;
+        }
+      }
+      return { el, info: { id: String(i), kind, bbox, endpoints } as GroupInfo };
+    });
+    const byId = new Map(infos.map((x) => [x.info.id, x.el]));
+    const ordered = orderGroups(infos.map((x) => x.info));
+    this.groups = ordered.map((info) => {
+      const element = byId.get(info.id) as SVGGraphicsElement;
+      return { element, info, paths: info.kind === 'edge' ? pathsOf(element) : [], label: (element.textContent ?? '').replace(/\s+/g, ' ').trim() || `${info.kind} ${Number(info.id) + 1}`, extra: [] };
+    });
+    // Attach each edge label to the closest edge so they appear together.
+    for (const label of edgeLabels) {
+      const r = toRect(label);
+      const c = { x: r.x + r.w / 2, y: r.y + r.h / 2 };
+      let best: Group | undefined;
+      let bestD = Infinity;
+      for (const g of this.groups) {
+        if (g.info.kind !== 'edge') continue;
+        const b = g.info.bbox;
+        const d = Math.hypot(b.x + b.w / 2 - c.x, b.y + b.h / 2 - c.y);
+        if (d < bestD) {
+          bestD = d;
+          best = g;
+        }
+      }
+      best?.extra.push(label);
+    }
+  }
+
+  stepBounds(step: number): Rect | undefined {
+    return this.groups[step]?.info.bbox;
+  }
+
+  /** Applies the reveal state for time `t`. */
+  renderAt(t: number, reducedMotion: boolean): void {
+    const pos = positionAt(this.timeline, t);
+    this.groups.forEach((g, i) => {
+      let opacity = 0;
+      let draw = 1;
+      if (i < pos.index) opacity = 1;
+      else if (i === pos.index) {
+        if (reducedMotion) opacity = windowed(pos.elapsed, 0, DURATION.fast, EASE.linear);
+        else {
+          draw = windowed(pos.elapsed, 0, 420, EASE.travel);
+          opacity = g.info.kind === 'edge' ? Math.min(1, draw * 4) : windowed(pos.elapsed, 0, DURATION.base, EASE.enter);
+        }
+      }
+      for (const el of [g.element, ...g.extra]) {
+        el.style.opacity = String(opacity);
+        el.style.display = opacity <= 0 ? 'none' : '';
+      }
+      for (const p of g.paths) {
+        if (p.dashed || !p.length) continue;
+        p.el.style.strokeDasharray = draw < 1 ? `${p.length}` : '';
+        p.el.style.strokeDashoffset = draw < 1 ? `${p.length * (1 - draw)}` : '';
+      }
+    });
+  }
+
+  exportDrawing(t: number): { svg: SVGSVGElement; width: number; height: number } | undefined {
+    const inner = this.holder.firstElementChild as SVGSVGElement | null;
+    if (!inner) return undefined;
+    this.renderAt(t, true);
+    const svg = inner.cloneNode(true) as SVGSVGElement;
+    if (this.sheet) {
+      const style = document.createElementNS(SVG_NS, 'style');
+      style.textContent = [...this.sheet.cssRules].map((r) => r.cssText).join('\n');
+      svg.insertBefore(style, svg.firstChild);
+    }
+    return { svg, width: this.bounds.w, height: this.bounds.h };
+  }
+
+  destroy(): void {
+    this.holder.remove();
+    if (this.sheet) document.adoptedStyleSheets = document.adoptedStyleSheets.filter((s) => s !== this.sheet);
+  }
+}

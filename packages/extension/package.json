@@ -40,6 +40,8 @@
     "virtualWorkspaces": true
   },
   "activationEvents": [
+    "onLanguage:markdown",
+    "onLanguage:mdx",
     "onWebviewPanel:mermaidAnimator.panel"
   ],
   "contributes": {
@@ -68,24 +70,201 @@
         "title": "%command.openToSide%",
         "category": "Mermaid Animator",
         "icon": "$(play-circle)"
+      },
+      {
+        "command": "mermaidAnimator.openAtCursor",
+        "title": "%command.openAtCursor%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.animateAll",
+        "title": "%command.animateAll%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.openFromExplorer",
+        "title": "%command.openFromExplorer%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.openDiagram",
+        "title": "%command.openDiagram%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.export",
+        "title": "%command.export%",
+        "category": "Mermaid Animator",
+        "icon": "$(export)"
+      },
+      {
+        "command": "mermaidAnimator.exportDiagram",
+        "title": "%command.exportDiagram%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.export.svg",
+        "title": "%command.export.svg%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.export.png",
+        "title": "%command.export.png%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.copyImage",
+        "title": "%command.copyImage%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.togglePlay",
+        "title": "%command.togglePlay%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.play",
+        "title": "%command.play%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.pause",
+        "title": "%command.pause%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.nextStep",
+        "title": "%command.nextStep%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.previousStep",
+        "title": "%command.previousStep%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.firstStep",
+        "title": "%command.firstStep%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.lastStep",
+        "title": "%command.lastStep%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.goToStep",
+        "title": "%command.goToStep%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.revealSource",
+        "title": "%command.revealSource%",
+        "category": "Mermaid Animator"
       }
     ],
     "menus": {
       "commandPalette": [
         {
           "command": "mermaidAnimator.open",
-          "when": "editorLangId == mermaid"
+          "when": "mermaidAnimator.editorHasDiagram"
         },
         {
           "command": "mermaidAnimator.openToSide",
-          "when": "editorLangId == mermaid"
+          "when": "mermaidAnimator.editorHasDiagram"
+        },
+        {
+          "command": "mermaidAnimator.openAtCursor",
+          "when": "mermaidAnimator.cursorInDiagram"
+        },
+        {
+          "command": "mermaidAnimator.animateAll",
+          "when": "mermaidAnimator.editorHasDiagram"
+        },
+        {
+          "command": "mermaidAnimator.openFromExplorer",
+          "when": "false"
+        },
+        {
+          "command": "mermaidAnimator.openDiagram",
+          "when": "false"
+        },
+        {
+          "command": "mermaidAnimator.exportDiagram",
+          "when": "false"
+        },
+        {
+          "command": "mermaidAnimator.export",
+          "when": "mermaidAnimator.panelActive"
+        },
+        {
+          "command": "mermaidAnimator.export.svg",
+          "when": "mermaidAnimator.panelActive"
+        },
+        {
+          "command": "mermaidAnimator.export.png",
+          "when": "mermaidAnimator.panelActive"
+        },
+        {
+          "command": "mermaidAnimator.copyImage",
+          "when": "mermaidAnimator.panelActive"
+        },
+        {
+          "command": "mermaidAnimator.togglePlay",
+          "when": "mermaidAnimator.panelActive"
+        },
+        {
+          "command": "mermaidAnimator.play",
+          "when": "mermaidAnimator.panelActive"
+        },
+        {
+          "command": "mermaidAnimator.pause",
+          "when": "mermaidAnimator.panelActive"
+        },
+        {
+          "command": "mermaidAnimator.nextStep",
+          "when": "mermaidAnimator.panelActive"
+        },
+        {
+          "command": "mermaidAnimator.previousStep",
+          "when": "mermaidAnimator.panelActive"
+        },
+        {
+          "command": "mermaidAnimator.firstStep",
+          "when": "mermaidAnimator.panelActive"
+        },
+        {
+          "command": "mermaidAnimator.lastStep",
+          "when": "mermaidAnimator.panelActive"
+        },
+        {
+          "command": "mermaidAnimator.goToStep",
+          "when": "mermaidAnimator.panelActive"
+        },
+        {
+          "command": "mermaidAnimator.revealSource",
+          "when": "mermaidAnimator.panelActive"
         }
       ],
       "editor/title": [
         {
           "command": "mermaidAnimator.openToSide",
-          "when": "editorLangId == mermaid",
+          "when": "mermaidAnimator.editorHasDiagram && !mermaidAnimator.panelActive",
           "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "mermaidAnimator.openAtCursor",
+          "when": "mermaidAnimator.cursorInDiagram",
+          "group": "navigation@90"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "mermaidAnimator.openFromExplorer",
+          "when": "resourceExtname =~ /^\\.(mmd|mermaid|md|mdx)$/i",
+          "group": "navigation@90"
         }
       ]
     },
@@ -108,9 +287,272 @@
           ],
           "default": "auto",
           "markdownDescription": "%config.theme.mode%"
+        },
+        "mermaidAnimator.codeLens.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%config.codeLens.enabled%"
+        },
+        "mermaidAnimator.files.languages": {
+          "type": "array",
+          "default": [
+            "markdown",
+            "mdx",
+            "mermaid"
+          ],
+          "markdownDescription": "%config.files.languages%",
+          "items": {
+            "type": "string"
+          }
+        },
+        "mermaidAnimator.liveReload.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%config.liveReload.enabled%"
+        },
+        "mermaidAnimator.liveReload.debounceMs": {
+          "type": "number",
+          "default": 250,
+          "markdownDescription": "%config.liveReload.debounceMs%",
+          "minimum": 0,
+          "maximum": 5000
+        },
+        "mermaidAnimator.sync.stepToEditor": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%config.sync.stepToEditor%"
+        },
+        "mermaidAnimator.sync.cursorToStep": {
+          "type": "string",
+          "default": "click",
+          "markdownDescription": "%config.sync.cursorToStep%",
+          "enum": [
+            "off",
+            "click",
+            "follow"
+          ],
+          "enumDescriptions": [
+            "%config.sync.cursorToStep.off%",
+            "%config.sync.cursorToStep.click%",
+            "%config.sync.cursorToStep.follow%"
+          ]
+        },
+        "mermaidAnimator.playback.autoplay": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%config.playback.autoplay%"
+        },
+        "mermaidAnimator.playback.speed": {
+          "type": "number",
+          "default": 1,
+          "markdownDescription": "%config.playback.speed%",
+          "minimum": 0.25,
+          "maximum": 4
+        },
+        "mermaidAnimator.playback.dwell": {
+          "type": "string",
+          "default": "adaptive",
+          "markdownDescription": "%config.playback.dwell%",
+          "enum": [
+            "adaptive",
+            "fixed"
+          ],
+          "enumDescriptions": [
+            "%config.playback.dwell.adaptive%",
+            "%config.playback.dwell.fixed%"
+          ]
+        },
+        "mermaidAnimator.playback.dwellMs": {
+          "type": "number",
+          "default": 900,
+          "markdownDescription": "%config.playback.dwellMs%",
+          "minimum": 0
+        },
+        "mermaidAnimator.playback.onEnd": {
+          "type": "string",
+          "default": "stop",
+          "markdownDescription": "%config.playback.onEnd%",
+          "enum": [
+            "stop",
+            "loop",
+            "rewind"
+          ],
+          "enumDescriptions": [
+            "%config.playback.onEnd.stop%",
+            "%config.playback.onEnd.loop%",
+            "%config.playback.onEnd.rewind%"
+          ]
+        },
+        "mermaidAnimator.playback.reverse": {
+          "type": "string",
+          "default": "animate",
+          "markdownDescription": "%config.playback.reverse%",
+          "enum": [
+            "animate",
+            "cut"
+          ],
+          "enumDescriptions": [
+            "%config.playback.reverse.animate%",
+            "%config.playback.reverse.cut%"
+          ]
+        },
+        "mermaidAnimator.playback.pauseOnHover": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%config.playback.pauseOnHover%"
+        },
+        "mermaidAnimator.playback.startAt": {
+          "type": "string",
+          "default": "beginning",
+          "markdownDescription": "%config.playback.startAt%",
+          "enum": [
+            "beginning",
+            "end"
+          ],
+          "enumDescriptions": [
+            "%config.playback.startAt.beginning%",
+            "%config.playback.startAt.end%"
+          ]
+        },
+        "mermaidAnimator.playback.notes": {
+          "type": "string",
+          "default": "step",
+          "markdownDescription": "%config.playback.notes%",
+          "enum": [
+            "step",
+            "attach",
+            "hidden"
+          ],
+          "enumDescriptions": [
+            "%config.playback.notes.step%",
+            "%config.playback.notes.attach%",
+            "%config.playback.notes.hidden%"
+          ]
+        },
+        "mermaidAnimator.scrubber.snap": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%config.scrubber.snap%"
+        },
+        "mermaidAnimator.display.futureSteps": {
+          "type": "string",
+          "default": "hidden",
+          "markdownDescription": "%config.display.futureSteps%",
+          "enum": [
+            "hidden",
+            "ghosted",
+            "visible"
+          ],
+          "enumDescriptions": [
+            "%config.display.futureSteps.hidden%",
+            "%config.display.futureSteps.ghosted%",
+            "%config.display.futureSteps.visible%"
+          ]
+        },
+        "mermaidAnimator.display.pastSteps": {
+          "type": "string",
+          "default": "full",
+          "markdownDescription": "%config.display.pastSteps%",
+          "enum": [
+            "full",
+            "muted",
+            "trail"
+          ],
+          "enumDescriptions": [
+            "%config.display.pastSteps.full%",
+            "%config.display.pastSteps.muted%",
+            "%config.display.pastSteps.trail%"
+          ]
+        },
+        "mermaidAnimator.display.trailLength": {
+          "type": "integer",
+          "default": 3,
+          "markdownDescription": "%config.display.trailLength%",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "mermaidAnimator.motion.profile": {
+          "type": "string",
+          "default": "formal",
+          "markdownDescription": "%config.motion.profile%",
+          "enum": [
+            "formal",
+            "expressive",
+            "minimal",
+            "none"
+          ],
+          "enumDescriptions": [
+            "%config.motion.profile.formal%",
+            "%config.motion.profile.expressive%",
+            "%config.motion.profile.minimal%",
+            "%config.motion.profile.none%"
+          ]
+        },
+        "mermaidAnimator.motion.respectReducedMotion": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%config.motion.respectReducedMotion%"
+        },
+        "mermaidAnimator.motion.travelIndicator": {
+          "type": "string",
+          "default": "pulse",
+          "markdownDescription": "%config.motion.travelIndicator%",
+          "enum": [
+            "pulse",
+            "comet",
+            "none"
+          ],
+          "enumDescriptions": [
+            "%config.motion.travelIndicator.pulse%",
+            "%config.motion.travelIndicator.comet%",
+            "%config.motion.travelIndicator.none%"
+          ]
+        },
+        "mermaidAnimator.camera.mode": {
+          "type": "string",
+          "default": "auto",
+          "markdownDescription": "%config.camera.mode%",
+          "enum": [
+            "auto",
+            "fit",
+            "follow",
+            "manual"
+          ],
+          "enumDescriptions": [
+            "%config.camera.mode.auto%",
+            "%config.camera.mode.fit%",
+            "%config.camera.mode.follow%",
+            "%config.camera.mode.manual%"
+          ]
         }
       }
-    }
+    },
+    "keybindings": [
+      {
+        "command": "mermaidAnimator.openToSide",
+        "key": "ctrl+k alt+m",
+        "mac": "cmd+k alt+m",
+        "when": "editorTextFocus && mermaidAnimator.editorHasDiagram"
+      },
+      {
+        "command": "mermaidAnimator.togglePlay",
+        "key": "ctrl+alt+space",
+        "mac": "cmd+alt+space",
+        "when": "mermaidAnimator.panelActive"
+      },
+      {
+        "command": "mermaidAnimator.nextStep",
+        "key": "ctrl+alt+right",
+        "mac": "cmd+alt+right",
+        "when": "mermaidAnimator.panelActive"
+      },
+      {
+        "command": "mermaidAnimator.previousStep",
+        "key": "ctrl+alt+left",
+        "mac": "cmd+alt+left",
+        "when": "mermaidAnimator.panelActive"
+      }
+    ]
   },
   "scripts": {
     "package": "vsce package --no-dependencies --out ../../mermaid-animator.vsix"

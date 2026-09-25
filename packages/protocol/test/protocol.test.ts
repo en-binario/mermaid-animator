@@ -10,6 +10,14 @@ describe('host messages', () => {
     hostMessage('document/load', { uri: 'file:///a.mmd', fileName: 'a.mmd', source: 'sequenceDiagram', version: 1, origin }),
     hostMessage('document/update', { source: 'x', version: 2, origin }),
     hostMessage('settings/changed', { settings, themeKind: 'light', reduceMotion: true }),
+    hostMessage('document/load', {
+      uri: 'u', fileName: 'a.md', source: 's', version: 1, origin: { line: 4, character: 0 }, diagramIndex: 1,
+      diagrams: [{ index: 0, type: 'sequence', summary: 'A->>B: x' }, { index: 1, type: 'flowchart', title: 'T', summary: 'A-->B' }],
+    }),
+    hostMessage('command', { action: 'next' }),
+    hostMessage('command', { action: 'goToStep', args: { step: 3 } }),
+    hostMessage('editor/cursor', { line: 3, character: 2 }),
+    hostMessage('export/ack', { path: '/tmp/a.png' }),
   ];
 
   it.each(valid)('accepts $type', (message) => {
@@ -31,6 +39,8 @@ describe('host messages', () => {
     ['bad enum', { v: 1, type: 'settings/changed', payload: { settings: { themeMode: 'neon' }, themeKind: 'dark', reduceMotion: null } }],
     ['bad theme kind', { v: 1, type: 'settings/changed', payload: { settings, themeKind: 'sepia', reduceMotion: null } }],
     ['non-string id', { v: 1, id: 3, type: 'document/update', payload: { source: '', version: 1, origin } }],
+    ['unknown command', { v: 1, type: 'command', payload: { action: 'explode' } }],
+    ['bad diagram list', { v: 1, type: 'document/load', payload: { uri: 'u', fileName: 'f', source: 's', version: 1, origin, diagrams: [{ index: 'x' }] } }],
     ['non-string strings', { v: 1, type: 'init', payload: { settings, themeKind: 'dark', reduceMotion: null, locale: 'en', strings: { a: 1 } } }],
   ])('rejects %s', (_label, value) => {
     const result = validateHostMessage(value);
@@ -49,6 +59,11 @@ describe('webview messages', () => {
     webviewMessage('ready', { protocol: 1 }),
     webviewMessage('state/changed', { stepIndex: 2, playing: true }),
     webviewMessage('log', { level: 'warn', message: 'careful' }),
+    webviewMessage('state/changed', { stepIndex: 1, sourceRanges: [{ startLine: 1, startCol: 0, endLine: 1, endCol: 5 }] }),
+    webviewMessage('diagram/select', { index: 2 }),
+    webviewMessage('source/reveal', { range: { startLine: 1, startCol: 0, endLine: 1, endCol: 5 } }),
+    webviewMessage('export/data', { format: 'png', suggestedName: 'a.png', data: new Uint8Array([1, 2]), index: 0, total: 1 }),
+    webviewMessage('clipboard/fallback', { reason: 'denied' }),
   ])('accepts $type', (message) => {
     expect(validateWebviewMessage(message).ok).toBe(true);
   });
@@ -58,6 +73,8 @@ describe('webview messages', () => {
     ['log with bad level', { v: 1, type: 'log', payload: { level: 'debug', message: 'x' } }],
     ['state that is not an object', { v: 1, type: 'state/changed', payload: [] }],
     ['host-only type', { v: 1, type: 'init', payload: {} }],
+    ['export without bytes', { v: 1, type: 'export/data', payload: { format: 'png', suggestedName: 'a', data: 'AAA', index: 0, total: 1 } }],
+    ['bad source ranges', { v: 1, type: 'state/changed', payload: { sourceRanges: [{ startLine: 'x' }] } }],
   ])('rejects %s', (_label, value) => {
     expect(validateWebviewMessage(value).ok).toBe(false);
   });

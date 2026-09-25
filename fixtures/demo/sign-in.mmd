@@ -1,0 +1,19 @@
+sequenceDiagram
+    title Sign-in
+    autonumber
+    actor U as User
+    participant G as Gateway
+    participant A as Auth Service
+    participant D@{ "type": "database" } as Database
+    U->>+G: POST /login
+    G->>+A: verify(credentials)
+    A->>D: SELECT user
+    D-->>A: row
+    A->>A: compare hash
+    A-->>-G: token
+    G-->>-U: 200 OK + cookie
+    create participant S as Session Store
+    G->>S: save session
+    Note right of S: expires in 30 min
+    %% @emphasis
+    G-)S: refresh asynchronously

@@ -85,3 +85,11 @@ describe('annotation diagnostics', () => {
     expect(diagnostics.map((d) => [d.code, d.range.startLine])).toEqual([['annotation/duplicate-step-id', 3]]);
   });
 });
+
+describe('annotation line endings', () => {
+  it('parses annotations in CRLF documents', () => {
+    const { annotations, diagnostics } = parseAnnotations('sequenceDiagram\r\n%% @pause 2s\r\nA->>B: x\r\n');
+    expect(diagnostics).toEqual([]);
+    expect(annotations.map((a) => [a.name, a.line])).toEqual([['pause', 1]]);
+  });
+});

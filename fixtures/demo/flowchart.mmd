@@ -1,0 +1,6 @@
+flowchart TD
+    A[Request] --> B{Authenticated?}
+    B -- yes --> C[Load profile]
+    B -- no --> D[Redirect to login]
+    C --> E[Render page]
+    D --> E

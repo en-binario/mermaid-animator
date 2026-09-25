@@ -22,9 +22,36 @@ const types = {
   '.md': 'text/plain; charset=utf-8',
 };
 
+/** Every demo and corpus diagram, exposed to the harness as `window.harnessFixtures`. */
+async function fixturesScript() {
+  const { readdir } = await import('node:fs/promises');
+  const fixtures = {};
+  for (const dir of ['fixtures/demo', 'fixtures/mermaid/sequence/valid', 'fixtures/mermaid/sequence/invalid']) {
+    const folder = path.join(root, dir);
+    for (const file of (await readdir(folder)).filter((f) => f.endsWith('.mmd')).sort()) {
+      const key = dir === 'fixtures/demo' ? file : `${dir.split('/').pop()}/${file}`;
+      fixtures[key] = await readFile(path.join(folder, file), 'utf8');
+    }
+  }
+  // Spanish strings keyed like the webview catalogue, from the real l10n bundle.
+  const catalogue = await readFile(path.join(root, 'packages/protocol/src/strings.ts'), 'utf8');
+  const bundle = JSON.parse(await readFile(path.join(root, 'packages/extension/l10n/bundle.l10n.es.json'), 'utf8'));
+  const es = {};
+  for (const m of catalogue.matchAll(/'([\w.]+)':\s*'((?:[^'\\]|\\.)*)'/g)) {
+    const english = m[2].replace(/\\'/g, "'");
+    if (bundle[english]) es[m[1]] = bundle[english];
+  }
+  return `window.harnessFixtures = ${JSON.stringify(fixtures)};\nwindow.harnessStringsEs = ${JSON.stringify(es)};`;
+}
+
 createServer(async (req, res) => {
   try {
     const url = new URL(req.url ?? '/', `http://localhost:${port}`);
+    if (url.pathname.endsWith('/harness-fixtures.js')) {
+      res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' });
+      res.end(await fixturesScript());
+      return;
+    }
     let file = path.normalize(path.join(root, decodeURIComponent(url.pathname)));
     if (!file.startsWith(root)) throw new Error('outside root');
     if ((await stat(file)).isDirectory()) file = path.join(file, 'index.html');

@@ -38,7 +38,7 @@ export function preprocess(input: string): Preprocessed {
     return blank(m);
   });
 
-  text = text.replace(/^([ \t]*)(%%(?!\{)[^\n]*)/gm, (m, indent: string, comment: string, offset: number) => {
+  text = text.replace(/^([ \t]*)(%%(?!\{)[^\n\r]*)/gm, (m, indent: string, comment: string, offset: number) => {
     comments.push({ text: comment, offset: offset + indent.length });
     return blank(m);
   });

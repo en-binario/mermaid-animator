@@ -143,6 +143,13 @@ describe('error recovery', () => {
     expect(diagnostics.map((d) => d.range.startLine)).toEqual([1, 3, 4]);
   });
 
+  it('accepts CRLF line endings with unchanged line numbers', () => {
+    const { model, diagnostics } = parseSequence('sequenceDiagram\r\n    title T\r\n    autonumber\r\n    actor U as User\r\n    U->>B: hi\r\n');
+    expect(diagnostics).toEqual([]);
+    expect(messages(model.body)[0]?.range.startLine).toBe(4);
+    expect(model.participants[0]?.label).toBe('User');
+  });
+
   it('never throws on arbitrary input', () => {
     const noise = ['', '\n\n', 'sequenceDiagram', '::::', '->>->>', 'sequenceDiagram\n@{', 'sequenceDiagram\nparticipant', 'sequenceDiagram\nbox', '%%{', '---\n'];
     for (const text of noise) expect(() => parseSequence(text)).not.toThrow();

@@ -44,7 +44,25 @@ npm run build
 node scripts/serve-harness.mjs          # → http://localhost:5173/packages/webview/harness/
 ```
 
-Query parameters: `theme=light|dark|highContrast|highContrastLight`, `mode=auto|ivory|graphite|highContrast`, `locale=en|es`, `reduce=1`, `chrome=0` (hide the harness controls), `fixture=<name>`.
+Query parameters: `theme=light|dark|highContrast|highContrastLight`, `mode=auto|ivory|graphite|highContrast`, `locale=en|es`, `reduce=1`, `chrome=0` (hide the harness controls), `fixture=<name>` (any file in `fixtures/demo/` or `valid/…`, `invalid/…` from the conformance corpus), and settings as `s.<key>=<value>` (e.g. `s.display.futureSteps=ghosted`, `s.playback.startAt=end`).
+
+### Mermaid conformance
+
+The native sequence parser is checked against Mermaid's own parser (run under jsdom):
+
+```sh
+node scripts/mermaid-probe.mjs fixtures/mermaid/sequence/valid   # ask Mermaid about any files
+node scripts/gen-sequence-lexer.mjs                              # regenerate lexer rules after a Mermaid upgrade
+```
+
+`npm test` includes the differential corpus test (`packages/core/test/conformance.test.ts`).
+
+## Release checklist
+
+1. `npm run check`, `npm run build`, `npm run test:integration` all pass.
+2. `npm run package` produces `mermaid-animator.vsix`.
+3. Install it into a clean VS Code profile and smoke-test: open a Markdown file with a sequence diagram → **▶ Animate**; play, step with `→`/`←`, scrub; edit a message label and confirm the playhead stays; introduce a syntax error and confirm the dimmed last-good drawing and the Problems entry; **Export…** → PNG 2×; open a flowchart and confirm the generic animation.
+4. Update `packages/extension/CHANGELOG.md`.
 
 ## Licence
 

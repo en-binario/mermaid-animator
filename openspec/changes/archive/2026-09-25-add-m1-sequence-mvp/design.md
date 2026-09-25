@@ -59,3 +59,17 @@ Host strings via `vscode.l10n.t` with `l10n/bundle.l10n.es.json`; manifest strin
 - [Mermaid chunk size (~3 MB)] → loaded only for fallback diagrams; not part of the initial bundle budget.
 - [Scene recomputation per frame for very large diagrams] → diffed attribute writes; culling and level of detail are P1 (M2) items.
 - [Visual verification of a webview is hard to automate] → the browser harness renders fixtures in Chromium for manual and scripted screenshots; automated pixel baselines are planned with CI.
+
+## Implementation Notes
+
+Findings made while implementing, reflected in code and (where product-relevant) in the specification:
+
+- **Lexer generated from Mermaid.** `scripts/gen-sequence-lexer.mjs` extracts Mermaid 12.0.0's 94 lexer rules and state table into `lexerRules.generated.ts`; only the state actions are hand-written. Rule matching is first-match (Jison without `flex`).
+- **Mermaid's semantic checks mirrored:** created participants must receive the next message; destroyed participants must take part in the next message; deactivating an inactive participant is an error (the `-` shorthand deactivates the *sender*); `create` of an existing id is an error; a participant may belong to one box; the diagram keyword is detected case-sensitively although the lexer is case-insensitive. Corpus agreement: 88/88 files.
+- **CRLF.** Mermaid normalises `\r\n` to `\n` before lexing; replacing `\r` with a space let the whitespace rule swallow newlines. The parser now drops `\r` (line/column positions are unchanged).
+- **Settle period (spec ADR-016).** The message choreography extends 240 ms past the travel (arrowhead, activation growth, receiver glow), so a step's rest point is `start + transition + settle`; otherwise a paused frame showed a half-dissolved pulse and ungrown bars.
+- **Camera hold.** To meet "in view before the arrow draws", Follow holds the playhead at the step's start until the camera tween completes (not an 80 ms lead as the product spec's §8.6.2 text suggests; the observable outcome is the same).
+- **Mermaid under the CSP (spec ADR-015).** Mermaid measures labels while its own `<style>` element is blocked. The generic engine renders twice with the same id (the first pass supplies the CSS, adopted as a constructed stylesheet, for the measuring pass) and uses SVG text labels. Blocked-`<style>` console messages from Mermaid are expected.
+- **Pure helpers extracted for testing:** `orderGroups` (fallback ordering), `chooseEngine` (routing), `followView`/`fitView` (camera), `resolveSettings`, `announcement`.
+- **Test hooks** are exposed through the extension API (`setSaveTarget`), because the integration-test bundle has its own copies of extension classes.
+- **Known limitations (deferred):** editor → step seeking on click (the cursor is used only for position preservation in M1; seeking is M2a, FR-SYNC-04); the fallback's state-diagram labels are left-aligned by Mermaid's SVG-label layout; clipboard failure fallback verified by code review only (no clipboard in the test host).

@@ -31,6 +31,13 @@ export interface InitPayload {
   strings: Record<string, string>;
 }
 
+export interface DiagramSummary {
+  index: number;
+  type: string;
+  title?: string;
+  summary: string;
+}
+
 export interface DocumentLoadPayload {
   uri: string;
   fileName: string;
@@ -38,12 +45,18 @@ export interface DocumentLoadPayload {
   version: number;
   /** Where the diagram's text starts in the host document. */
   origin: { line: number; character: number };
+  /** Index of this diagram in its document (M1). */
+  diagramIndex?: number;
+  /** Every diagram in the source document, for the toolbar switcher (M1). */
+  diagrams?: DiagramSummary[];
 }
 
 export interface DocumentUpdatePayload {
   source: string;
   version: number;
   origin: { line: number; character: number };
+  /** The bound diagram is no longer in the document; keep the last rendering and say so (M1). */
+  unbound?: boolean;
 }
 
 export interface SettingsChangedPayload {
@@ -52,26 +65,55 @@ export interface SettingsChangedPayload {
   reduceMotion: boolean | null;
 }
 
+export type CommandAction =
+  | 'togglePlay' | 'play' | 'pause' | 'next' | 'previous' | 'first' | 'last' | 'goToStep'
+  | 'export' | 'exportSvg' | 'exportPng' | 'copyImage' | 'revealSource' | 'fit';
+
+export const COMMAND_ACTIONS: readonly CommandAction[] = [
+  'togglePlay', 'play', 'pause', 'next', 'previous', 'first', 'last', 'goToStep', 'export', 'exportSvg', 'exportPng', 'copyImage', 'revealSource', 'fit',
+];
+
+export type ExportFormat = 'svg' | 'png';
+
 export type HostMessage =
   | { v: 1; type: 'init'; payload: InitPayload }
   | { v: 1; type: 'document/load'; payload: DocumentLoadPayload }
   | { v: 1; type: 'document/update'; payload: DocumentUpdatePayload }
-  | { v: 1; type: 'settings/changed'; payload: SettingsChangedPayload };
+  | { v: 1; type: 'settings/changed'; payload: SettingsChangedPayload }
+  | { v: 1; type: 'command'; payload: { action: CommandAction; args?: Record<string, unknown> } }
+  | { v: 1; type: 'editor/cursor'; payload: { line: number; character: number } }
+  | { v: 1; type: 'export/ack'; payload: { path: string } };
 
 export interface StatePayload {
   uri?: string;
   stepIndex?: number;
   stepCount?: number;
   playing?: boolean;
+  /** Document ranges of the current step, for editor decorations (M1). */
+  sourceRanges?: DocumentRange[];
   [key: string]: unknown;
 }
 
 export type LogLevel = 'info' | 'warn' | 'error';
 
+export interface ExportDataPayload {
+  format: ExportFormat;
+  suggestedName: string;
+  /** File bytes (this chunk). */
+  data: Uint8Array;
+  /** 0-based chunk index and total chunk count (files over 8 MB are chunked). */
+  index: number;
+  total: number;
+}
+
 export type WebviewMessage =
   | { v: 1; type: 'ready'; payload: { protocol: number } }
   | { v: 1; type: 'state/changed'; payload: StatePayload }
-  | { v: 1; type: 'log'; payload: { level: LogLevel; message: string } };
+  | { v: 1; type: 'log'; payload: { level: LogLevel; message: string } }
+  | { v: 1; type: 'diagram/select'; payload: { index: number } }
+  | { v: 1; type: 'source/reveal'; payload: { range: DocumentRange } }
+  | { v: 1; type: 'export/data'; payload: ExportDataPayload }
+  | { v: 1; type: 'clipboard/fallback'; payload: { reason: string } };
 
 export type HostMessageType = HostMessage['type'];
 export type WebviewMessageType = WebviewMessage['type'];
@@ -110,18 +152,36 @@ const shape = (fields: Record<string, Guard>): Guard => (v) => {
 const themeKind = oneOf('light', 'dark', 'highContrast', 'highContrastLight');
 const settings = shape({ themeMode: oneOf('auto', 'ivory', 'graphite', 'highContrast') });
 const position = shape({ line: num, character: num });
+const range = shape({ startLine: num, startCol: num, endLine: num, endCol: num });
+const arrayOf = (g: Guard): Guard => (v) => {
+  if (!Array.isArray(v)) return 'expected array';
+  for (let i = 0; i < v.length; i++) {
+    const error = g(v[i]);
+    if (error) return `[${i}]: ${error}`;
+  }
+  return undefined;
+};
+const bytes: Guard = (v) => (v instanceof Uint8Array ? undefined : 'expected Uint8Array');
+const diagramSummary = shape({ index: num, type: str, title: optional(str), summary: str });
 
 const hostPayloads: Record<HostMessageType, Guard> = {
   init: shape({ settings, themeKind, reduceMotion: nullable(bool), locale: str, strings: stringRecord }),
-  'document/load': shape({ uri: str, fileName: str, source: str, version: num, origin: position }),
-  'document/update': shape({ source: str, version: num, origin: position }),
+  'document/load': shape({ uri: str, fileName: str, source: str, version: num, origin: position, diagramIndex: optional(num), diagrams: optional(arrayOf(diagramSummary)) }),
+  'document/update': shape({ source: str, version: num, origin: position, unbound: optional(bool) }),
   'settings/changed': shape({ settings, themeKind, reduceMotion: nullable(bool) }),
+  command: shape({ action: oneOf(...COMMAND_ACTIONS), args: optional(record) }),
+  'editor/cursor': shape({ line: num, character: num }),
+  'export/ack': shape({ path: str }),
 };
 
 const webviewPayloads: Record<WebviewMessageType, Guard> = {
   ready: shape({ protocol: num }),
-  'state/changed': record,
+  'state/changed': (v) => record(v) ?? shape({ sourceRanges: optional(arrayOf(range)) })(v),
   log: shape({ level: oneOf('info', 'warn', 'error'), message: str }),
+  'diagram/select': shape({ index: num }),
+  'source/reveal': shape({ range }),
+  'export/data': shape({ format: oneOf('svg', 'png'), suggestedName: str, data: bytes, index: num, total: num }),
+  'clipboard/fallback': shape({ reason: str }),
 };
 
 function validate<T>(value: unknown, payloads: Record<string, Guard>): ValidationResult<T> {
@@ -155,3 +215,4 @@ export function hostMessage<T extends HostMessageType>(type: T, payload: Extract
 export function webviewMessage<T extends WebviewMessageType>(type: T, payload: Extract<WebviewMessage, { type: T }>['payload']): Extract<WebviewMessage, { type: T }> {
   return { v: PROTOCOL_VERSION, type, payload } as Extract<WebviewMessage, { type: T }>;
 }
+export * from './strings';

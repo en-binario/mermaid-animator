@@ -6,7 +6,7 @@ Guarantees that the animator webview executes only the extension's own bundled c
 ## Requirements
 
 ### Requirement: Nonce-based Content Security Policy
-The webview document SHALL carry a Content Security Policy with `default-src 'none'`, scripts allowed only by a per-render random nonce or from the extension's webview resource origin, styles only from that origin or by nonce, images from that origin plus `data:` and `blob:`, fonts from that origin plus `data:`, workers from that origin plus `blob:`, and `connect-src 'none'`.
+The webview document SHALL carry a Content Security Policy with `default-src 'none'`, scripts allowed only by a per-render random nonce or from the extension's webview resource origin, style elements and stylesheets only from that origin or by nonce, inline style attributes permitted (`style-src-attr 'unsafe-inline'`, required because Mermaid's own renderer writes style attributes in the generic fallback), images from that origin plus `data:` and `blob:`, fonts from that origin plus `data:`, workers from that origin plus `blob:`, and `connect-src 'none'`. Style content extracted from Mermaid's output SHALL be applied as constructed stylesheets, never as inline `<style>` elements.
 
 #### Scenario: Policy present and nonce fresh
 - **WHEN** the animator panel's HTML is generated twice
@@ -15,6 +15,10 @@ The webview document SHALL carry a Content Security Policy with `default-src 'no
 #### Scenario: Injected inline script is blocked
 - **WHEN** content containing an inline `<script>` element without the nonce is inserted into the webview document
 - **THEN** the script does not execute
+
+#### Scenario: Injected style element is blocked
+- **WHEN** a `<style>` element without the nonce is inserted into the webview document
+- **THEN** its rules are not applied
 
 ### Requirement: Restricted local resources
 The webview SHALL only be permitted to load local resources from the extension's bundled output and media directories.

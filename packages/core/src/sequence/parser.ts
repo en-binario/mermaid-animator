@@ -608,7 +608,8 @@ class Parser {
 /** Parses a sequence diagram's source (the diagram text only, not a whole Markdown file). */
 export function parseSequence(source: string): SequenceParseResult {
   const pre = preprocess(source);
-  const text = pre.text.replace(/\r/g, ' ');
+  // Like Mermaid, normalise CRLF/CR to LF. Dropping a line-final \r keeps every line/column position.
+  const text = pre.text.replace(/\r\n?/g, '\n');
   const lines = new LineIndex(text);
   const parser = new Parser(lex(text), lines);
   const result = parser.run();

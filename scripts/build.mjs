@@ -67,7 +67,7 @@ const configs = [
     chunkNames: 'chunks/[name]-[hash]',
     jsx: 'automatic',
     jsxImportSource: 'preact',
-    loader: { '.woff2': 'file', '.ttf': 'file' },
+    loader: { '.woff2': 'dataurl', '.ttf': 'file' },
     assetNames: 'assets/[name]-[hash]',
     plugins: [noNodeBuiltins],
   },

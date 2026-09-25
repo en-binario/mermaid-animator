@@ -30,6 +30,8 @@ describe('buildCsp', () => {
 
   it('restricts styles, images, fonts and workers', () => {
     expect(directives['style-src']).toEqual([cspSource, "'nonce-abc'"]);
+    expect(directives['style-src-attr']).toEqual(["'unsafe-inline'"]);
+    expect(directives['style-src-elem']).toBeUndefined();
     expect(directives['img-src']).toEqual([cspSource, 'data:', 'blob:']);
     expect(directives['font-src']).toEqual([cspSource, 'data:']);
     expect(directives['worker-src']).toEqual([cspSource, 'blob:']);

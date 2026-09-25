@@ -32,7 +32,7 @@ In the Formal profile a message step SHALL: emphasise the sender lifeline; draw 
 
 #### Scenario: Mid-transition frame
 - **WHEN** playback is at 50% of a message's transition
-- **THEN** the arrow is half drawn, the pulse is at its tip and the label is not yet visible
+- **THEN** the arrow is partially drawn along the travel easing curve (about 73% of its length), the pulse is at its tip and the label is not yet visible
 
 ### Requirement: Step state display
 Unplayed, current and played steps SHALL render per §9.7 of the product specification, with `mermaidAnimator.display.futureSteps` (`hidden` default, `ghosted`, `visible`) and `mermaidAnimator.display.pastSteps` (`full` default, `muted`, `trail`) controlling unplayed and played steps, and `@emphasis` steps drawn in brass.

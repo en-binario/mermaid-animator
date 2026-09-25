@@ -10,6 +10,8 @@ export interface HostState {
   locale: string;
   strings: Record<string, string>;
   document?: DocumentLoadPayload;
+  /** Last editor cursor position inside the bound diagram (document coordinates). */
+  cursor?: { line: number; character: number };
 }
 
 export const initialHostState: HostState = {
@@ -47,6 +49,11 @@ export function reduce(state: HostState, message: HostMessage): HostState {
         themeKind: message.payload.themeKind,
         reduceMotionPreference: message.payload.reduceMotion,
       };
+    case 'editor/cursor':
+      return { ...state, cursor: message.payload };
+    case 'command':
+    case 'export/ack':
+      return state;
   }
 }
 

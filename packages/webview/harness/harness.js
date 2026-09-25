@@ -1,33 +1,21 @@
 // Mocks the VS Code webview API so the built webview runs in a normal browser tab.
 // Query parameters: ?theme=dark&mode=auto&fixture=<name>&locale=es&reduce=1&chrome=0
+// Settings: any `s.<key>=<value>` parameter, e.g. ?s.display.futureSteps=ghosted&s.playback.autoplay=true
 (function () {
   const params = new URLSearchParams(location.search);
   const posted = [];
+  const settings = {};
+  for (const [key, value] of params) {
+    if (!key.startsWith('s.')) continue;
+    settings[key.slice(2)] = value === 'true' ? true : value === 'false' ? false : Number.isFinite(Number(value)) && value.trim() !== '' ? Number(value) : value;
+  }
+  window.harnessSettings = Object.assign({}, window.harnessSettings || {}, settings);
   let persisted;
   const byId = (id) => document.getElementById(id);
 
-  const strings = {
-    en: {
-      'app.loading': 'Loading diagram…',
-      'app.lines': '{0} lines',
-      'app.canvasPlaceholder': 'The animation appears here.',
-      'transport.label': 'Playback controls',
-      'transport.first': 'First step',
-      'transport.previous': 'Previous step',
-      'transport.play': 'Play',
-      'transport.pause': 'Pause',
-      'transport.next': 'Next step',
-      'transport.last': 'Last step',
-      'toolbar.label': 'Diagram toolbar',
-    },
-    es: {
-      'transport.play': 'Reproducir',
-      'transport.pause': 'Pausar',
-      'transport.next': 'Paso siguiente',
-      'transport.previous': 'Paso anterior',
-      'app.loading': 'Cargando diagrama…',
-    },
-  };
+  // English comes from the webview's built-in catalogue; Spanish from the real l10n bundle.
+  const strings = { en: {}, es: window.harnessStringsEs || {} };
+
 
   // Fixtures registered by later milestones (window.harnessFixtures) or a trivial default.
   const fixtures = Object.assign(
@@ -51,7 +39,7 @@
     const name = byId('fixture').value;
     const source = fixtures[name];
     const payload = { source, version: Date.now(), origin: { line: 0, character: 0 } };
-    if (type === 'document/load') Object.assign(payload, { uri: `file:///harness/${name}`, fileName: name });
+    if (type === 'document/load') Object.assign(payload, { uri: `file:///harness/${name}`, fileName: name.split('/').pop(), diagramIndex: 0 });
     send(type, Object.assign(payload, window.harnessDocumentExtras ? window.harnessDocumentExtras(name, source) : {}));
   }
 

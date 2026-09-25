@@ -8,6 +8,8 @@ export interface Timeline {
   /** Start of each step's transition, in ms. */
   starts: number[];
   transitions: number[];
+  /** Part of each dwell in which the step's choreography settles (arrowhead, activation, glow). */
+  settles: number[];
   dwells: number[];
   /** Steps whose dwell waits for the user during autoplay (`@pause` with no duration). */
   holds: boolean[];
@@ -24,27 +26,34 @@ export interface Position {
   elapsed: number;
 }
 
+/** Choreography that follows the travel (arrowhead, activation growth, receiver glow): spec §9.8.3. */
+export const SETTLE_MS = 240;
+
 export function buildTimeline(steps: readonly Step[]): Timeline {
   const starts: number[] = [];
   const transitions: number[] = [];
+  const settles: number[] = [];
   const dwells: number[] = [];
   const holds: boolean[] = [];
   let t = 0;
   for (const step of steps) {
+    // A hold still needs its settle time before playback rests.
+    const dwell = step.timing.hold ? SETTLE_MS : step.timing.dwellMs;
     starts.push(t);
     transitions.push(step.timing.transitionMs);
-    dwells.push(step.timing.hold ? 0 : step.timing.dwellMs);
+    settles.push(Math.min(SETTLE_MS, dwell));
+    dwells.push(dwell);
     holds.push(step.timing.hold);
-    t += step.timing.transitionMs + (step.timing.hold ? 0 : step.timing.dwellMs);
+    t += step.timing.transitionMs + dwell;
   }
-  return { starts, transitions, dwells, holds, duration: t };
+  return { starts, transitions, settles, dwells, holds, duration: t };
 }
 
-/** End of a step's transition — where playback rests when paused "at" that step. */
+/** Where playback rests when paused "at" a step: after its transition and settle. */
 export function stepEnd(timeline: Timeline, index: number): number {
   if (index < 0) return 0;
   const i = Math.min(index, timeline.starts.length - 1);
-  return (timeline.starts[i] ?? 0) + (timeline.transitions[i] ?? 0);
+  return (timeline.starts[i] ?? 0) + (timeline.transitions[i] ?? 0) + (timeline.settles[i] ?? 0);
 }
 
 export function positionAt(timeline: Timeline, t: number): Position {

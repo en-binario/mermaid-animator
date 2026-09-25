@@ -6,7 +6,8 @@
   "license": "MIT",
   "exports": {
     ".": "./src/index.ts",
-    "./tokens.css": "./src/tokens.css"
+    "./tokens.css": "./src/tokens.css",
+    "./diagram.css": "./src/diagram.css"
   },
   "types": "./src/index.ts",
   "description": "Theme tokens, scene model and SVG renderer.",

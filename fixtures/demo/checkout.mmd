@@ -1,0 +1,24 @@
+sequenceDiagram
+    %% @id checkout
+    %% @title "Checkout — happy path"
+    actor U as Customer
+    participant W as Web App
+    participant P as Payments
+    participant L@{ "type": "database" } as Ledger
+
+    %% @chapter "Place order"
+    %% @caption "The customer confirms the basket."
+    U->>+W: Confirm order
+    W->>+P: Authorise card
+    loop Retry on contention
+        P->>L: Write entry
+        L-->>P: Ack
+    end
+    alt Card accepted
+        P-->>W: Authorised
+    else Card declined
+        P-->>W: Declined
+    end
+    deactivate P
+    Note over W,P: Idempotency key stored for 24h
+    W-->>-U: Order confirmed

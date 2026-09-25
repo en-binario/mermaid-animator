@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8">
     <!-- Same policy as production (packages/extension/src/html.ts), with 'self' standing in for the webview resource origin. -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-harness' 'self'; style-src 'self' 'nonce-harness'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'none'">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-harness' 'self'; style-src 'self' 'nonce-harness'; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'none'">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mermaid Animator — webview harness</title>
     <link rel="stylesheet" href="../../extension/dist/webview/fonts.css">
@@ -38,6 +38,7 @@
       <output id="log"></output>
     </aside>
     <div id="app" class="ma-root"></div>
+    <script nonce="harness" src="./harness-fixtures.js"></script>
     <script nonce="harness" src="./harness.js"></script>
     <script type="module" nonce="harness" src="../../extension/dist/webview/main.js"></script>
   </body>

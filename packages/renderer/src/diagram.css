@@ -1,0 +1,110 @@
+/* Diagram shape language (spec §9.6.1, §9.7) — colours only from Ink & Ivory tokens. */
+
+.ma-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+  font-family: var(--ma-font-label);
+  text-rendering: geometricPrecision;
+}
+
+.ma-svg text {
+  font-family: var(--ma-font-label);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Boxes (participant groups) */
+.ma-box-fill { fill: var(--ma-surface-sunken); fill-opacity: 0.7; stroke: var(--ma-hairline); stroke-width: var(--ma-stroke-hairline); }
+.ma-box-label { fill: var(--ma-ink-3); font-size: var(--ma-type-micro); font-weight: 600; letter-spacing: 0.08em; }
+
+/* Participants */
+.ma-participant-box { fill: var(--ma-surface); stroke: var(--ma-rule); stroke-width: var(--ma-stroke-structural); }
+.ma-participant-label { fill: var(--ma-ink-1); font-size: var(--ma-type-participant); font-weight: 560; }
+.ma-participant--footer .ma-participant-box { stroke: var(--ma-hairline); }
+.ma-participant--footer .ma-participant-label { fill: var(--ma-ink-2); font-weight: 450; }
+.ma-actor-figure { fill: none; stroke: var(--ma-ink-1); stroke-width: var(--ma-stroke-structural); stroke-linecap: round; }
+.ma-glyph { fill: none; stroke: var(--ma-ink-2); stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Lifelines */
+.ma-lifeline { stroke: var(--ma-rule); stroke-width: 1; stroke-dasharray: 2 4; }
+.ma-lifeline-glow { stroke: var(--ma-accent); stroke-width: 1; }
+.ma-destroy { stroke: var(--ma-crimson); stroke-width: 1.5; stroke-linecap: round; fill: none; }
+
+/* Activations */
+.ma-activation { fill: var(--ma-accent-muted); stroke: var(--ma-accent); stroke-opacity: 0.6; stroke-width: 1; }
+.ma-activation[data-ghost='true'] { stroke: var(--ma-rule); fill: var(--ma-surface-sunken); }
+
+/* Messages */
+.ma-hit { fill: none; stroke: transparent; stroke-width: 12; pointer-events: stroke; }
+.ma-message-line { fill: none; stroke: var(--ma-ink-2); stroke-width: var(--ma-stroke-structural); stroke-linecap: butt; }
+.ma-message-hl { fill: none; stroke: var(--ma-accent); stroke-width: var(--ma-stroke-active); pointer-events: none; }
+.ma-message--dotted .ma-message-line,
+.ma-message--dotted .ma-message-hl { stroke-dasharray: 5 4; }
+.ma-arrowhead { fill: none; stroke: var(--ma-ink-2); stroke-width: var(--ma-stroke-structural); stroke-linecap: round; stroke-linejoin: round; }
+.ma-arrowhead--filled { fill: var(--ma-ink-2); }
+.ma-message--cross .ma-arrowhead { stroke: var(--ma-crimson); stroke-width: 1.5; }
+.ma-message-label { fill: var(--ma-ink-2); font-size: var(--ma-type-label); font-weight: 450; }
+/* A canvas-coloured halo keeps labels legible where they cross lifelines and bars. */
+.ma-message-label,
+.ma-fragment-label,
+.ma-fragment-keyword { paint-order: stroke fill; stroke: var(--ma-canvas); stroke-width: 4px; stroke-linejoin: round; }
+.ma-fragment-keyword { stroke: var(--ma-surface-sunken); }
+.ma-fragment[data-active='true'] .ma-fragment-keyword { stroke: var(--ma-accent-muted); }
+.ma-central { fill: var(--ma-surface); stroke: var(--ma-ink-2); stroke-width: 1.25; }
+.ma-badge circle { fill: var(--ma-surface); stroke: var(--ma-rule); stroke-width: 1; }
+.ma-badge text { fill: var(--ma-ink-2); font-size: 10.5px; font-weight: 560; }
+
+.ma-message[data-state='current'] .ma-message-label { fill: var(--ma-ink-1); font-weight: 560; }
+.ma-message[data-state='current'] .ma-arrowhead { stroke: var(--ma-accent); }
+.ma-message[data-state='current'] .ma-arrowhead--filled { fill: var(--ma-accent); }
+.ma-message[data-state='current'] .ma-badge circle { fill: var(--ma-accent); stroke: var(--ma-accent); }
+.ma-message[data-state='current'] .ma-badge text { fill: var(--ma-surface); }
+.ma-message[data-state='current'] .ma-central { stroke: var(--ma-accent); }
+
+.ma-message[data-state='future'] .ma-message-line,
+.ma-message[data-state='unplayed'] .ma-message-line { stroke: var(--ma-ink-3); stroke-width: 1; }
+.ma-message[data-state='future'] .ma-message-label,
+.ma-message[data-state='unplayed'] .ma-message-label,
+.ma-message[data-muted='true'] .ma-message-label { fill: var(--ma-ink-3); }
+.ma-message[data-state='future'] .ma-arrowhead,
+.ma-message[data-state='unplayed'] .ma-arrowhead { stroke: var(--ma-ink-3); }
+.ma-message[data-state='future'] .ma-arrowhead--filled,
+.ma-message[data-state='unplayed'] .ma-arrowhead--filled { fill: var(--ma-ink-3); }
+
+.ma-message[data-emphasis='true'] .ma-message-hl,
+.ma-message[data-emphasis='true'] .ma-message-line { stroke: var(--ma-brass); stroke-width: var(--ma-stroke-active); }
+.ma-message[data-emphasis='true'] .ma-arrowhead { stroke: var(--ma-brass); }
+.ma-message[data-emphasis='true'] .ma-arrowhead--filled { fill: var(--ma-brass); }
+
+/* Travelling pulse */
+.ma-pulse-dot { fill: var(--ma-accent); }
+.ma-pulse-halo { fill: var(--ma-pulse-halo); }
+.ma-pulse-tail { stroke: var(--ma-accent); stroke-width: 2; stroke-linecap: round; stroke-opacity: 0.35; }
+.ma-pulse[data-emphasis='true'] .ma-pulse-dot { fill: var(--ma-brass); }
+
+/* Notes */
+.ma-note-shape { fill: var(--ma-note-fill); stroke: var(--ma-note-rule); stroke-width: 1; }
+.ma-note-fold { fill: none; stroke: var(--ma-note-rule); stroke-width: 1; }
+.ma-note-text { fill: var(--ma-ink-1); font-size: var(--ma-type-label); }
+.ma-note[data-state='future'] .ma-note-text,
+.ma-note[data-state='unplayed'] .ma-note-text { fill: var(--ma-ink-3); }
+
+/* Fragments */
+.ma-fragment-frame { fill: none; stroke: var(--ma-hairline); stroke-width: var(--ma-stroke-hairline); }
+.ma-fragment-glow { fill: none; stroke: var(--ma-brass); stroke-width: 1.5; pointer-events: none; }
+.ma-fragment-tab { fill: var(--ma-surface-sunken); stroke: var(--ma-hairline); stroke-width: 1; }
+.ma-fragment[data-active='true'] .ma-fragment-tab { fill: var(--ma-accent-muted); }
+.ma-fragment-keyword { fill: var(--ma-ink-2); font-size: var(--ma-type-micro); font-weight: 650; letter-spacing: 0.08em; }
+.ma-fragment-label { fill: var(--ma-ink-2); font-size: var(--ma-type-label); font-style: italic; }
+.ma-fragment-separator { stroke: var(--ma-hairline); stroke-width: 1; stroke-dasharray: 4 4; }
+.ma-rect-fill { fill: var(--ma-accent-muted); fill-opacity: 0.55; stroke: none; }
+
+/* High-contrast palettes: no opacity-only dimming, wider strokes */
+[data-palette$='-hc'] .ma-message[data-state='future'] .ma-message-line,
+[data-palette$='-hc'] .ma-message[data-state='unplayed'] .ma-message-line { stroke-dasharray: 1 3; }
+[data-palette$='-hc'] .ma-participant-box { stroke: var(--ma-ink-1); stroke-width: 2; }
+[data-palette$='-hc'] .ma-lifeline { stroke-width: 1.5; }
+
+/* Generic (Mermaid-rendered) diagrams: keep the flat Ink & Ivory look. */
+.ma-generic * { filter: none !important; }

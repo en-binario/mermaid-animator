@@ -11,3 +11,4 @@ export * from './hash';
 export * from './steps';
 export * from './timeline';
 export * from './compile';
+export * from './layout';

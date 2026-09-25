@@ -205,3 +205,404 @@ body {
 [data-palette$='-hc'] .ma-button {
   border-color: var(--ma-rule);
 }
+
+/* ---------------------------------------------------------------------------------------------
+ * M1 components (spec §9.9)
+ * ------------------------------------------------------------------------------------------- */
+
+.ma-visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.ma-toolbar__spacer {
+  flex: 1;
+}
+
+.ma-switcher select {
+  max-width: 280px;
+  height: 26px;
+  padding: 0 var(--ma-space-2);
+  border: var(--ma-border-width) solid var(--ma-rule);
+  border-radius: var(--ma-radius-sm);
+  background: var(--ma-surface);
+  color: var(--ma-ink-1);
+  font: inherit;
+}
+
+.ma-button--pressed,
+.ma-button--pressed:hover:not(:disabled) {
+  background: var(--ma-accent-muted);
+  color: var(--ma-accent);
+}
+
+.ma-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+.ma-popover {
+  position: absolute;
+  z-index: 20;
+  min-width: 180px;
+  padding: var(--ma-space-1);
+  background: var(--ma-surface);
+  border: var(--ma-border-width) solid var(--ma-rule);
+  border-radius: var(--ma-radius-lg);
+  box-shadow: var(--ma-elevation-1);
+}
+
+.ma-toolbar .ma-popover {
+  top: calc(100% + 6px);
+  right: 0;
+}
+
+.ma-transport .ma-popover {
+  bottom: calc(100% + 8px);
+  right: 0;
+}
+
+.ma-menu {
+  display: flex;
+  flex-direction: column;
+}
+
+.ma-menu__item {
+  display: block;
+  min-height: 28px;
+  padding: 4px var(--ma-space-3);
+  border: 0;
+  border-radius: var(--ma-radius-sm);
+  background: transparent;
+  color: var(--ma-ink-1);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ma-menu__item:hover,
+.ma-menu__item:focus-visible {
+  background: var(--ma-surface-sunken);
+  outline: none;
+}
+
+.ma-menu__item--checked {
+  color: var(--ma-accent);
+  font-weight: 560;
+}
+
+.ma-menu--speed {
+  min-width: 96px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ma-menu__rule {
+  height: 1px;
+  margin: var(--ma-space-1) 0;
+  background: var(--ma-hairline);
+}
+
+/* Canvas overlays */
+.ma-canvas .ma-svg {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}
+
+.ma-canvas--stale .ma-svg {
+  opacity: 0.4;
+}
+
+.ma-banner {
+  position: absolute;
+  top: var(--ma-space-3);
+  left: 50%;
+  z-index: 10;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--ma-space-3);
+  max-width: min(720px, calc(100% - 32px));
+  padding: var(--ma-space-2) var(--ma-space-3) var(--ma-space-2) var(--ma-space-4);
+  background: var(--ma-surface);
+  border: var(--ma-border-width) solid var(--ma-hairline);
+  border-left: 2px solid var(--ma-accent);
+  border-radius: var(--ma-radius-sm);
+  box-shadow: var(--ma-elevation-1);
+  color: var(--ma-ink-1);
+}
+
+.ma-banner--error {
+  border-left-color: var(--ma-crimson);
+}
+
+/* Informational notices are quiet captions at the bottom-left, never over the drawing's top. */
+.ma-banner--info {
+  top: auto;
+  bottom: var(--ma-space-3);
+  left: var(--ma-space-4);
+  transform: none;
+  max-width: min(520px, calc(100% - 180px));
+  box-shadow: none;
+  color: var(--ma-ink-2);
+  font-size: var(--ma-type-caption);
+}
+
+.ma-banner--warning {
+  border-left-color: var(--ma-brass);
+}
+
+.ma-banner__text {
+  overflow-wrap: anywhere;
+}
+
+.ma-text-button {
+  flex: none;
+  padding: 2px var(--ma-space-1);
+  border: 0;
+  background: transparent;
+  color: var(--ma-accent);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ma-text-button:focus-visible,
+.ma-chip:focus-visible,
+.ma-counter:focus-visible,
+.ma-speed:focus-visible,
+.ma-scrubber:focus-visible,
+.ma-switcher select:focus-visible {
+  outline: 1px solid var(--ma-focus);
+  outline-offset: 2px;
+}
+
+.ma-chip {
+  height: 24px;
+  padding: 0 var(--ma-space-3);
+  border: var(--ma-border-width) solid var(--ma-rule);
+  border-radius: 12px;
+  background: var(--ma-surface);
+  color: var(--ma-ink-1);
+  font-size: var(--ma-type-caption);
+  cursor: pointer;
+  box-shadow: var(--ma-elevation-1);
+}
+
+.ma-resume {
+  position: absolute;
+  right: var(--ma-space-4);
+  bottom: var(--ma-space-4);
+  z-index: 10;
+}
+
+.ma-tooltip {
+  position: absolute;
+  z-index: 30;
+  max-width: 320px;
+  padding: 6px 8px;
+  background: var(--ma-surface);
+  border: var(--ma-border-width) solid var(--ma-rule);
+  border-radius: var(--ma-radius-sm);
+  color: var(--ma-ink-1);
+  font-size: var(--ma-type-caption);
+  line-height: 1.4;
+  pointer-events: none;
+  box-shadow: var(--ma-elevation-1);
+}
+
+[data-palette="graphite"] .ma-tooltip {
+  background: var(--ma-surface-sunken);
+}
+
+.ma-tooltip__meta {
+  margin-top: 2px;
+  color: var(--ma-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.ma-toast {
+  position: absolute;
+  left: 50%;
+  bottom: var(--ma-space-4);
+  z-index: 10;
+  transform: translateX(-50%);
+  padding: 6px var(--ma-space-3);
+  background: var(--ma-ink-1);
+  color: var(--ma-canvas);
+  border-radius: var(--ma-radius-sm);
+  font-size: var(--ma-type-caption);
+}
+
+/* Transport */
+.ma-scrubber {
+  position: relative;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.ma-scrubber__track {
+  position: relative;
+}
+
+.ma-scrubber__played {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: var(--ma-ink-2);
+}
+
+.ma-scrubber__tick {
+  position: absolute;
+  top: -3px;
+  width: 1px;
+  height: 8px;
+  background: var(--ma-rule);
+  transform: translateX(-0.5px);
+}
+
+.ma-scrubber__thumb {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid var(--ma-accent);
+  border-radius: 50%;
+  background: var(--ma-surface);
+  transform: translate(-50%, -50%);
+  box-sizing: border-box;
+  transition: width var(--ma-duration-xfast) var(--ma-ease-standard), height var(--ma-duration-xfast) var(--ma-ease-standard);
+}
+
+.ma-scrubber:hover .ma-scrubber__thumb {
+  width: 14px;
+  height: 14px;
+}
+
+.ma-scrubber__hover {
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%);
+  white-space: nowrap;
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ma-counter,
+.ma-speed {
+  height: 28px;
+  padding: 0 var(--ma-space-2);
+  border: var(--ma-border-width) solid transparent;
+  border-radius: var(--ma-radius-sm);
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--ma-font-label);
+}
+
+.ma-counter:hover:not(:disabled),
+.ma-speed:hover {
+  background: var(--ma-surface-sunken);
+}
+
+.ma-speed {
+  min-width: 48px;
+  color: var(--ma-ink-2);
+  font-size: var(--ma-type-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+.ma-goto {
+  min-width: 220px;
+  padding: var(--ma-space-2);
+}
+
+.ma-input {
+  width: 100%;
+  height: 28px;
+  box-sizing: border-box;
+  padding: 0 var(--ma-space-2);
+  border: var(--ma-border-width) solid var(--ma-rule);
+  border-radius: var(--ma-radius-sm);
+  background: var(--ma-canvas);
+  color: var(--ma-ink-1);
+  font: inherit;
+}
+
+.ma-input:focus {
+  outline: 1px solid var(--ma-focus);
+  outline-offset: 1px;
+}
+
+/* Shortcut sheet */
+.ma-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 18%);
+}
+
+.ma-sheet {
+  width: min(460px, calc(100% - 32px));
+  max-height: calc(100% - 64px);
+  overflow: auto;
+  padding: var(--ma-space-5);
+  background: var(--ma-surface);
+  border: var(--ma-border-width) solid var(--ma-rule);
+  border-radius: var(--ma-radius-lg);
+  box-shadow: var(--ma-elevation-1);
+}
+
+.ma-sheet__title {
+  margin: 0 0 var(--ma-space-4);
+  font-family: var(--ma-font-serif);
+  font-size: var(--ma-type-lead);
+  font-weight: 500;
+}
+
+.ma-shortcuts {
+  margin: 0 0 var(--ma-space-4);
+}
+
+.ma-shortcuts__row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: var(--ma-space-3);
+  padding: 5px 0;
+  border-bottom: 1px solid var(--ma-hairline);
+}
+
+.ma-shortcuts dt,
+.ma-shortcuts dd {
+  margin: 0;
+}
+
+.ma-shortcuts kbd {
+  font-family: var(--ma-font-label);
+  font-size: var(--ma-type-caption);
+  font-variant-numeric: tabular-nums;
+  color: var(--ma-ink-2);
+}
+
+.ma-export-host {
+  position: fixed;
+  left: -100000px;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+@media (max-width: 559px) {
+  .ma-speed {
+    display: none;
+  }
+}
