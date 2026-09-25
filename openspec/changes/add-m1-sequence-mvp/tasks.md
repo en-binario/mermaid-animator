@@ -2,25 +2,25 @@
 
 ## 1. Diagram discovery (core + host)
 
-- [ ] 1.1 Implement the fence locator and diagram-type detector in `core` (backtick/tilde fences, info strings, unterminated fences, front matter, directives, comments); verify Vitest cases for every rule in `specs/diagram-discovery` and the type list in `specs/sequence-parsing`
-- [ ] 1.2 Implement diagram binding (match by `@id`, similarity ≥ 50%, index) in `core`; verify unit tests for moved, edited and deleted diagrams
+- [x] 1.1 Implement the fence locator and diagram-type detector in `core` (backtick/tilde fences, info strings, unterminated fences, front matter, directives, comments); verify Vitest cases for every rule in `specs/diagram-discovery` and the type list in `specs/sequence-parsing`
+- [x] 1.2 Implement diagram binding (match by `@id`, similarity ≥ 50%, index) in `core`; verify unit tests for moved, edited and deleted diagrams
 - [ ] 1.3 Add CodeLens, context keys, *Animate Diagram at Cursor*, *Animate All Diagrams in File*, Explorer menu with quick pick, and widen open commands/title action to Markdown/MDX; key panels per diagram with `▶ <title> · n` titles; verify integration tests for CodeLens presence, markdown open and panel reuse
 
 ## 2. Sequence parsing and annotations (core)
 
-- [ ] 2.1 Implement the statement splitter and label decoding (entities, `<br>`, wrap prefixes, `#` comments); verify unit tests
-- [ ] 2.2 Implement the sequence parser for all statement forms with source ranges, block stack, implicit participants and error recovery; verify unit tests per statement form and for unclosed/stray blocks
-- [ ] 2.3 Implement front matter / `%%{init}%%` / title extraction; verify unit tests
-- [ ] 2.4 Implement the annotation grammar, scoping, validation diagnostics with suggestions; verify unit tests including `@pasue` → `@pause`
-- [ ] 2.5 Build the conformance corpus (≥ 40 valid and ≥ 10 invalid fixtures) and the differential test against Mermaid 12 under jsdom; verify 100% acceptance agreement
-- [ ] 2.6 Add the 1,000-line parse performance test; verify median < 30 ms
+- [x] 2.1 Implement the statement splitter and label decoding (entities, `<br>`, wrap prefixes, `#` comments); verify unit tests
+- [x] 2.2 Implement the sequence parser for all statement forms with source ranges, block stack, implicit participants and error recovery; verify unit tests per statement form and for unclosed/stray blocks
+- [x] 2.3 Implement front matter / `%%{init}%%` / title extraction; verify unit tests
+- [x] 2.4 Implement the annotation grammar, scoping, validation diagnostics with suggestions; verify unit tests including `@pasue` → `@pause`
+- [x] 2.5 Build the conformance corpus (≥ 40 valid and ≥ 10 invalid fixtures) and the differential test against Mermaid 12 under jsdom; verify 100% acceptance agreement
+- [x] 2.6 Add the 1,000-line parse performance test; verify median < 30 ms
 
 ## 3. Step compilation and timeline (core)
 
-- [ ] 3.1 Implement step compilation with activation/create/destroy merge rules, fragment handling for M1, fragment paths and annotation effects; verify unit tests for each rule in `specs/step-compilation` and `specs/animation-annotations`
-- [ ] 3.2 Implement stable identities (FNV-1a 64, structural and content IDs, `@step-id`); verify property-style tests: unrelated insertion keeps IDs, label edit keeps `structuralId`
-- [ ] 3.3 Implement timing (`travel(Δcol)`, adaptive dwell, overrides) and the timeline (`stepStarts`, `positionAt`); verify unit tests including the 315 ms / 710 ms example
-- [ ] 3.4 Implement position resolution (step-id → id → structuralId → cursor → nearest preceding); verify unit tests
+- [x] 3.1 Implement step compilation with activation/create/destroy merge rules, fragment handling for M1, fragment paths and annotation effects; verify unit tests for each rule in `specs/step-compilation` and `specs/animation-annotations`
+- [x] 3.2 Implement stable identities (FNV-1a 64, structural and content IDs, `@step-id`); verify property-style tests: unrelated insertion keeps IDs, label edit keeps `structuralId`
+- [x] 3.3 Implement timing (`travel(Δcol)`, adaptive dwell, overrides) and the timeline (`stepStarts`, `positionAt`); verify unit tests including the 315 ms / 710 ms example
+- [x] 3.4 Implement position resolution (step-id → id → structuralId → cursor → nearest preceding); verify unit tests
 
 ## 4. Layout and rendering (core + renderer)
 

@@ -1,1 +1,13 @@
-export {};
+export * from './text';
+export * from './preprocess';
+export * from './detect';
+export * from './sequence/model';
+export { parseSequence, cleanLabel, type SequenceParseResult } from './sequence/parser';
+export { MERMAID_VERSION } from './sequence/lexerRules.generated';
+export * from './locate';
+export * from './binding';
+export * from './annotations';
+export * from './hash';
+export * from './steps';
+export * from './timeline';
+export * from './compile';

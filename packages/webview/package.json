@@ -10,13 +10,17 @@
   "types": "./src/index.ts",
   "description": "Preact application running inside the animator webview.",
   "dependencies": {
+    "@fontsource-variable/inter": "5.3.0",
+    "@fontsource-variable/source-serif-4": "5.3.0",
     "@mermaid-animator/core": "*",
     "@mermaid-animator/protocol": "*",
     "@mermaid-animator/renderer": "*",
     "@preact/signals": "2.11.2",
     "@vscode/codicons": "0.0.46-24",
-    "@fontsource-variable/inter": "5.3.0",
-    "@fontsource-variable/source-serif-4": "5.3.0",
+    "d3-interpolate": "3.0.1",
+    "d3-selection": "3.0.0",
+    "d3-zoom": "3.0.0",
+    "mermaid": "12.0.0",
     "preact": "10.29.8"
   }
 }
