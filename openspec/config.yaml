@@ -1,5 +1,16 @@
 schema: spec-driven
 
+context: |
+  Product: Mermaid Animator, a VS Code extension that plays existing Mermaid diagrams as animated, navigable diagrams.
+  Product source of truth: vscode-extension-specification.md (v1.1). Requirement IDs (FR-*/NFR-*) and section numbers refer to it.
+  Tech stack: TypeScript (strict), npm workspaces monorepo (packages/core, protocol, renderer, webview, extension), esbuild bundles,
+  Preact + @preact/signals in the webview, d3-zoom for camera, mermaid 12.x (pinned, lazy-loaded) for validation and Tier 3 fallback,
+  Vitest for unit tests, @vscode/test-electron for integration tests.
+  Architecture rules: packages/core has no DOM/Node/vscode imports; visual state is a pure function sceneAt(t); the extension host stays
+  light and web-compatible; the webview has a strict nonce CSP and no network access.
+  Design: "Ink & Ivory" tokens (Ivory light / Graphite dark / high contrast), Formal motion profile, reduced motion honoured.
+  Conventions: Conventional Commits; every commit ends with a Co-Authored-By trailer.
+
 # Project context (optional)
 # This is shown to AI when creating artifacts.
 # Add your tech stack, conventions, style guides, domain knowledge, etc.
