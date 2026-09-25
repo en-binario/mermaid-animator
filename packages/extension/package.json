@@ -1,0 +1,122 @@
+{
+  "name": "mermaid-animator",
+  "displayName": "%displayName%",
+  "description": "%description%",
+  "version": "0.1.0",
+  "publisher": "enbinario",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "mermaid",
+    "sequence diagram",
+    "animation",
+    "diagram",
+    "markdown"
+  ],
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#121417",
+    "theme": "dark"
+  },
+  "main": "./dist/extension.node.js",
+  "browser": "./dist/extension.web.js",
+  "l10n": "./l10n",
+  "extensionKind": [
+    "workspace",
+    "ui"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "%capabilities.untrusted%"
+    },
+    "virtualWorkspaces": true
+  },
+  "activationEvents": [
+    "onWebviewPanel:mermaidAnimator.panel"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "mermaid",
+        "aliases": [
+          "Mermaid",
+          "mermaid"
+        ],
+        "extensions": [
+          ".mmd",
+          ".mermaid"
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "command": "mermaidAnimator.open",
+        "title": "%command.open%",
+        "category": "Mermaid Animator",
+        "icon": "$(play-circle)"
+      },
+      {
+        "command": "mermaidAnimator.openToSide",
+        "title": "%command.openToSide%",
+        "category": "Mermaid Animator",
+        "icon": "$(play-circle)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "mermaidAnimator.open",
+          "when": "editorLangId == mermaid"
+        },
+        {
+          "command": "mermaidAnimator.openToSide",
+          "when": "editorLangId == mermaid"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "mermaidAnimator.openToSide",
+          "when": "editorLangId == mermaid",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Mermaid Animator",
+      "properties": {
+        "mermaidAnimator.theme.mode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "ivory",
+            "graphite",
+            "highContrast"
+          ],
+          "enumDescriptions": [
+            "%config.theme.mode.auto%",
+            "%config.theme.mode.ivory%",
+            "%config.theme.mode.graphite%",
+            "%config.theme.mode.highContrast%"
+          ],
+          "default": "auto",
+          "markdownDescription": "%config.theme.mode%"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "package": "vsce package --no-dependencies --out ../../mermaid-animator.vsix"
+  },
+  "devDependencies": {
+    "@mermaid-animator/core": "*",
+    "@mermaid-animator/protocol": "*"
+  }
+}

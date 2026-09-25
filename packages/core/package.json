@@ -1,0 +1,12 @@
+{
+  "name": "@mermaid-animator/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "description": "Pure TypeScript pipeline: parsing, IR, steps, timeline and layout. No DOM, Node or VS Code imports."
+}

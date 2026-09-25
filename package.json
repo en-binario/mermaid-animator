@@ -1,0 +1,38 @@
+{
+  "name": "mermaid-animator-monorepo",
+  "private": true,
+  "description": "Mermaid Animator — play Mermaid diagrams as elegant, navigable animations in VS Code.",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:watch": "node scripts/build.mjs --watch",
+    "typecheck": "node scripts/typecheck.mjs",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "npm run build && node packages/extension/test/runTests.mjs",
+    "package": "node scripts/build.mjs --production && npm run package --workspace mermaid-animator",
+    "check": "npm run lint && npm run typecheck && npm test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/mocha": "10.0.10",
+    "@types/node": "24.13.6",
+    "@types/vscode": "1.95.0",
+    "@vscode/test-electron": "3.1.0",
+    "@vscode/vsce": "4.0.0",
+    "esbuild": "0.28.2",
+    "eslint": "10.11.0",
+    "globals": "17.12.0",
+    "mocha": "12.0.2",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.70.1",
+    "vitest": "5.0.2"
+  }
+}

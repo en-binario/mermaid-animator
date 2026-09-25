@@ -1,0 +1,156 @@
+/*
+ * Ink & Ivory design tokens (spec §9). Palettes are selected with
+ * [data-palette] on the root element; values must match src/theme.ts.
+ */
+
+:root {
+  /* Spacing — 8 px rhythm with 4 px half-steps (§9.5) */
+  --ma-space-1: 4px;
+  --ma-space-2: 8px;
+  --ma-space-3: 12px;
+  --ma-space-4: 16px;
+  --ma-space-5: 24px;
+  --ma-space-6: 32px;
+  --ma-space-7: 48px;
+  --ma-space-8: 64px;
+
+  /* Radii */
+  --ma-radius-xs: 2px;
+  --ma-radius-sm: 4px;
+  --ma-radius-md: 6px;
+  --ma-radius-lg: 10px;
+
+  /* Strokes */
+  --ma-stroke-hairline: 1px;
+  --ma-stroke-structural: 1.25px;
+  --ma-stroke-active: 2px;
+  --ma-border-width: 1px;
+
+  /* Typography (§9.4) */
+  --ma-font-label: 'Inter Variable', var(--vscode-font-family, system-ui), system-ui, sans-serif;
+  --ma-font-serif: 'Source Serif 4 Variable', Georgia, 'Times New Roman', serif;
+  --ma-font-mono: var(--vscode-editor-font-family, ui-monospace), ui-monospace, monospace;
+  --ma-font-ui: var(--vscode-font-family, system-ui), system-ui, sans-serif;
+  --ma-type-micro: 10.5px;
+  --ma-type-caption: 11.5px;
+  --ma-type-label: 13px;
+  --ma-type-participant: 13.5px;
+  --ma-type-body: 15px;
+  --ma-type-lead: 18px;
+  --ma-type-display: 34px;
+
+  /* Opacities (§9.2.3) */
+  --ma-opacity-ghost: 0.12;
+  --ma-opacity-dim: 0.18;
+  --ma-opacity-muted: 0.45;
+
+  /* Motion (§9.8) */
+  --ma-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ma-ease-enter: cubic-bezier(0, 0, 0.2, 1);
+  --ma-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ma-ease-travel: cubic-bezier(0.45, 0, 0.25, 1);
+  --ma-duration-xfast: 90ms;
+  --ma-duration-fast: 150ms;
+  --ma-duration-base: 240ms;
+  --ma-duration-slow: 400ms;
+  --ma-duration-deliberate: 640ms;
+
+  /* Elevation 1 (light palettes); dark palettes use a border instead */
+  --ma-elevation-1: 0 1px 2px rgb(27 30 35 / 6%), 0 6px 16px rgb(27 30 35 / 6%);
+  --ma-focus: var(--vscode-focusBorder, #1F3B61);
+}
+
+[data-palette='ivory'] {
+  --ma-canvas: #FAF8F3;
+  --ma-surface: #FFFFFF;
+  --ma-surface-sunken: #F2EFE8;
+  --ma-hairline: #E2DDD2;
+  --ma-rule: #C9C2B4;
+  --ma-ink-1: #1B1E23;
+  --ma-ink-2: #4F555E;
+  --ma-ink-3: #6B7078;
+  --ma-accent: #1F3B61;
+  --ma-accent-muted: #DCE4EE;
+  --ma-brass: #8C6A3A;
+  --ma-sage: #4E6E60;
+  --ma-note-fill: #F5EEDC;
+  --ma-note-rule: #CDB98C;
+  --ma-crimson: #9E2B2B;
+  --ma-viridian: #2E6B4F;
+  --ma-pulse-halo: rgb(31 59 97 / 22%);
+  color-scheme: light;
+}
+
+[data-palette='graphite'] {
+  --ma-canvas: #121417;
+  --ma-surface: #1A1D21;
+  --ma-surface-sunken: #0E1013;
+  --ma-hairline: #2A2E34;
+  --ma-rule: #3A3F47;
+  --ma-ink-1: #ECE9E3;
+  --ma-ink-2: #B3B6BC;
+  --ma-ink-3: #868B93;
+  --ma-accent: #9DBCE3;
+  --ma-accent-muted: #1F2D42;
+  --ma-brass: #D4B27C;
+  --ma-sage: #94B8A6;
+  --ma-note-fill: #26231C;
+  --ma-note-rule: #5E5238;
+  --ma-crimson: #E38080;
+  --ma-viridian: #7FC4A2;
+  --ma-pulse-halo: rgb(157 188 227 / 22%);
+  --ma-elevation-1: none;
+  color-scheme: dark;
+}
+
+[data-palette='ivory-hc'] {
+  --ma-canvas: #FFFFFF;
+  --ma-surface: #FFFFFF;
+  --ma-surface-sunken: #F5F5F5;
+  --ma-hairline: #0F4A85;
+  --ma-rule: #0F4A85;
+  --ma-ink-1: #000000;
+  --ma-ink-2: #1F1F1F;
+  --ma-ink-3: #3B3B3B;
+  --ma-accent: #0F4A85;
+  --ma-accent-muted: #DCE9F7;
+  --ma-brass: #7A5A00;
+  --ma-sage: #2D5B45;
+  --ma-note-fill: #FFFBE6;
+  --ma-note-rule: #0F4A85;
+  --ma-crimson: #B5200D;
+  --ma-viridian: #1E6B3A;
+  --ma-pulse-halo: rgb(15 74 133 / 30%);
+  --ma-border-width: 2px;
+  --ma-stroke-hairline: 2px;
+  --ma-stroke-structural: 2px;
+  --ma-focus: var(--vscode-contrastActiveBorder, #0F4A85);
+  --ma-elevation-1: none;
+  color-scheme: light;
+}
+
+[data-palette='graphite-hc'] {
+  --ma-canvas: #000000;
+  --ma-surface: #000000;
+  --ma-surface-sunken: #0A0A0A;
+  --ma-hairline: #6FC3DF;
+  --ma-rule: #6FC3DF;
+  --ma-ink-1: #FFFFFF;
+  --ma-ink-2: #E6E6E6;
+  --ma-ink-3: #C8C8C8;
+  --ma-accent: #F38518;
+  --ma-accent-muted: #2B1A05;
+  --ma-brass: #FFD166;
+  --ma-sage: #9CDCA0;
+  --ma-note-fill: #0F0F0F;
+  --ma-note-rule: #6FC3DF;
+  --ma-crimson: #F48771;
+  --ma-viridian: #89D185;
+  --ma-pulse-halo: rgb(243 133 24 / 30%);
+  --ma-border-width: 2px;
+  --ma-stroke-hairline: 2px;
+  --ma-stroke-structural: 2px;
+  --ma-focus: var(--vscode-contrastActiveBorder, #F38518);
+  --ma-elevation-1: none;
+  color-scheme: dark;
+}

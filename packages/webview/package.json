@@ -1,0 +1,22 @@
+{
+  "name": "@mermaid-animator/webview",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "description": "Preact application running inside the animator webview.",
+  "dependencies": {
+    "@mermaid-animator/core": "*",
+    "@mermaid-animator/protocol": "*",
+    "@mermaid-animator/renderer": "*",
+    "@preact/signals": "2.11.2",
+    "@vscode/codicons": "0.0.46-24",
+    "@fontsource-variable/inter": "5.3.0",
+    "@fontsource-variable/source-serif-4": "5.3.0",
+    "preact": "10.29.8"
+  }
+}

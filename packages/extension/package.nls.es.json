@@ -1,0 +1,12 @@
+{
+  "displayName": "Mermaid Animator",
+  "description": "Reproduce tus diagramas Mermaid como animaciones elegantes y navegables.",
+  "capabilities.untrusted": "En áreas de trabajo que no son de confianza los diagramas se pueden ver y exportar, pero nunca se escriben archivos auxiliares.",
+  "command.open": "Abrir vista previa animada",
+  "command.openToSide": "Abrir vista previa animada en el lateral",
+  "config.theme.mode": "Paleta de colores del animador. `auto` sigue el tema del editor (Ivory para claro, Graphite para oscuro, alto contraste para temas de alto contraste).",
+  "config.theme.mode.auto": "Seguir el tema del editor.",
+  "config.theme.mode.ivory": "Usar siempre la paleta Ivory (clara).",
+  "config.theme.mode.graphite": "Usar siempre la paleta Graphite (oscura).",
+  "config.theme.mode.highContrast": "Usar siempre la paleta de alto contraste acorde con el tema del editor."
+}

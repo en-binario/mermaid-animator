@@ -1,0 +1,14 @@
+{
+  "Loading diagram…": "Cargando diagrama…",
+  "{0} lines": "{0} líneas",
+  "The animation appears here.": "Aquí aparece la animación.",
+  "Playback controls": "Controles de reproducción",
+  "First step": "Primer paso",
+  "Previous step": "Paso anterior",
+  "Play": "Reproducir",
+  "Pause": "Pausar",
+  "Next step": "Paso siguiente",
+  "Last step": "Último paso",
+  "Diagram toolbar": "Barra de herramientas del diagrama",
+  "Open a Mermaid file to animate it.": "Abre un archivo Mermaid para animarlo."
+}

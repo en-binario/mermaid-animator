@@ -1,0 +1,33 @@
+# Contributing
+
+## Workflow: OpenSpec
+
+Work is planned and delivered as [OpenSpec](https://github.com/Fission-AI/OpenSpec) changes (spec §23.1).
+
+1. **Propose** — `openspec new change <id>` (or `/opsx:propose` in Claude Code), then write `proposal.md`, the capability spec deltas under `specs/`, `design.md` and `tasks.md`.
+2. **Validate** — `openspec validate <id> --strict` must pass before implementation starts.
+3. **Apply** — implement the tasks in order (`/opsx:apply`), ticking each checkbox in `tasks.md` only when its stated verification passes.
+4. **Archive** — `openspec archive <id> --yes` merges the requirement deltas into `openspec/specs/` and moves the change to `openspec/changes/archive/`.
+
+Keep `vscode-extension-specification.md` in step: if implementation reveals that the product specification is wrong or incomplete, update it in the same change and say so in the change's design notes.
+
+## Checks
+
+Every change must pass:
+
+```sh
+npm run check             # lint, type-check, unit tests
+npm run build
+npm run test:integration
+```
+
+Architecture rules enforced by lint: `packages/core` imports nothing from VS Code, Node.js or DOM-oriented packages. The web-host bundle fails to build if it imports a Node.js built-in.
+
+## Commits
+
+- [Conventional Commits](https://www.conventionalcommits.org/) style subjects (`feat:`, `fix:`, `docs:`, `test:`, `build:`, `chore:`).
+- One logical change per commit; reference the OpenSpec change id in the body when relevant.
+
+## Design
+
+Visual work follows the Ink & Ivory design system (spec §9): colours only from tokens, hairline strokes, no overshoot in the Formal motion profile, and the design QA checklist in §9.11.

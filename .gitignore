@@ -6,3 +6,5 @@ out/
 coverage/
 *.tsbuildinfo
 .DS_Store
+.playwright-mcp/
+out-test/

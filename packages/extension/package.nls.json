@@ -1,0 +1,12 @@
+{
+  "displayName": "Mermaid Animator",
+  "description": "Play your Mermaid diagrams as elegant, navigable animations.",
+  "capabilities.untrusted": "In untrusted workspaces diagrams can be viewed and exported, but sidecar files are never written.",
+  "command.open": "Open Animated Preview",
+  "command.openToSide": "Open Animated Preview to the Side",
+  "config.theme.mode": "Colour palette of the animator. `auto` follows the editor theme (Ivory for light, Graphite for dark, high contrast for high-contrast themes).",
+  "config.theme.mode.auto": "Follow the editor theme.",
+  "config.theme.mode.ivory": "Always use the Ivory (light) palette.",
+  "config.theme.mode.graphite": "Always use the Graphite (dark) palette.",
+  "config.theme.mode.highContrast": "Always use the high-contrast palette matching the editor theme."
+}

@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <!-- Same policy as production (packages/extension/src/html.ts), with 'self' standing in for the webview resource origin. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-harness' 'self'; style-src 'self' 'nonce-harness'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'none'">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mermaid Animator — webview harness</title>
+    <link rel="stylesheet" href="../../extension/dist/webview/fonts.css">
+    <link rel="stylesheet" href="../../extension/dist/webview/codicons/codicon.css">
+    <link rel="stylesheet" href="../../extension/dist/webview/main.css">
+    <link rel="stylesheet" href="./harness.css">
+  </head>
+  <body>
+    <aside class="harness" aria-label="Harness controls">
+      <label>Theme kind
+        <select id="themeKind">
+          <option value="light">light</option>
+          <option value="dark">dark</option>
+          <option value="highContrast">highContrast</option>
+          <option value="highContrastLight">highContrastLight</option>
+        </select>
+      </label>
+      <label>Mode
+        <select id="themeMode">
+          <option value="auto">auto</option>
+          <option value="ivory">ivory</option>
+          <option value="graphite">graphite</option>
+          <option value="highContrast">highContrast</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="reduceMotion"> reduce motion</label>
+      <label>Fixture <select id="fixture"></select></label>
+      <label>Locale
+        <select id="locale"><option value="en">en</option><option value="es">es</option></select>
+      </label>
+      <button type="button" id="reload">Send document</button>
+      <output id="log"></output>
+    </aside>
+    <div id="app" class="ma-root"></div>
+    <script nonce="harness" src="./harness.js"></script>
+    <script type="module" nonce="harness" src="../../extension/dist/webview/main.js"></script>
+  </body>
+</html>

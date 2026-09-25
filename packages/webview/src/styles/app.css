@@ -1,0 +1,207 @@
+/* Animator shell (spec §8.2, §9.9). Colours come only from tokens.css. */
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--ma-canvas);
+  color: var(--ma-ink-1);
+  font-family: var(--ma-font-ui);
+  font-size: var(--ma-type-label);
+  -webkit-font-smoothing: antialiased;
+}
+
+.ma-root {
+  height: 100%;
+}
+
+.ma-shell {
+  display: grid;
+  grid-template-rows: 40px minmax(0, 1fr) 48px;
+  height: 100vh;
+}
+
+.ma-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--ma-space-2);
+  padding: 0 var(--ma-space-4);
+  background: var(--ma-surface);
+  border-bottom: var(--ma-border-width) solid var(--ma-hairline);
+  color: var(--ma-ink-2);
+  min-width: 0;
+}
+
+.ma-breadcrumb {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ma-breadcrumb strong {
+  color: var(--ma-ink-1);
+  font-weight: 560;
+}
+
+.ma-canvas {
+  position: relative;
+  overflow: hidden;
+  background: var(--ma-canvas);
+}
+
+.ma-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ma-space-2);
+  text-align: center;
+}
+
+.ma-placeholder p {
+  margin: 0;
+}
+
+.ma-placeholder__title {
+  font-family: var(--ma-font-serif);
+  font-size: var(--ma-type-display);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ma-ink-1);
+}
+
+.ma-placeholder__meta {
+  font-family: var(--ma-font-label);
+  font-size: var(--ma-type-caption);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ma-ink-3);
+}
+
+.ma-placeholder__hint {
+  font-family: var(--ma-font-serif);
+  font-size: var(--ma-type-lead);
+  color: var(--ma-ink-2);
+}
+
+.ma-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  overflow: hidden;
+}
+
+.ma-progress::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -30%;
+  width: 30%;
+  height: 100%;
+  background: var(--ma-accent);
+  animation: ma-indeterminate 1.4s var(--ma-ease-standard) infinite;
+}
+
+[data-reduced-motion='true'] .ma-progress::after {
+  animation: none;
+  left: 0;
+  width: 100%;
+  opacity: 0.4;
+}
+
+@keyframes ma-indeterminate {
+  to {
+    left: 100%;
+  }
+}
+
+.ma-transport {
+  display: flex;
+  align-items: center;
+  gap: var(--ma-space-1);
+  padding: 0 var(--ma-space-4);
+  background: var(--ma-surface);
+  border-top: var(--ma-border-width) solid var(--ma-hairline);
+}
+
+.ma-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: var(--ma-border-width) solid transparent;
+  border-radius: var(--ma-radius-sm);
+  background: transparent;
+  color: var(--ma-ink-2);
+  cursor: pointer;
+  transition: background-color var(--ma-duration-xfast) var(--ma-ease-standard), color var(--ma-duration-xfast) var(--ma-ease-standard);
+}
+
+.ma-button:hover:not(:disabled) {
+  background: var(--ma-surface-sunken);
+  color: var(--ma-ink-1);
+}
+
+.ma-button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.ma-button:focus-visible {
+  outline: 1px solid var(--ma-focus);
+  outline-offset: 2px;
+}
+
+.ma-button--primary {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--ma-accent);
+  color: var(--ma-surface);
+  margin: 0 var(--ma-space-1);
+}
+
+.ma-button--primary:hover:not(:disabled) {
+  background: var(--ma-accent);
+  color: var(--ma-surface);
+}
+
+.ma-scrubber {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  height: 32px;
+  margin: 0 var(--ma-space-3);
+}
+
+.ma-scrubber__track {
+  width: 100%;
+  height: 2px;
+  background: var(--ma-hairline);
+}
+
+.ma-counter {
+  font-family: var(--ma-font-label);
+  font-size: var(--ma-type-caption);
+  font-variant-numeric: tabular-nums;
+  color: var(--ma-ink-2);
+  min-width: 56px;
+  text-align: right;
+}
+
+.ma-counter strong {
+  color: var(--ma-ink-1);
+  font-weight: 560;
+}
+
+[data-palette$='-hc'] .ma-button {
+  border-color: var(--ma-rule);
+}
