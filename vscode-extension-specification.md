@@ -6,9 +6,11 @@
 |---|---|
 | **Document** | Product & Technical Specification |
 | **Product** | Mermaid Animator (VS Code extension) |
-| **Version** | 1.0 — Draft for review |
+| **Version** | 1.1 — Revised after technical review |
 | **Date** | 2026-09-25 |
-| **Status** | Proposed |
+| **Status** | Approved for M0/M1 implementation |
+| **Review** | [vscode-extension-specification-review.md](vscode-extension-specification-review.md) — disposition in Appendix E |
+| **Delivery workflow** | OpenSpec (`openspec/`) — see §23.1 |
 | **Source material** | [ideas-exploration.md](ideas-exploration.md) |
 | **Working identifier** | `enbinario.mermaid-animator` *(publisher ID to be confirmed — see §25)* |
 
@@ -45,6 +47,7 @@
 - [Appendix B — Sidecar File Example](#appendix-b--sidecar-file-example)
 - [Appendix C — `package.json` Contribution Excerpt](#appendix-c--packagejson-contribution-excerpt)
 - [Appendix D — Traceability to the Ideas Document](#appendix-d--traceability-to-the-ideas-document)
+- [Appendix E — Review Disposition](#appendix-e--review-disposition)
 
 ---
 
@@ -279,7 +282,7 @@ Support is delivered in three tiers.
 | Pie, XY chart, quadrant, radar | `pie`, `xychart-beta`, `quadrantChart`, `radar-beta` | 3 | M4 | Slice / series / point | Entrance per data element |
 | C4, block, packet, requirement, kanban, treemap, others | various | 3 | M4 | SVG group | Ordered reveal |
 
-> **Version policy.** The extension pins a Mermaid version (initially the latest 11.x at M0) and tracks it in `fixtures/mermaid-version.json`. Tier coverage is validated against that version's documentation examples (§21.2). Diagram types introduced by later Mermaid releases automatically receive Tier 3 support once the bundled Mermaid is upgraded.
+> **Version policy.** The extension pins a Mermaid version (12.0.0 at M0 — the latest release when M0 began) and tracks it in `fixtures/mermaid-version.json`. Tier coverage is validated against that version's documentation examples (§21.2). Diagram types introduced by later Mermaid releases automatically receive Tier 3 support once the bundled Mermaid is upgraded.
 
 ---
 
@@ -300,7 +303,7 @@ Support is delivered in three tiers.
 | E9 | **Deep link** | `vscode://enbinario.mermaid-animator/open?…` | Opens a file, diagram and step (§14.6). | P1 |
 | E10 | **Markdown preview control** | Built-in Markdown preview | A discreet play control on rendered Mermaid diagrams that opens the animator. | P2 |
 
-**Panel placement.** By default the animator opens in the editor group beside the active one (`panel.openBeside`). Panels are reused per diagram (`panel.reuse = "perDiagram"`); alternatives are `perDocument` and `single`.
+**Panel placement.** By default the animator opens in the editor group beside the active one (`panel.openBeside`). Panels are reused per diagram (`panel.reuse = "perDiagram"`); alternatives are `perDocument` and `single`. Whenever a panel switches to another diagram — through `perDocument`/`single` reuse or the toolbar diagram switcher — the existing webview is kept and receives a new `document/load` message (target: < 40 ms to first frame for a cached diagram); the webview iframe is never torn down and recreated for a diagram switch.
 
 **Panel title.** `▶ <diagram title or file name> · <n>` where `<n>` is the diagram's index when a document has more than one diagram. The diagram title comes, in order of precedence, from the `@id`/`@title` annotation, the front-matter `title:`, or the file name.
 
@@ -553,7 +556,7 @@ While a fragment's contents play, its frame border transitions to **brass** at 1
 
 Activated with `P` or *Mermaid Animator: Start Presentation*.
 
-- Executes `workbench.action.toggleZenMode` and `workbench.action.maximizeEditorHideSidebar` (or equivalent maximisation) and restores the previous layout on exit (`Esc`).
+- Executes `workbench.action.maximizeEditorHideSidebar` (a state VS Code restores deterministically) and restores the previous layout on exit (`Esc`). Zen Mode is **opt-in** (`presentation.zenMode`, default `false`): `workbench.action.toggleZenMode` is a blind toggle and the API exposes no Zen-Mode state, so if the user leaves Zen Mode by other means, toggling again on exit would re-enter it. When opted in, the extension only toggles back through a command whose keybinding-style `when` clause requires the `inZenMode` context key.
 - Canvas uses **Cinematic** camera; the inspector and minimap hide; toolbar and transport auto-hide after 2 s of pointer inactivity.
 - Captions render in the serif caption face at 22–28 px (responsive), centred, max 68 characters per line.
 - **Title card** at start: the diagram title set in the serif display size, with a subtitle (`6 participants · 4 chapters · 24 steps`), fading after 1.6 s or on first key press. Chapter title cards appear at each chapter boundary (`presentation.chapterCards`, default on).
@@ -583,7 +586,7 @@ Maps scroll position to playback, as suggested in the ideas document, and is the
 #### 8.12.2 Live reload
 
 - The panel re-parses on document change, debounced (`liveReload.debounceMs`, default 250 ms). Unsaved changes are reflected (the extension reads the `TextDocument`, not the file on disk).
-- **Position preservation.** Steps have stable IDs (§13.6.3). After re-compilation the player seeks to the same step ID; if it no longer exists, to the nearest preceding surviving step.
+- **Position preservation.** Steps have stable identities (§13.6.3). After re-compilation the player resolves the previous current step in this order: explicit `@step-id` → content `StepId` → `structuralId` (label-independent, so editing a message label character by character never moves the playhead) → a step whose source range contains the editor cursor → the nearest preceding surviving step.
 - **Change emphasis.** Newly added elements draw in (accent), removed elements fade out, and moved elements glide to their new positions (240 ms). Can be disabled (`liveReload.animateChanges`).
 - The topology layout is **stable** under edits: existing nodes keep their positions unless the layout strategy requires re-ordering; ELK is seeded with previous positions.
 
@@ -854,11 +857,11 @@ A user override `theme.accent` (hex) replaces `accent`; `accent-muted` is derive
 | `base` | 240 | Activations, badges, layout shifts |
 | `slow` | 400 | Fragment illumination, panel sheets |
 | `deliberate` | 640 | View morphs, title cards |
-| `travel(L)` | `clamp(280, 180 + 0.85 × L, 900)` where `L` is the path length in px | Message drawing |
+| `travel(Δcol)` | `clamp(280, 220 + 95 × Δcol, 900)` where `Δcol` is the absolute difference between the receiver's and sender's column indices — a **logical** span (1 for self-messages and non-sequence steps) | Message drawing |
 
 #### 9.8.3 Message step choreography (Sequence view, *Formal* profile)
 
-Let `T = travel(L)`.
+Let `T = travel(Δcol)`. The duration is **layout-invariant**: the step compiler derives it from logical columns, never from pixel lengths, so every view (Sequence, Topology, Split) draws its own path `0 → L_view` over the *same* millisecond window of the shared timeline, and switching views never changes `Timeline.duration`.
 
 | Order | Window | Motion |
 |---|---|---|
@@ -934,17 +937,25 @@ Every visual change is reviewed against:
 |---|---|
 | `participant` / `actor` (with `as` alias) | Declared up front; rendered at t = 0 (headers always visible). |
 | Participant types (e.g. `participant DB@{ "type": "database" }` in recent Mermaid 11 releases) | Glyph/shape mapping per §9.6. Unknown types fall back to `participant`. |
-| `create participant X` | Header materialises at the creation row as part of the step that creates it. |
-| `destroy X` | Lifeline terminates with a ✕ at the step of its final message. |
+| `create participant X` / `create actor X` | Merged into the immediately following message that targets `X`: the header reveal runs over `[0, base]` of that step. With no such message, it is its own step. |
+| `destroy X` | Merged into the adjacent message involving `X` (Mermaid allows `destroy` before *or* after it; the IR records `attachTo` = `prev`, `next` or `standalone`): the lifeline ✕ draws over `[T, T + fast]`. |
+| Labels | Mermaid entity codes (`#quot;`, `#9829;`, `#35;`) are decoded by the lexer; `<br>` / `<br/>` break lines; Markdown strings (`` "`**bold** text`" ``) are rendered through the whitelist inline parser of §8.9 into `<tspan>`s. |
+| `title`, `accTitle`, `accDescr` | The title feeds the panel title and title card; the accessibility title and description feed the SVG `aria-label` and the Transcript view. |
+| `properties` / `details` | Parsed and preserved; shown in the participant menu (no animation). |
+| `par_over` | Treated as `par`; its frame spans all participants. |
 | `box <colour> <label> … end` | Group background visible from t = 0; label emphasised while any member is active. |
-| All arrow types: `->`, `-->`, `->>`, `-->>`, `<<->>`, `<<-->>`, `-x`, `--x`, `-)`, `--)` | One step per message; visual per §9.6.1. |
-| Activation: `activate X` / `deactivate X` / `+` / `-` suffixes | Merged into the adjacent message step (explicit `activate` lines attach to the following message; `deactivate` to the preceding one). Standalone activations with no adjacent message become their own micro-step. |
+| All arrow types of the pinned grammar: `->`, `-->`, `->>`, `-->>`, `<<->>`, `<<-->>`, `-x`, `--x`, `-)`, `--)`, and the Mermaid 12 half-arrow family (listed below the table) | One step per message; visual per §9.6.1 (half arrowheads draw only the upper or lower barb). |
+| Central connections `A()->>B`, `A->>()B`, `A()->>()B` (Mermaid 12) | A small circle on the lifeline at the connected end(s); the pulse starts/ends at the circle. |
+| Statement separator `;`; `%%` and `#` comments | `;` splits statements on one line; comments are ignored except annotations (§11). |
+| Activation: `activate X` / `deactivate X` / `+` / `-` suffixes | Merged into an adjacent message step. An explicit `activate X` attaches to the **immediately preceding** message when `X` is its target or sender (unless that message already activated `X` via `+`); otherwise to the **immediately following** message when `X` is its sender. Consecutive `deactivate` statements merge into the immediately preceding message. Activations with no eligible adjacent message become their own micro-step. |
 | `Note left of / right of / over A[,B]` | Step (default), attached, or hidden (§8.9). |
 | `loop`, `alt`/`else`, `opt`, `par`/`and`, `critical`/`option`, `break`, `rect` | §8.8. |
 | `autonumber` (with start/increment) | Badges animate with messages; numbering honours Mermaid rules. |
 | `link` / `links` | Participant menu in inspector and on header click-and-hold; opening requires confirmation (§18). |
 | Comments `%%` | Ignored except for annotations (§11). |
 | Front matter / `%%{init}%%` | `title`, `config.sequence.*` (`mirrorActors`, `wrap`, `showSequenceNumbers`, margins) honoured where meaningful to layout. |
+
+**Half-arrow family (Mermaid 12).** Solid forms, arrowhead at the receiver: `-|\` (half filled, top), `-|/` (half filled, bottom), `-\\` (half stick, top), `-//` (half stick, bottom). Reverse forms, arrowhead at the sender: `/|-`, `\|-`, `//-`, `\\-`. Dotted variants double the line dash: `--|\`, `--|/`, `--\\`, `--//`, `/|--`, `\|--`, `//--`, `\\--`. The lexer is case-insensitive for keywords, as Mermaid's is.
 
 ### 10.2 Flowcharts (Tier 1)
 
@@ -1061,6 +1072,7 @@ Mermaid directives (`%%{ … }%%`) are **not** annotations and are passed to Mer
 | `@emphasis` | Statement | — | Emphasised style (§9.7). |
 | `@skip` | Statement | — | The next statement is drawn statically (from t = 0) and produces no step. |
 | `@with-next` | Statement | `[n]` | Merges the next step with the following *n* (default 1) into one step. |
+| `@step-id` | Statement | `word` (slug) | Pins an immutable identity for the next step, used for sidecar references and position preservation (§13.6.3). Duplicates are an error. |
 | `@focus` | Statement | `list` of participant IDs | Camera frames these participants for the next step. |
 | `@iterations` | Fragment | `number` | Iterations to play for the next `loop`. |
 | `@branch` | Fragment | `number` (1-based), `"label"`, `all`, `ask`, `skip` | Branch selection for the next `alt`/`opt`/`critical`. |
@@ -1117,7 +1129,7 @@ sequenceDiagram
 For teams who prefer diagrams free of annotations, the same configuration can live in a sidecar:
 
 - **Location.** `<source-file>.animator.json` next to the source (e.g. `README.md.animator.json`, `flow.mmd.animator.json`).
-- **Keys.** Diagrams are keyed by `@id` or, failing that, by `#<index>` (1-based) in the source document. Steps are keyed by stable step ID (§13.6.3) or by `#<step-number>`.
+- **Keys.** Diagrams are keyed by `@id` or, failing that, by `#<index>` (1-based) in the source document. Steps are keyed by `@step-id` slug, by content `StepId`, or by `#<step-number>`. Lookup falls back from content `StepId` to `structuralId`, so fixing a typo in a label does not orphan its caption; an entry that no longer resolves produces a warning diagnostic on the sidecar file rather than being silently dropped. Authors who want references that survive any edit use `@step-id`.
 - **Schema.** Contributed via `jsonValidation` for IntelliSense (`schemas/animator.schema.json`). See Appendix B.
 - **Writes.** The extension writes the sidecar only on explicit user action (*Save layout*, *Save as diagram defaults*), never implicitly.
 
@@ -1324,9 +1336,22 @@ flowchart LR
 |---|---|---|---|
 | **Extension host** | Node.js (desktop/remote) or Web Worker (vscode.dev) | Activation; locating diagrams in documents; commands, CodeLens, hovers, status bar; panel lifecycle and restoration; configuration resolution; editor decorations and cursor sync; diagnostics; annotation language features (using the **same core parser**); writing files. | Load heavy libraries (Mermaid, ELK) or do layout. Use Node-only APIs in shared code paths. |
 | **Webview** | Sandboxed Chromium iframe | Parsing, IR, step compilation, layout, rendering, animation, UI, export encoding. | Access the file system or network; execute diagram-provided scripts. |
-| **Workers** (within webview) | Web Workers | ELK layout, GIF quantisation, video encoding. | — |
+| **Workers** (within webview) | Web Workers, created through a same-origin `Blob` shim (below) | ELK layout, offline frame rendering (Canvas 2D backend), GIF quantisation, video encoding. | Touch the DOM; decode SVG. |
 
 The host also imports `@mermaid-animator/core` (pure TypeScript, no DOM) to provide diagnostics, completions and source ranges without a webview.
+
+**Worker instantiation.** The webview document's origin is `vscode-webview://…` while `asWebviewUri` resources are served from `https://file+.vscode-resource.vscode-cdn.net/…`, so the `Worker` constructor's same-origin check rejects a resource URL. Workers MUST be created through a same-origin blob wrapper:
+
+```ts
+export function createWebviewWorker(scriptUri: string): Worker {
+  const blob = new Blob([`importScripts(${JSON.stringify(scriptUri)});`], {
+    type: 'application/javascript',
+  });
+  return new Worker(URL.createObjectURL(blob));
+}
+```
+
+Blob workers inherit the document's CSP, so `script-src` must allow `${webview.cspSource}` for `importScripts` (§18).
 
 ### 13.3 Core pipeline
 
@@ -1406,11 +1431,18 @@ export type ArrowKind =
   | 'solidArrow' | 'dottedArrow'                // ->>  -->>
   | 'solidBidirectional' | 'dottedBidirectional'// <<->> <<-->>
   | 'solidCross' | 'dottedCross'                // -x   --x
-  | 'solidOpen' | 'dottedOpen';                 // -)   --)
+  | 'solidOpen' | 'dottedOpen'                  // -)   --)
+  // Mermaid 12 half arrows; the `dotted` flag on Message distinguishes -- forms
+  | 'halfTop' | 'halfBottom'                    // -|\   -|/
+  | 'stickTop' | 'stickBottom'                  // -\\   -//
+  | 'halfTopReverse' | 'halfBottomReverse'      // /|-   \|-
+  | 'stickTopReverse' | 'stickBottomReverse';   // //-   \\-
 
 export interface Message {
   id: string; from: string; to: string; label: string;
-  arrow: ArrowKind; activatesTarget?: boolean; deactivatesSource?: boolean;
+  arrow: ArrowKind; dotted: boolean;
+  activatesTarget?: boolean; deactivatesSource?: boolean;
+  central?: 'source' | 'target' | 'both';       // Mermaid 12 () connections
   sequenceNumber?: number; range: SourceRange;
 }
 
@@ -1432,7 +1464,7 @@ export type SequenceNode =
   | { type: 'note'; note: Note }
   | { type: 'activation'; participant: string; on: boolean; range: SourceRange }
   | { type: 'create'; participant: string; range: SourceRange }
-  | { type: 'destroy'; participant: string; range: SourceRange }
+  | { type: 'destroy'; participant: string; attachTo: 'prev' | 'next' | 'standalone'; range: SourceRange }
   | { type: 'fragment'; fragment: Fragment };
 
 export interface SequenceIR {
@@ -1447,18 +1479,26 @@ export interface SequenceIR {
 export type StepId = string;     // stable hash, see §13.6.3
 
 export interface Step {
-  id: StepId;
-  index: number;
+  id: StepId;                    // @step-id slug, else content hash (§13.6.3)
+  structuralId: StepId;          // label-independent identity for live-edit stability
+  index: number;                 // steps[i].index === i, always
   kind: 'message' | 'note' | 'activation' | 'create' | 'destroy'
       | 'transition' | 'node' | 'edge' | 'commit' | 'task' | 'group';
   targets: ElementRef[];         // IR element ids animated by this step
   fragmentPath: { fragmentId: string; branch: number; iteration?: number; of?: number }[];
-  lane?: number;                 // for concurrent par steps
+  lanes?: {                      // populated when concurrent par branches zip into one step
+    lane: number;
+    label: string;
+    targets: ElementRef[];
+    source: SourceRange;
+    caption?: string;
+  }[];
   chapter?: string;
   caption?: string;
   emphasis?: boolean;
-  timing: { transitionMs: number; dwellMs: number; latencyMs?: number };
-  source: SourceRange;
+  timing: { transitionMs: number; dwellMs: number; latencyMs?: number }; // layout-invariant
+  source: SourceRange;           // primary range (first lane when concurrent)
+  sources: SourceRange[];        // every range to decorate in the editor (FR-SYNC-03)
 }
 
 export interface StepList {
@@ -1487,7 +1527,7 @@ export interface Timeline {
 #### 13.6.1 Algorithm (sequence)
 
 1. Walk `SequenceIR.body` in document order, maintaining a fragment stack.
-2. For each **message**, emit one step. Merge adjacent explicit `activate`/`deactivate` statements (attach per §10.1).
+2. For each **message**, emit one step. Merge adjacent explicit `activate`/`deactivate` statements (attachment rules in §10.1). Merge a preceding `create participant X` into the immediately following message targeting `X` (header reveal over `[0, base]`), and a `destroy X` into the adjacent message involving `X` (✕ over `[T, T + fast]`). Standalone `create`/`destroy`/activation statements with no eligible neighbour emit their own step.
 3. For each **note**, emit per `playback.notes`.
 4. For each **fragment**:
    - `loop`: expand `iterations` times; each expansion's steps carry `{iteration, of}`.
@@ -1497,11 +1537,11 @@ export interface Timeline {
    - `break`: include content; mark the step after the break's last step as the continuation after the enclosing fragment.
 5. Apply statement annotations (`@caption`, `@chapter`, `@pause`, `@skip`, `@with-next`, `@emphasis`).
 6. Apply focus filter if *Play only focused steps* is active (filter is a view over the step list; step IDs are unchanged).
-7. Compute timing per step: transition from motion tokens (`travel(L)` requires layout, so timing finalisation happens after layout), dwell per §8.5.1.
+7. Compute timing per step: transition from `travel(Δcol)` using **logical** columns (no layout dependency — the step compiler stays pure and all views share one timeline), dwell per §8.5.1.
 
 #### 13.6.2 Invariants (property-tested)
 
-- Step indices are contiguous from 0.
+- Step indices are contiguous from 0 and `steps[i].index === i`; concurrent `par` lanes live inside one step's `lanes`, never as duplicate indices.
 - Every message in the selected branches/iterations appears exactly `iterations` times.
 - Every step's `source` lies within the diagram's range.
 - Step IDs are unique within a step list.
@@ -1510,12 +1550,16 @@ export interface Timeline {
 #### 13.6.3 Stable step IDs
 
 ```
-signature  = kind | from | to | normalise(label) | fragmentPathSignature
-occurrence = count of earlier steps with the same signature
-StepId     = base36( fnv1a64( signature + "#" + occurrence ) )
+structuralSig = kind | from | to | fragmentPathSignature
+structuralOcc = count of earlier steps with the same structuralSig
+structuralId  = base36( fnv1a64( structuralSig + "#" + structuralOcc ) )
+
+contentSig    = structuralSig | normalise(label)
+contentOcc    = count of earlier steps with the same contentSig
+StepId        = explicitStepId ?? base36( fnv1a64( contentSig + "#" + contentOcc ) )
 ```
 
-`normalise` lowercases, collapses whitespace and strips autonumber prefixes. Inserting unrelated statements does not change existing IDs; editing a label changes only that step's ID (in which case position is preserved by nearest-preceding fallback).
+`normalise` lowercases, collapses whitespace and strips autonumber prefixes. Inserting unrelated statements does not change existing IDs. Authors MAY pin an immutable `explicitStepId` with `%% @step-id <slug>`. During live reload (§8.12.2) and sidecar lookup (§11.7), resolution tries `StepId` first, then `structuralId` — unchanged while a user edits a message's label — and finally the nearest preceding surviving step.
 
 ### 13.7 Timeline & animation runtime (ADR-002)
 
@@ -1560,8 +1604,8 @@ ELK layered for flowcharts, class, ER and state diagrams; bespoke deterministic 
 ### 13.9 Rendering
 
 - **Engine `native`** (default for Tier 1/2): an SVG scene graph organised in layers — `background` → `boxes/clusters` → `fragments` → `lifelines` → `activations` → `edges/messages` → `labels` → `notes` → `overlay` (pulses, focus rings, heat) — plus HTML overlays for UI.
-- **Engine `mermaid-overlay`** (`render.engine`): Mermaid renders the SVG exactly; the extension maps Mermaid's DOM (by class names and document order) to IR elements and applies the same step animations with reduced fidelity (no travelling pulse along custom paths where geometry is unavailable, no view morphs). Offered for users who need Mermaid's exact visual identity.
-- **Canvas export path:** for raster exports, the SVG for each frame is serialised with fonts embedded as data URIs and drawn to an `OffscreenCanvas`.
+- **Engine `mermaid-overlay`** (`render.engine`, **P2 / M4**): Mermaid renders the SVG exactly and the **same SVG-group animator used by the Tier 3 generic engine** (§10.12) animates it, with per-type group ordering. There is deliberately no separate DOM-mapping layer for Tier 1 types: one animator serves both uses, avoiding brittle coupling to Mermaid's internal class names.
+- **Canvas 2D backend** (`@mermaid-animator/renderer/canvas`): because `sceneAt(t)` is renderer-independent, raster exports draw each scene directly with `CanvasRenderingContext2D` on an `OffscreenCanvas` **inside the encoder worker**, with fonts registered via `self.fonts.add(new FontFace(…))`. SVG strings are never serialised and rasterised per frame: Chromium's `createImageBitmap` cannot decode `image/svg+xml` blobs and `HTMLImageElement` does not exist in workers.
 - **Culling:** elements outside the viewport (plus 25% margin) are removed from the DOM for diagrams exceeding 500 elements.
 - **Text:** labels use `textContent` exclusively — never `innerHTML` (§18).
 
@@ -1593,7 +1637,7 @@ All messages are JSON objects `{ v: 1, type: string, id?: string, payload: … }
 | `link/open` | `{ url }` | Request to open a diagram link (host confirms). |
 | `sidecar/write` | `{ patch }` | Save layout / defaults. |
 | `export/data` | `{ id, format, suggestedName, chunk, index, total }` | Export bytes. |
-| `clipboard/image` | `{ png }` | Copy image (host writes via a temporary file where clipboard image APIs are unavailable). |
+| `clipboard/fallback` | `{ reason }` | The webview could not copy an image. *Copy Image* runs **inside the webview** with `navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])` (`vscode.env.clipboard` is text-only); from the palette the host first reveals the panel, then sends `command: copyImage`. On failure the host offers *Save as PNG…*. |
 | `telemetry` | `{ event, props }` | Forwarded to `TelemetryLogger` if enabled. |
 | `log` | `{ level, message }` | Output channel. |
 
@@ -1628,8 +1672,8 @@ Protocol types live in a shared package and are validated at the boundary in dev
 |---|---|---|---|
 | **SVG** (static) | Docs, print | Serialise current scene; inline styles; embed fonts (subset) as data URIs. | P0 |
 | **PNG** (static) | Chat, slides | Rasterise at 1×/2×/3×; optional transparent background. | P0 |
-| **Copy image** | Quick sharing | PNG to clipboard. | P0 |
-| **GIF** | Release notes, issues, chat | Offline frame rendering → `gifenc` in a Worker (median-cut palette per export, optional dithering). | P1 |
+| **Copy image** | Quick sharing | PNG to clipboard via `ClipboardItem` in the webview (§13.10). | P0 |
+| **GIF** | Release notes, issues, chat | Offline frame rendering with the Canvas 2D backend and `gifenc`, both in one worker (median-cut palette per export, optional dithering). | P1 |
 | **WebM** (VP9/VP8) | High quality video | WebCodecs `VideoEncoder` + WebM muxer in a Worker. | P1 |
 | **MP4** (H.264) | Slides, social | WebCodecs if `VideoEncoder.isConfigSupported` allows H.264 in the host's Chromium build; otherwise offer WebM, or transcode with `ffmpeg` found on `PATH` (desktop only, opt-in). | P1 |
 | **Animated SVG** | GitHub READMEs, docs sites | Self-contained SVG using CSS `@keyframes` (no script, no external resources), looping; GitHub renders it animated in `<img>`. | P1 |
@@ -1663,16 +1707,16 @@ The sheet shows a live preview, estimated duration and file size (GIF estimate f
 sequenceDiagram
     actor U as User
     participant WV as Webview UI
-    participant R as Offline Renderer
-    participant EW as Encoder Worker
+    participant EW as Render and Encode Worker
     participant H as Extension Host
     U->>WV: Export (options)
     WV->>H: request save location
     H-->>WV: target Uri (showSaveDialog)
+    WV->>EW: start(timeline, layout, fonts, options)
     loop for each frame f
-        WV->>R: sceneAt(f / fps)
-        R->>R: serialise SVG → OffscreenCanvas
-        R->>EW: ImageBitmap (transfer)
+        EW->>EW: scene = sceneAt(f / fps)
+        EW->>EW: renderSceneToCanvas(scene, ctx)
+        EW->>EW: encodeFrame(canvas)
         EW-->>WV: progress
     end
     EW-->>WV: encoded bytes
@@ -1689,7 +1733,8 @@ sequenceDiagram
 
 - Each element's timeline is compiled to CSS `@keyframes` with percentage stops; `animation-timing-function` per segment reproduces easing tokens.
 - `stroke-dashoffset` drawing and `opacity`/`transform` changes only; pulses use `offset-path` where supported, otherwise keyframed `transform: translate()` samples (12 per message).
-- Dark/light: optional `@media (prefers-color-scheme: dark)` block so the SVG adapts to the reader's GitHub theme (`export.svgAdaptiveTheme`, default on).
+- **Theme on GitHub.** Inside an `<img>`, `prefers-color-scheme` reflects the viewer's **OS** theme, not GitHub's theme setting, so one adaptive SVG can show an Ivory canvas on a dark GitHub page. Therefore (1) the animated SVG defaults to a **transparent background** with a GitHub-safe palette whose strokes and text keep ≥ 4.5 : 1 on both `#ffffff` and `#0d1117`; (2) *Export for GitHub (light + dark pair)* writes `<name>.light.anim.svg` and `<name>.dark.anim.svg`, and the insert-reference action emits a `<picture>` element, which GitHub resolves against its own theme. The in-SVG media query remains available (`export.svgAdaptiveTheme`, default **off**).
+- **Font fallback safety.** SVGs embedded as images may not load embedded `@font-face` data (GitHub's image proxy, Safari). Exported SVGs add an 8% horizontal buffer to boxes and set `textLength` with `lengthAdjust="spacing"` on every `<text>`, so fallback fonts never overflow boxes or collide with arrowheads.
 - `@media (prefers-reduced-motion: reduce)` shows the final state statically.
 - Size budget: warn above 1 MB.
 
@@ -1701,7 +1746,14 @@ After exporting from a Markdown source, a notification action *Insert below diag
 ![Checkout — happy path](./checkout.anim.svg)
 ```
 
-beneath the fenced block, using a relative path and the diagram title as alt text.
+beneath the fenced block, using a relative path and the diagram title as alt text. For a light/dark pair it inserts:
+
+```html
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./checkout.dark.anim.svg">
+  <img alt="Checkout — happy path" src="./checkout.light.anim.svg">
+</picture>
+```
 
 ### 14.6 Deep links
 
@@ -1803,7 +1855,7 @@ All keys are under `mermaidAnimator.`. The *short name* column is the key usable
 | `topology.returnMessages` | `returns` | `merge` \| `separate` \| `hide` | `merge` | Return message handling. |
 | `topology.edgeWeight` | — | `count` \| `uniform` | `count` | Edge width encoding. |
 | `flowchart.order` | `order` | `topological` \| `source` \| `bfs` \| `path` \| `token` | `topological` | Flowchart traversal. |
-| `render.engine` | `engine` | `auto` \| `native` \| `mermaid-overlay` | `auto` | `auto` = native when available, else overlay. |
+| `render.engine` | `engine` | `auto` \| `native` \| `mermaid-overlay` | `auto` | `auto` = native when available, else the generic SVG-group engine. `mermaid-overlay` arrives in M4. |
 
 **Theme & typography**
 
@@ -1837,21 +1889,21 @@ All keys are under `mermaidAnimator.`. The *short name* column is the key usable
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `presentation.chapterCards` | boolean | `true` | Chapter title cards. |
-| `presentation.zenMode` | boolean | `true` | Toggle Zen Mode on start. |
+| `presentation.zenMode` | boolean | `false` | Also enter Zen Mode on start (opt-in; see §8.10). |
 | `export.defaultFormat` | `gif` \| `webm` \| `mp4` \| `animatedSvg` \| `html` \| `svg` \| `png` | `animatedSvg` | Preselected format. |
 | `export.fps` | number | `30` | Video frame rate (GIF uses 15 unless changed). |
 | `export.scale` | 1 \| 2 \| 3 | `2` | Raster scale. |
 | `export.background` | `theme` \| `transparent` \| string | `theme` | Background. |
 | `export.includeCaptions` | boolean | `true` | Burn captions into video/GIF. |
 | `export.outputDirectory` | string | `${fileDirname}` | Output directory. |
-| `export.svgAdaptiveTheme` | boolean | `true` | Light/dark media query in animated SVG. |
+| `export.svgAdaptiveTheme` | boolean | `false` | Embed an OS-theme media query in animated SVG (§14.4 explains the default). |
 | `export.ffmpegPath` | string \| `null` | `null` | Optional external encoder for MP4 fallback. |
 
 ### 15.3 Other contributions
 
 | Contribution | Content |
 |---|---|
-| `activationEvents` | `onLanguage:markdown`, `onLanguage:mdx`, `onLanguage:mermaid`, `onWebviewPanel:mermaidAnimator.panel`, `onUri` (commands, views and custom editors activate implicitly). Activation is cheap (< 50 ms): only the locator and CodeLens provider are constructed eagerly. |
+| `activationEvents` | `onLanguage:markdown`, `onLanguage:mdx`, `onWebviewPanel:mermaidAnimator.panel`, `onUri` — only events VS Code does not generate itself (it derives `onLanguage:mermaid` from the contributed language, and activation for commands, views and custom editors). Activation is cheap (< 50 ms): only the locator and CodeLens provider are constructed eagerly. |
 | `languages` | Registers `mermaid` for `.mmd` and `.mermaid` if absent (merging harmlessly with other Mermaid extensions). |
 | `customEditors` | `mermaidAnimator.viewer` for `*.mmd`, `*.mermaid`, `priority: "option"`. |
 | `views` | `explorer` → `mermaidAnimator.diagrams` (*Mermaid Diagrams*). |
@@ -1922,7 +1974,7 @@ Budgets are enforced in CI (§21.5): bundle sizes by `size-limit`; runtime metri
 
 | Area | Measure |
 |---|---|
-| **Content Security Policy** | `default-src 'none'; script-src 'nonce-<random>'; style-src ${webview.cspSource} 'nonce-<random>'; img-src ${webview.cspSource} data: blob:; font-src ${webview.cspSource} data:; worker-src ${webview.cspSource} blob:; connect-src 'none';`. The native renderer sets styles via CSSOM and attributes only, which CSP permits. |
+| **Content Security Policy** | `default-src 'none'; script-src 'nonce-<random>' ${webview.cspSource}; style-src ${webview.cspSource} 'nonce-<random>'; img-src ${webview.cspSource} data: blob:; font-src ${webview.cspSource} data:; worker-src ${webview.cspSource} blob:; connect-src 'none';`. The native renderer sets styles via CSSOM and attributes only, which CSP permits. `${webview.cspSource}` in `script-src` is required for lazily imported chunks and for `importScripts` inside blob workers (§13.2); `blob:` in `worker-src` permits the blob shim. |
 | **Mermaid's inline styles** | Mermaid injects `<style>` elements into its SVG. For the `mermaid-overlay` and generic engines, those style elements are extracted and re-applied through a nonce'd stylesheet (or via CSSOM) so `'unsafe-inline'` is not required. If this proves infeasible for a Mermaid version, `'unsafe-inline'` may be enabled **for styles only**, never scripts — recorded as a decision (§25). |
 | **Mermaid configuration** | `securityLevel: "strict"`, `htmlLabels` sanitised by Mermaid's DOMPurify; user `%%{init}%%` cannot lower `securityLevel` (forced after merge). |
 | **Label rendering** | Native renderer uses `textContent` only; Mermaid `<br/>` handled by splitting into `<tspan>`s. Caption mini-markup is parsed by a whitelist parser into DOM nodes, never `innerHTML`. |
@@ -2017,7 +2069,8 @@ mermaid-animator/
 ├── media/                    # Icons, fonts (WOFF2), walkthrough assets
 ├── docs/                     # ADRs, contributor guide, design tokens reference
 ├── .github/workflows/
-├── package.json              # pnpm workspaces
+├── package.json              # npm workspaces
+├── openspec/                 # OpenSpec living specs and change proposals
 └── vscode-extension-specification.md
 ```
 
@@ -2026,14 +2079,14 @@ mermaid-animator/
 | Concern | Choice | Notes |
 |---|---|---|
 | Language | TypeScript 5.x, `strict` | Project references across packages |
-| Package manager | pnpm workspaces | |
+| Package manager | npm workspaces | Ships with Node; no extra global tooling |
 | Bundling | esbuild | Separate bundles: host (Node), host (web), webview, workers |
 | Webview UI | **Preact** + `@preact/signals` | ~4 KB; React-like ergonomics. (The official Webview UI Toolkit was deprecated in January 2025 and is not used; components are built in-house on VS Code CSS variables and codicons.) |
 | Icons | `@vscode/codicons` | |
 | Zoom / interpolation | `d3-zoom`, `d3-interpolate`, `d3-ease`, `d3-shape` | Modular imports only |
 | Force layout | `d3-force` | Seeded |
 | Layered layout | `elkjs` | Worker, lazy |
-| Mermaid | `mermaid` 11.x (pinned) | Lazy-loaded in webview for validation and Tier 3 |
+| Mermaid | `mermaid` 12.x (exact version pinned) | Lazy-loaded in webview for validation and Tier 3 |
 | GIF | `gifenc` | Worker |
 | Video | WebCodecs + a WebM/MP4 muxer (e.g. Mediabunny or its predecessors `webm-muxer` / `mp4-muxer`) | Worker; licence reviewed at adoption |
 | Fonts | Inter, Source Serif 4 (WOFF2 subsets) | |
@@ -2068,13 +2121,20 @@ A `ThirdPartyNotices.txt` is generated at build time and shipped in the VSIX.
 
 Durations assume a team of two engineers plus part-time design support; they are estimates for sequencing, not commitments.
 
+### 23.1 Delivery workflow (OpenSpec)
+
+Each milestone is delivered as one or more **OpenSpec changes** under `openspec/changes/<change-id>/` (proposal, design, capability spec deltas, tasks). A change is implemented task by task, validated with `openspec validate --strict`, and archived with `openspec archive`, which merges its requirement deltas into the living capability specs under `openspec/specs/`. This document stays the product-level source; `openspec/specs/` holds the normative, testable requirements for what has been built. M0 is change `add-m0-foundations`; M1 is change `add-m1-sequence-mvp`.
+
+### 23.2 Milestones
+
 | Milestone | Duration | Scope | Exit criteria |
 |---|---|---|---|
 | **M0 — Foundations** | 2 weeks | Monorepo, CI, esbuild bundles, extension skeleton, webview shell with CSP, typed protocol, theme tokens (Ivory/Graphite/HC), fonts, panel serializer. | Empty panel opens from a `.mmd` in desktop and web; themes switch live; CI green on three OSes. |
-| **M1 — Sequence MVP** (Preview release) | 5 weeks | Sequence parser + corpus; IR; step compiler; sequence layout; scene runtime; full message choreography; transport; Fit/Follow/Manual camera; CodeLens, title button, palette, explorer entry; live reload with preservation; last-known-good + diagnostics; step→editor sync; static SVG/PNG; reduced motion; generic fallback for other types; en/es. | All P0 requirements; corpus parity 100%; NFR-PERF-02/03/05 met; axe-core clean; published as *Preview* on Marketplace. |
-| **M2 — Explore & present** | 4 weeks | Topology view (layered, force, manual), FLIP morph, split view, transcript view, inspector, minimap, focus/multi-focus, search, branch explorer, loop iterations, `par` concurrency, annotations + editor support, captions, chapters, presentation mode, cursor→step sync, Cinematic camera. | P1 requirements in VIEW/INT/PRES/SYNC areas met; usability test with 5 participants: ≥ 4 complete S1 and S2 unaided. |
+| **M1 — Sequence MVP** (Preview release) | 5 weeks | Sequence parser + corpus; IR; step compiler; sequence layout; scene runtime; full message choreography; transport; Fit/Follow/Manual camera; CodeLens, title button, palette, explorer entry; live reload with preservation; last-known-good + diagnostics; step→editor sync; static SVG/PNG; reduced motion; generic fallback for other types; en/es. | All P0 requirements; corpus parity 100%; NFR-PERF-02/03/05 met; axe-core clean; VSIX packaged (Marketplace *Preview* publication once the publisher ID, Q1, is confirmed). |
+| **M2a — Narrative & present** | 3 weeks | Annotations + editor support, captions, chapters, inspector, focus/multi-focus, search, branch explorer, loop iterations, `par` concurrency, presentation mode, Cinematic camera, transcript view, cursor→step sync. | P1 requirements in INT/PRES/SYNC areas met; usability test: ≥ 4 of 5 participants complete S2 unaided. |
+| **M2b — Topology** | 3 weeks | Topology view (ELK worker, d3-force, manual), FLIP Sequence ↔ Topology morph, split view, minimap. | P1 requirements in the VIEW area met; usability test: ≥ 4 of 5 participants complete S1 unaided. |
 | **M3 — Share** (1.0) | 3 weeks | Export sheet; GIF, WebM, MP4 (where supported), animated SVG, HTML player; deep links; insert reference; sidecar read/write; Diagrams view; walkthrough. | All FR-EXP P1 met; exports verified in target apps; **1.0 release** to Marketplace and Open VSX. |
-| **M4 — More diagrams** | 5 weeks | Native flowchart (all traversal strategies incl. token), state diagram with simulator, git graph; Tier 3 data-chart refinements. | Corpus parity for flowchart/state; visual baselines approved. |
+| **M4 — More diagrams** | 5 weeks | Native flowchart (all traversal strategies incl. token), state diagram with simulator, git graph; Tier 3 data-chart refinements; `mermaid-overlay` engine on the shared SVG-group animator. | Corpus parity for flowchart/state; visual baselines approved. |
 | **M5 — Advanced** | Ongoing | Trace view, revision playback, scrollytelling, heat overlay, radial/grid layouts, Gantt/class/ER/journey/timeline/mindmap/sankey/architecture native tiers, Markdown preview integration, CLI exporter, APNG/WebP. | Per-feature DoD. |
 
 ---
@@ -2114,15 +2174,20 @@ Durations assume a team of two engineers plus part-time design support; they are
 
 | ADR | Decision | Status |
 |---|---|---|
-| ADR-001 | Native hand-written parsers with source ranges; Mermaid for validation and Tier 3 (§13.4). | Proposed |
-| ADR-002 | Custom deterministic scene interpolator; visual state = f(t) (§13.7). | Proposed |
-| ADR-003 | Preact + signals for the webview UI; no Webview UI Toolkit (deprecated). | Proposed |
-| ADR-004 | Heavy work in the webview; extension host stays light and web-compatible (§13.2). | Proposed |
-| ADR-005 | Annotations as Mermaid comments + optional sidecar; never rewrite user diagrams (§11). | Proposed |
-| ADR-006 | No GSAP: scroll-driven and timeline features implemented natively (licence terms and bundle size). | Proposed |
-| ADR-007 | ELK.js for layered layout; d3-force for organic layout (§13.8.2). | Proposed |
-| ADR-008 | Offline, frame-exact export via `sceneAt(t)` sampling; WebCodecs in workers (§14.3). | Proposed |
-| ADR-009 | "Ink & Ivory" design system with Formal motion as default (§9). | Proposed |
+| ADR-001 | Native hand-written parsers with source ranges; Mermaid for validation and Tier 3 (§13.4). | Accepted |
+| ADR-002 | Custom deterministic scene interpolator; visual state = f(t) (§13.7). | Accepted |
+| ADR-003 | Preact + signals for the webview UI; no Webview UI Toolkit (deprecated). | Accepted |
+| ADR-004 | Heavy work in the webview; extension host stays light and web-compatible (§13.2). | Accepted |
+| ADR-005 | Annotations as Mermaid comments + optional sidecar; never rewrite user diagrams (§11). | Accepted |
+| ADR-006 | No GSAP: scroll-driven and timeline features implemented natively (licence terms and bundle size). | Accepted |
+| ADR-007 | ELK.js for layered layout; d3-force for organic layout (§13.8.2). | Accepted |
+| ADR-008 | Offline, frame-exact export via `sceneAt(t)` sampling; WebCodecs in workers (§14.3). | Accepted |
+| ADR-009 | "Ink & Ivory" design system with Formal motion as default (§9). | Accepted |
+| ADR-010 | Canvas 2D render backend for exports, running inside the encoder worker; no per-frame SVG rasterisation (§13.9). | Accepted (review 3.1) |
+| ADR-011 | Layout-invariant step timing from logical column span (§9.8.2, §13.6.1). | Accepted (review 3.3) |
+| ADR-012 | Two-level step identity (`StepId` + `structuralId`) with optional `@step-id` (§13.6.3). | Accepted (review 3.2) |
+| ADR-013 | Webview workers via same-origin blob shim (§13.2). | Accepted (review 3.4) |
+| ADR-014 | OpenSpec change proposals as the delivery workflow (§23.1). | Accepted |
 
 ---
 
@@ -2185,7 +2250,7 @@ sequenceDiagram
         "display.futureSteps": "ghosted"
       },
       "captions": {
-        "k3f9a2": "Auth looks the user up by e-mail address.",
+        "lookup-user": "Auth looks the user up by e-mail address.",
         "#4": "The database returns the hashed password."
       },
       "chapters": [
@@ -2236,7 +2301,6 @@ sequenceDiagram
   "activationEvents": [
     "onLanguage:markdown",
     "onLanguage:mdx",
-    "onLanguage:mermaid",
     "onWebviewPanel:mermaidAnimator.panel",
     "onUri"
   ],
@@ -2320,6 +2384,31 @@ sequenceDiagram
 | Paste-your-own source with live re-parse | §8.12.2 (live reload of the actual document, which subsumes pasting) |
 | Export GIF/MP4; shareable link with step in URL | §14.1, §14.6 |
 | Light/dark theme matching Mermaid theming variables | §9.3 (`auto`, `vscode`, `mermaid` modes) |
+
+---
+
+## Appendix E — Review Disposition
+
+Disposition of [vscode-extension-specification-review.md](vscode-extension-specification-review.md) (2026-09-25). Claims were checked against the Mermaid 12.0.0 grammar, Chromium behaviour and the VS Code API before acceptance.
+
+| Review item | Disposition | Where applied |
+|---|---|---|
+| 3.1 `createImageBitmap` cannot decode SVG; `Image` unavailable in workers | **Accepted.** Canvas 2D backend renders `sceneAt(t)` inside the encoder worker. | §13.9, §14.1, §14.3, ADR-010 |
+| 3.2 `StepId` changes while typing; sidecar captions orphaned | **Accepted.** `structuralId`, `@step-id`, ordered resolution; unresolved sidecar keys warn instead of vanishing. | §8.12.2, §11.4, §11.7, §13.5, §13.6.3, ADR-012 |
+| 3.3 Pixel-length timing breaks the shared timeline in Split view | **Accepted.** `travel(Δcol)` from logical columns. | §9.8.2, §9.8.3, §13.6.1, ADR-011 |
+| 3.4 `new Worker(resourceUri)` fails cross-origin in webviews | **Accepted.** Blob shim; CSP `script-src` includes `cspSource` for `importScripts`. | §13.2, §18, ADR-013 |
+| 4.1 `par` lanes vs single-index `Step` | **Accepted.** `lanes[]` and `sources[]`; `steps[i].index === i`. | §13.5, §13.6.2 |
+| 4.2 `activate` usually follows its triggering message | **Accepted.** Attach-to-preceding rule. | §10.1, §13.6.1 |
+| 4.3 `create`/`destroy` merging missing from the compiler | **Accepted.** | §10.1, §13.6.1 |
+| 5.1 `toggleZenMode` is a blind toggle | **Accepted (first option).** Maximise the editor by default; Zen Mode opt-in and guarded. The Fullscreen API option was not adopted because webview iframes are not guaranteed fullscreen permission. | §8.10, §15.2 |
+| 5.2 `vscode.env.clipboard` is text-only | **Accepted.** `ClipboardItem` in the webview; *Save as PNG* fallback. | §13.10, §14.1 |
+| 5.3 Redundant `onLanguage:mermaid` activation event | **Accepted.** | §15.3, Appendix C |
+| 6.1 Half arrows, `destroy` attachment, entity codes and Markdown strings | **Accepted with correction.** The review's half-arrow spellings do not match Mermaid; the pinned grammar's spellings are listed in §10.1. Central connections `()`, `par_over`, `properties`/`details`, `title`/`acc*` and `;` separators were also found in the grammar and added. | §10.1, §13.5 |
+| 7.1 GitHub `<img>` SVG theme mismatch; font fallback overflow | **Accepted.** Transparent GitHub-safe default, light/dark pair with `<picture>`, 8% buffer + `textLength`. | §14.4, §14.5, §15.2 |
+| 7.2 Reuse the webview when switching diagrams | **Accepted.** | §8.1 |
+| 8.1 M2 too dense; `mermaid-overlay` duplicates Tier 3 | **Accepted.** M2 split into M2a/M2b; overlay deferred to M4 on the shared SVG-group animator. | §13.9, §15.2, §23 |
+| (not in review) Mermaid 12.0.0 is current, not 11.x | **Applied.** Pinned version updated. | §7, §22.2 |
+| (not in review) pnpm is not installed by default | **Applied.** npm workspaces. | §22 |
 
 ---
 
