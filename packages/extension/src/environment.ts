@@ -56,6 +56,12 @@ export const WEBVIEW_SETTING_KEYS = [
   'topology.returnMessages',
   'topology.edgeWeight',
   'display.showMinimap',
+  'export.defaultFormat',
+  'export.fps',
+  'export.scale',
+  'export.background',
+  'export.includeCaptions',
+  'export.svgAdaptiveTheme',
 ] as const;
 
 export function currentSettings(): WebviewSettings {
@@ -65,6 +71,9 @@ export function currentSettings(): WebviewSettings {
     const value = config.get(key);
     if (value !== undefined) settings[key] = value;
   }
+  // `export.fps` applies to video; GIF uses 15 fps unless the user chose a rate (spec §15.2).
+  const fps = config.inspect('export.fps');
+  if (fps && [fps.globalValue, fps.workspaceValue, fps.workspaceFolderValue].every((v) => v === undefined)) delete settings['export.fps'];
   return settings;
 }
 

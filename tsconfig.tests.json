@@ -1,6 +1,6 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": { "lib": ["ES2022", "DOM", "DOM.Iterable"], "types": ["node"], "noEmit": true },
-  "include": ["packages/*/test/**/*.ts", "packages/*/test/**/*.tsx", "packages/extension/unit/**/*.ts", "vitest.config.ts"],
+  "include": ["packages/*/test/**/*.ts", "packages/*/test/**/*.tsx", "packages/extension/unit/**/*.ts", "packages/webview/src/assets.d.ts", "packages/webview/src/gifenc.d.ts", "vitest.config.ts"],
   "exclude": ["packages/extension/test/**"]
 }

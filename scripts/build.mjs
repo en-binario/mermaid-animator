@@ -30,6 +30,42 @@ export const noNodeBuiltins = {
   },
 };
 
+/** Metafiles of nested builds (embedded workers), for the third-party notices. */
+const nestedResults = [];
+
+/**
+ * Embeds worker sources as text modules (`virtual:elk-worker`, `virtual:export-worker`): webview
+ * workers start from a blob holding the whole script, because a blob worker cannot `importScripts`
+ * extension resources in a VS Code webview (see packages/webview/src/workers/embedded.ts).
+ */
+const workerSources = {
+  name: 'worker-sources',
+  setup(build) {
+    build.onResolve({ filter: /^virtual:(elk|export)-worker$/ }, (args) => ({ path: args.path, namespace: 'worker-source' }));
+    build.onLoad({ filter: /.*/, namespace: 'worker-source' }, async (args) => {
+      if (args.path === 'virtual:elk-worker') {
+        const elk = path.dirname(require.resolve('elkjs/package.json', { paths: [path.join(root, 'packages/webview')] }));
+        const file = path.join(elk, 'lib', 'elk-worker.min.js');
+        return { contents: `export default ${JSON.stringify(await readFile(file, 'utf8'))};`, loader: 'js', watchFiles: [file] };
+      }
+      const result = await esbuild.build({
+        entryPoints: [path.join(root, 'packages/webview/src/workers/export.worker.ts')],
+        bundle: true,
+        write: false,
+        minify: production,
+        target: 'es2022',
+        platform: 'browser',
+        format: 'iife',
+        legalComments: 'none',
+        metafile: true,
+        plugins: [noNodeBuiltins],
+      });
+      nestedResults.push(result);
+      return { contents: `export default ${JSON.stringify(result.outputFiles[0].text)};`, loader: 'js', watchFiles: Object.keys(result.metafile.inputs).map((f) => path.resolve(root, f)) };
+    });
+  },
+};
+
 const common = {
   bundle: true,
   sourcemap: production ? false : 'linked',
@@ -48,6 +84,8 @@ const configs = [
     platform: 'node',
     format: 'cjs',
     external: ['vscode'],
+    // Prefer ES module entries: jsonc-parser's UMD `main` uses require() calls esbuild cannot follow.
+    mainFields: ['module', 'main'],
   },
   {
     ...common,
@@ -70,6 +108,17 @@ const configs = [
     jsxImportSource: 'preact',
     loader: { '.woff2': 'dataurl', '.ttf': 'file' },
     assetNames: 'assets/[name]-[hash]',
+    plugins: [noNodeBuiltins, workerSources],
+  },
+  {
+    // The self-contained HTML player (M3 D5): the host inlines player.js and player.css into exported files.
+    ...common,
+    sourcemap: false,
+    entryPoints: { player: path.join(root, 'packages/webview/src/player/main.ts') },
+    outdir: path.join(dist, 'player'),
+    platform: 'browser',
+    format: 'iife',
+    loader: { '.woff2': 'dataurl' },
     plugins: [noNodeBuiltins],
   },
 ];
@@ -100,11 +149,7 @@ async function copyAssets() {
   }
   await writeFile(path.join(out, 'fonts.css'), css);
 
-  // ELK layout worker (M2b): shipped unmodified, started through the blob shim (spec §13.2).
-  const elk = path.dirname(require.resolve('elkjs/package.json', { paths: [path.join(root, 'packages/webview')] }));
-  await mkdir(path.join(out, 'workers'), { recursive: true });
-  await copyFile(path.join(elk, 'lib', 'elk-worker.min.js'), path.join(out, 'workers', 'elk-worker.min.js'));
-  await copyFile(path.join(elk, 'LICENSE.md'), path.join(out, 'workers', 'elk.LICENSE.md'));
+  // The ELK layout worker (M2b) is embedded unmodified as text (see the worker-sources plugin).
 
   const codicons = path.join(path.dirname(require.resolve('@vscode/codicons/package.json')), 'dist');
   await copyFile(path.join(codicons, 'codicon.css'), path.join(out, 'codicons', 'codicon.css'));
@@ -143,7 +188,7 @@ async function writeNotices(results) {
     const files = (await readdir(dir)).filter((f) => /^(licen[cs]e|copying|notice)(\.|$)/i.test(f));
     const texts = await Promise.all(files.map((f) => readFile(path.join(dir, f), 'utf8')));
     const license = typeof meta.license === 'string' ? meta.license : meta.license?.type ?? 'see text';
-    entries.push({ id: `${meta.name}@${meta.version}`, license, text: texts.join('\n\n').trim() || `Licensed under ${license}.` });
+    entries.push({ id: `${meta.name}@${meta.version}`, name: meta.name, version: meta.version, license, text: texts.join('\n\n').trim() || `Licensed under ${license}.` });
   }
   const unique = [...new Map(entries.map((e) => [e.id, e])).values()].sort((a, b) => a.id.localeCompare(b.id));
   const rule = '='.repeat(78);
@@ -152,14 +197,45 @@ async function writeNotices(results) {
     '',
     'This extension bundles the software listed below. Each component is provided under its own licence,',
     'reproduced in full. elkjs is used unmodified under the Eclipse Public License 2.0; its source is',
-    'available at https://github.com/kieler/elkjs.',
+    'available at https://github.com/kieler/elkjs. Mediabunny is used unmodified under the Mozilla Public',
+    `License 2.0; the source of the version shipped is available at https://github.com/Vanilagy/mediabunny/tree/v${unique.find((e) => e.name === 'mediabunny')?.version ?? ''}.`,
     '',
     ...unique.map((e) => `${e.id} (${e.license})`),
     '',
     ...unique.flatMap((e) => [rule, `${e.id} — ${e.license}`, rule, '', e.text, '']),
   ].join('\n');
   await writeFile(path.join(ext, 'ThirdPartyNotices.txt'), body);
+  if (production) await writeSbom(unique);
   return unique.length;
+}
+
+/**
+ * CycloneDX 1.5 SBOM of the components bundled into the VSIX (the same set as the notices), written
+ * beside the VSIX as a release artefact: mermaid-animator.cdx.json.
+ */
+async function writeSbom(components) {
+  const manifest = JSON.parse(await readFile(path.join(ext, 'package.json'), 'utf8'));
+  const purl = (name, version) => `pkg:npm/${name.startsWith('@') ? `%40${name.slice(1)}` : name}@${version}`;
+  const spdxId = /^[A-Za-z0-9.+-]+$/;
+  const bom = {
+    bomFormat: 'CycloneDX',
+    specVersion: '1.5',
+    version: 1,
+    metadata: {
+      timestamp: new Date().toISOString(),
+      tools: { components: [{ type: 'application', name: 'mermaid-animator scripts/build.mjs' }] },
+      component: { type: 'application', 'bom-ref': `vscode-extension:${manifest.publisher}.${manifest.name}@${manifest.version}`, name: manifest.name, version: manifest.version, publisher: manifest.publisher, licenses: [{ license: { id: manifest.license } }] },
+    },
+    components: components.map((c) => ({
+      type: 'library',
+      'bom-ref': purl(c.name, c.version),
+      name: c.name,
+      version: c.version,
+      purl: purl(c.name, c.version),
+      ...(c.license === 'see text' ? {} : { licenses: spdxId.test(c.license) ? [{ license: { id: c.license } }] : [{ expression: c.license }] }),
+    })),
+  };
+  await writeFile(path.join(root, 'mermaid-animator.cdx.json'), `${JSON.stringify(bom, null, 2)}\n`);
 }
 
 async function main() {
@@ -172,7 +248,7 @@ async function main() {
   } else {
     const results = await Promise.all(configs.map((c) => esbuild.build(c)));
     await copyAssets();
-    const count = await writeNotices(results);
+    const count = await writeNotices([...results, ...nestedResults]);
     console.log(`[build] ThirdPartyNotices.txt: ${count} packages`);
     const web = await readFile(path.join(dist, 'extension.web.js'), 'utf8');
     if (/require\(["'](node:)?(fs|path|os|child_process|crypto)["']\)/.test(web)) {

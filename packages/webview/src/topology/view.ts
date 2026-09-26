@@ -47,6 +47,8 @@ export class TopologyView {
   model: TopologySceneModel | undefined;
   /** The settled geometry of the latest layout. */
   geometry: TopologyGeometry | undefined;
+  /** Node label lines and message labels of the mounted topology (exports reuse them). */
+  labels: { nodes: Map<string, string[]>; messages: Map<string, string> } = { nodes: new Map(), messages: new Map() };
   private glide: { from: TopologyGeometry; start: number } | undefined;
   private settings: TopologySettings = { layout: 'layered', direction: 'LR', edgeStyle: 'curved', returnMessages: 'merge', edgeWeight: 'count' };
   private stored = new Map<string, Point>();
@@ -110,6 +112,12 @@ export class TopologyView {
     this.stored = new Map(Object.entries(positions ?? {}));
   }
 
+  /** Node centres of the current layout (what *Save Topology Layout* writes). */
+  positions(): Record<string, Point> | undefined {
+    if (!this.geometry) return undefined;
+    return Object.fromEntries([...this.geometry.nodes].map(([id, r]) => [id, { x: Math.round(r.x + r.w / 2), y: Math.round(r.y + r.h / 2) }]));
+  }
+
   get hasLayout(): boolean {
     return !!this.geometry;
   }
@@ -167,6 +175,7 @@ export class TopologyView {
     this.sizes = sizes;
     this.model = prepareTopologyScene(topology, compiled, timeline);
     this.renderer.mount(topology, geometry, labels);
+    this.labels = labels;
     this.glide = previous && !this.callbacks.reducedMotion() ? { from: previous, start: performance.now() } : undefined;
     this.geometry = geometry;
     this.minimap.setDrawing(this.minimapDrawing(geometry));
@@ -181,7 +190,7 @@ export class TopologyView {
     const hints = !relayout && this.geometry ? this.geometry.nodes : undefined;
     const layered = async () => {
       const { elk } = await import('./elk');
-      const r = await layouts.layeredLayout(elk(), topology, sizes, { direction: this.settings.direction, orthogonal, hints });
+      const r = await layouts.layeredLayout(await elk(), topology, sizes, { direction: this.settings.direction, orthogonal, hints });
       this.layered = r.nodes;
       return r;
     };
@@ -209,6 +218,10 @@ export class TopologyView {
       return this.geometry;
     }
     return interpolateGeometry(this.glide.from, this.geometry, EASE.standard(p));
+  }
+
+  get edgeWeight(): 'count' | 'uniform' {
+    return this.settings.edgeWeight;
   }
 
   get gliding(): boolean {

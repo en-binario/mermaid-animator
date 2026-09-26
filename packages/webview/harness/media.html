@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <!-- Harness only: shows an exported file handed over in sessionStorage (no CSP, like a user's browser). -->
+    <title>Export check</title>
+    <style>
+      body { margin: 16px; font: 13px system-ui, sans-serif; background: #f4f4f4; }
+      #out { margin-top: 8px; }
+      video, img, iframe { max-width: 100%; border: 1px solid #ccc; background: #fff; }
+      iframe { width: 100%; height: 640px; }
+    </style>
+  </head>
+  <body>
+    <div id="info"></div>
+    <div id="out"></div>
+    <script>
+      (function () {
+        const b64 = sessionStorage.getItem('export-b64');
+        const type = sessionStorage.getItem('export-type') || 'application/octet-stream';
+        const info = document.getElementById('info');
+        if (!b64) { info.textContent = 'No export in sessionStorage.'; return; }
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const url = URL.createObjectURL(new Blob([bytes], { type }));
+        let el;
+        if (type.startsWith('video/')) { el = document.createElement('video'); el.controls = true; el.muted = true; }
+        else if (type === 'text/html') { el = document.createElement('iframe'); el.setAttribute('sandbox', 'allow-scripts'); }
+        else el = document.createElement('img');
+        el.id = 'media';
+        el.src = url;
+        document.getElementById('out').appendChild(el);
+        info.textContent = `${type} · ${bytes.length} bytes`;
+        window.exportUrl = url;
+      })();
+    </script>
+  </body>
+</html>

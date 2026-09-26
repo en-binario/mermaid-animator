@@ -4,8 +4,9 @@ import './styles/app.css';
 import { render } from 'preact';
 import { effect, signal } from '@preact/signals';
 import { resolvePalette } from '@mermaid-animator/renderer';
-import { PROTOCOL_VERSION, WEBVIEW_STRINGS, webviewMessage, type CommandAction, type HostMessage } from '@mermaid-animator/protocol';
-import { setAssetBase } from './assetBase';
+import { PROTOCOL_VERSION, WEBVIEW_STRINGS, webviewMessage, type CommandAction, type ExportFormat, type HostMessage } from '@mermaid-animator/protocol';
+import { buildJob, runJob, type AnimatedOptions, type ExportHandle } from './animated/exporter';
+import type { AnimatedSvgRequest } from './animated/svgExport';
 import { App, type ExportAction, type UiState } from './App';
 import type { InspectorSection } from './Inspector';
 import { DiagramController } from './controller';
@@ -13,7 +14,6 @@ import { Host } from './host';
 import { SPEEDS } from './player';
 import { format, initialHostState, reduce, resolveReduceMotion, type HostState } from './state';
 
-setAssetBase(new URL('./', import.meta.url).href);
 const host = new Host();
 const hostState = signal<HostState>(initialHostState);
 const controller = signal<DiagramController | undefined>(undefined);
@@ -148,16 +148,107 @@ window.addEventListener('unhandledrejection', (event) => host.log('error', `Unha
 // -- export ------------------------------------------------------------------------------------------------------
 const CHUNK = 8 * 1024 * 1024;
 
-function suggestedName(ext: string): string {
+function fileStem(): string {
   const doc = hostState.value.document;
   const stem = controller.value?.fileStem || (doc?.fileName ?? 'diagram').replace(/\.[^.]+$/, '');
   const index = doc?.diagrams && doc.diagrams.length > 1 ? `-${(doc.diagramIndex ?? 0) + 1}` : '';
-  return `${stem}${index}.${ext}`;
+  return `${stem}${index}`;
 }
 
-function sendFile(format: 'svg' | 'png', name: string, bytes: Uint8Array): void {
+function suggestedName(ext: string): string {
+  return `${fileStem()}.${ext}`;
+}
+
+function sendFile(format: ExportFormat, name: string, bytes: Uint8Array, pair?: 'light' | 'dark'): void {
   const total = Math.max(1, Math.ceil(bytes.length / CHUNK));
-  for (let i = 0; i < total; i++) host.post(webviewMessage('export/data', { format, suggestedName: name, data: bytes.slice(i * CHUNK, (i + 1) * CHUNK), index: i, total }));
+  for (let i = 0; i < total; i++) host.post(webviewMessage('export/data', { format, suggestedName: name, data: bytes.slice(i * CHUNK, (i + 1) * CHUNK), index: i, total, ...(pair ? { pair } : {}) }));
+}
+
+// -- animated exports (M3) ---------------------------------------------------------------------------------------
+/** Progress of the running animated export, for the sheet. */
+const animatedProgress = signal<{ fraction: number; phase: string } | undefined>(undefined);
+let animatedHandle: ExportHandle | undefined;
+
+async function runAnimated(options: AnimatedOptions): Promise<{ bytes: Uint8Array; mime: string; frames: number } | undefined> {
+  const c = controller.value;
+  if (!c || animatedHandle) return undefined;
+  const material = c.exportMaterial(options.view);
+  if (!material) return undefined;
+  const { EMBEDDED_FONTS, dataUrlBytes } = await import('./export');
+  const fonts = EMBEDDED_FONTS.map((f) => ({ family: f.family, data: dataUrlBytes(f.url), unicodeRange: f.unicodeRange }));
+  const job = buildJob(material, options, fonts);
+  animatedProgress.value = { fraction: 0, phase: 'frames' };
+  host.post(webviewMessage('export/progress', { fraction: 0, phase: 'frames' }));
+  let lastPosted = 0;
+  const handle = runJob(job, material, {
+    onProgress: (fraction, phase) => {
+      animatedProgress.value = { fraction, phase };
+      if (fraction - lastPosted >= 0.02 || fraction >= 1) {
+        lastPosted = fraction;
+        host.post(webviewMessage('export/progress', { fraction, phase }));
+      }
+    },
+  });
+  animatedHandle = handle;
+  try {
+    const result = await handle.result;
+    if (!result) {
+      host.post(webviewMessage('export/cancelled', {}));
+      return undefined;
+    }
+    sendFile(options.format, suggestedName(options.format), result.bytes);
+    return result;
+  } catch (error) {
+    host.post(webviewMessage('export/cancelled', {}));
+    toast(t('export.failed', String((error as Error)?.message ?? error)));
+    host.log('error', `Animated export failed: ${String(error)}`);
+    return undefined;
+  } finally {
+    animatedHandle = undefined;
+    animatedProgress.value = undefined;
+  }
+}
+
+/** Animated SVG (spec animated-svg-export): one GitHub-safe file or a light/dark pair. Returns the byte sizes. */
+async function runAnimatedSvg(request: AnimatedSvgRequest): Promise<number[] | undefined> {
+  const c = controller.value;
+  if (!c) return undefined;
+  const material = c.exportMaterial(request.view);
+  if (!material) return undefined;
+  try {
+    const { compileAnimatedSvg, animatedSvgNames } = await import('./animated/svgExport');
+    const files = await compileAnimatedSvg(material, request, c.genericDiagram);
+    if (!files) return undefined;
+    const names = animatedSvgNames(fileStem(), request.pair);
+    const encoder = new TextEncoder();
+    const sizes: number[] = [];
+    files.forEach((file, i) => {
+      const bytes = encoder.encode(file.text);
+      sizes.push(bytes.length);
+      sendFile('svg', names[i]!, bytes, request.pair ? (i === 0 ? 'light' : 'dark') : undefined);
+    });
+    c.requestFrame();
+    return sizes;
+  } catch (error) {
+    toast(t('export.failed', String((error as Error)?.message ?? error)));
+    host.log('error', `Animated SVG export failed: ${String(error)}`);
+    return undefined;
+  }
+}
+
+/** HTML player (spec html-player): the webview builds the data; the host inlines the player bundle. */
+async function runPlayer(theme: 'light' | 'dark' | 'auto', view: 'sequence' | 'topology' | 'split'): Promise<string | undefined> {
+  const c = controller.value;
+  if (!c) return undefined;
+  const { buildPlayerData } = await import('./animated/playerExport');
+  const data = await buildPlayerData(c, theme, view);
+  if (!data) return undefined;
+  host.post(webviewMessage('export/player', { suggestedName: suggestedName('html'), title: c.title.value || fileStem(), data, theme }));
+  return data;
+}
+
+function cancelAnimated(): void {
+  animatedHandle?.cancel();
 }
 
 async function runExport(action: ExportAction): Promise<void> {
@@ -213,8 +304,11 @@ function command(action: CommandAction, args?: Record<string, unknown>): void {
       if (typeof args?.step === 'number') p.goTo(args.step);
       else setUi({ goTo: true });
       return;
+    case 'goToStepId':
+      if (typeof args?.id === 'string') c.goToStepId(args.id, typeof args.near === 'number' ? args.near : undefined);
+      return;
     case 'export':
-      return setUi({ exportMenu: true });
+      return setUi({ exportMenu: true, exportFormat: typeof args?.format === 'string' ? args.format : undefined, exportStart: args?.start === true });
     case 'exportSvg':
       void runExport({ kind: 'svg' });
       return;
@@ -252,6 +346,18 @@ function command(action: CommandAction, args?: Record<string, unknown>): void {
       return c.toggleView();
     case 'resetLayout':
       return c.resetLayout();
+    case 'saveLayout':
+      void c
+        .sidecarLayout()
+        .then((layout) => {
+          if (layout) host.post(webviewMessage('sidecar/write', { patch: { layout } }));
+          else toast(t('sidecar.noLayout'));
+        })
+        .catch((error: unknown) => host.post(webviewMessage('log', { level: 'error', message: `Save Topology Layout failed: ${String((error as Error)?.stack ?? error)}` })));
+      return;
+    case 'saveDefaults':
+      host.post(webviewMessage('sidecar/write', { patch: { settings: c.sidecarDefaults() } }));
+      return;
   }
 }
 
@@ -365,10 +471,11 @@ function handle(message: HostMessage): void {
   switch (message.type) {
     case 'document/load':
       if (!c) pendingLoad = message;
-      else void c.load(message.payload.source, message.payload.origin, hostState.value.settings, reducedMotion(), message.payload.layout);
+      else void c.load(message.payload.source, message.payload.origin, hostState.value.settings, reducedMotion(), message.payload.layout, message.payload.sidecar);
       break;
     case 'document/update':
       if (message.payload.unbound) c?.markUnbound();
+      else if (message.payload.sidecar) void c?.applySidecar(message.payload.sidecar, message.payload.source, message.payload.origin);
       else void c?.update(message.payload.source, message.payload.origin);
       break;
     case 'settings/changed':
@@ -379,6 +486,9 @@ function handle(message: HostMessage): void {
       break;
     case 'editor/cursor':
       c?.setCursor(message.payload.line);
+      break;
+    case 'export/cancel':
+      cancelAnimated();
       break;
     case 'export/ack':
       toast(t('export.done', message.payload.path.split(/[\\/]/).pop() ?? message.payload.path));
@@ -394,14 +504,19 @@ function handle(message: HostMessage): void {
 
 host.listen(handle);
 
+// Harness-only hook for verifying exports (the harness defines window.harness; VS Code never does).
+if ((window as unknown as { harness?: unknown }).harness) {
+  (window as unknown as { __ma: unknown }).__ma = { controller: () => controller.value, runAnimated, runAnimatedSvg, runPlayer, cancelAnimated, progress: animatedProgress, verify: () => import('./animated/verify') };
+}
+
 function mountCanvas(el: HTMLElement): void {
   if (controller.value) return;
   const c = new DiagramController(el, host, t);
   controller.value = c;
   if (pendingLoad?.type === 'document/load') {
-    const { source, origin, layout } = pendingLoad.payload;
+    const { source, origin, layout, sidecar } = pendingLoad.payload;
     pendingLoad = undefined;
-    void c.load(source, origin, hostState.value.settings, reducedMotion(), layout);
+    void c.load(source, origin, hostState.value.settings, reducedMotion(), layout, sidecar);
   }
 }
 
@@ -414,6 +529,14 @@ function AppRoot() {
       mountCanvas={mountCanvas}
       onSelectDiagram={(index) => host.post(webviewMessage('diagram/select', { index }))}
       onExport={(a) => void runExport(a)}
+      sheetActions={{
+        animated: (o) => runAnimated(o),
+        animatedSvg: (r) => runAnimatedSvg(r),
+        player: (theme, view) => runPlayer(theme, view),
+        still: (kind, o) => runExport(kind === 'png' ? { kind: 'png', scale: o.scale, transparent: o.transparent } : kind === 'svg' ? { kind: 'svg' } : { kind: 'copy' }),
+        cancel: () => cancelAnimated(),
+        progress: animatedProgress.value,
+      }}
       onTogglePresentation={togglePresentation}
       onToggleInspector={toggleInspector}
       reducedMotion={reducedMotion()}

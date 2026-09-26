@@ -1341,18 +1341,15 @@ flowchart LR
 
 The host also imports `@mermaid-animator/core` (pure TypeScript, no DOM) to provide diagnostics, completions and source ranges without a webview.
 
-**Worker instantiation.** The webview document's origin is `vscode-webview://…` while `asWebviewUri` resources are served from `https://file+.vscode-resource.vscode-cdn.net/…`, so the `Worker` constructor's same-origin check rejects a resource URL. Workers MUST be created through a same-origin blob wrapper:
+**Worker instantiation.** The webview document's origin is `vscode-webview://…` while `asWebviewUri` resources are served from `https://file+.vscode-resource.vscode-cdn.net/…`, so the `Worker` constructor's same-origin check rejects a resource URL. Workers MUST be created from a same-origin blob. The blob MUST contain the worker's whole source: an `importScripts(resourceUri)` wrapper fails in VS Code, because resource URLs are answered by the webview's service worker, which does not serve requests made by dedicated workers (found in M3; the harness did not show it). The build embeds each worker's source as a text module in a lazily loaded chunk (`virtual:elk-worker`, `virtual:export-worker`), and the webview creates the worker from it:
 
 ```ts
-export function createWebviewWorker(scriptUri: string): Worker {
-  const blob = new Blob([`importScripts(${JSON.stringify(scriptUri)});`], {
-    type: 'application/javascript',
-  });
-  return new Worker(URL.createObjectURL(blob));
-}
+const { default: source } = await import('virtual:export-worker'); // a lazily loaded chunk
+const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+const worker = new Worker(url);
 ```
 
-Blob workers inherit the document's CSP, so `script-src` must allow `${webview.cspSource}` for `importScripts` (§18).
+Chunks load through the document (and its service worker), so no fetch is needed and `connect-src 'none'` stands (§18).
 
 ### 13.3 Core pipeline
 
@@ -1732,9 +1729,9 @@ sequenceDiagram
 
 ### 14.4 Animated SVG specifics
 
-- Each element's timeline is compiled to CSS `@keyframes` with percentage stops; `animation-timing-function` per segment reproduces easing tokens.
+- Each element's timeline is sampled from the same scene model as the panel at 30 Hz and compiled to CSS `@keyframes` with percentage stops; constant and linear runs collapse into single stops, so eased motion is reproduced by samples rather than per-segment `animation-timing-function`s (identical to the panel at every sample, and robust across renderers).
 - `stroke-dashoffset` drawing and `opacity`/`transform` changes only; pulses use `offset-path` where supported, otherwise keyframed `transform: translate()` samples (12 per message).
-- **Theme on GitHub.** Inside an `<img>`, `prefers-color-scheme` reflects the viewer's **OS** theme, not GitHub's theme setting, so one adaptive SVG can show an Ivory canvas on a dark GitHub page. Therefore (1) the animated SVG defaults to a **transparent background** with a GitHub-safe palette whose strokes and text keep ≥ 4.5 : 1 on both `#ffffff` and `#0d1117`; (2) *Export for GitHub (light + dark pair)* writes `<name>.light.anim.svg` and `<name>.dark.anim.svg`, and the insert-reference action emits a `<picture>` element, which GitHub resolves against its own theme. The in-SVG media query remains available (`export.svgAdaptiveTheme`, default **off**).
+- **Theme on GitHub.** Inside an `<img>`, `prefers-color-scheme` reflects the viewer's **OS** theme, not GitHub's theme setting, so one adaptive SVG can show an Ivory canvas on a dark GitHub page. Therefore (1) the animated SVG defaults to a **transparent background** with a GitHub-safe palette whose inks keep ≥ 4.5 : 1 on `#ffffff` and whose strokes and text carry a white casing (halo) that keeps ≥ 4.5 : 1 against both the inks and `#0d1117` — no flat colour reaches 4.5 : 1 on both backgrounds (the best is ≈ 4.3 : 1), so the casing provides the contrast on dark pages; (2) *Export for GitHub (light + dark pair)* writes `<name>.light.anim.svg` and `<name>.dark.anim.svg`, and the insert-reference action emits a `<picture>` element, which GitHub resolves against its own theme. The in-SVG media query remains available (`export.svgAdaptiveTheme`, default **off**).
 - **Font fallback safety.** SVGs embedded as images may not load embedded `@font-face` data (GitHub's image proxy, Safari). Exported SVGs add an 8% horizontal buffer to boxes and set `textLength` with `lengthAdjust="spacing"` on every `<text>`, so fallback fonts never overflow boxes or collide with arrowheads.
 - `@media (prefers-reduced-motion: reduce)` shows the final state statically.
 - Size budget: warn above 1 MB.
@@ -1977,7 +1974,7 @@ Budgets are enforced in CI (§21.5): bundle sizes by `size-limit`; runtime metri
 
 | Area | Measure |
 |---|---|
-| **Content Security Policy** | `default-src 'none'; script-src 'nonce-<random>' ${webview.cspSource}; style-src ${webview.cspSource} 'nonce-<random>'; style-src-attr 'unsafe-inline'; img-src ${webview.cspSource} data: blob:; font-src ${webview.cspSource} data:; worker-src ${webview.cspSource} blob:; connect-src 'none';`. The native renderer sets styles via CSSOM and attributes only, which CSP permits. `${webview.cspSource}` in `script-src` is required for lazily imported chunks and for `importScripts` inside blob workers (§13.2); `blob:` in `worker-src` permits the blob shim. |
+| **Content Security Policy** | `default-src 'none'; script-src 'nonce-<random>' ${webview.cspSource}; style-src ${webview.cspSource} 'nonce-<random>'; style-src-attr 'unsafe-inline'; img-src ${webview.cspSource} data: blob:; font-src ${webview.cspSource} data:; worker-src ${webview.cspSource} blob:; connect-src 'none';`. The native renderer sets styles via CSSOM and attributes only, which CSP permits. `${webview.cspSource}` in `script-src` is required for lazily imported chunks (including the chunks that carry worker sources, §13.2); `blob:` in `worker-src` permits the blob workers. |
 | **Mermaid's inline styles** | Mermaid writes `style` *attributes* while it renders and injects `<style>` *elements* into its SVG. Style attributes are permitted with `style-src-attr 'unsafe-inline'` (decided in M1, ADR-015): scripts stay nonce-locked and `connect-src 'none'` leaves CSS no exfiltration channel. `<style>` elements remain blocked; their CSS is re-applied as a constructed stylesheet (`adoptedStyleSheets`). Because Mermaid measures labels while its own `<style>` is blocked, the generic engine renders twice with the same id — the first pass supplies the CSS that the measuring pass then sees — and uses SVG text labels (`htmlLabels: false`). The expected console messages about blocked `<style>` elements come from Mermaid and are harmless. |
 | **Mermaid configuration** | `securityLevel: "strict"`, `htmlLabels` sanitised by Mermaid's DOMPurify; user `%%{init}%%` cannot lower `securityLevel` (forced after merge). |
 | **Label rendering** | Native renderer uses `textContent` only; Mermaid `<br/>` handled by splitting into `<tspan>`s. Caption mini-markup is parsed by a whitelist parser into DOM nodes, never `innerHTML`. |
@@ -1987,7 +1984,7 @@ Budgets are enforced in CI (§21.5): bundle sizes by `size-limit`; runtime metri
 | **Workspace Trust** | Limited support in untrusted workspaces: viewing and exporting allowed (user-initiated writes via save dialog); sidecar writes and external `ffmpeg` disabled. |
 | **External process** | `ffmpeg` is invoked only if the user sets `export.ffmpegPath` or explicitly accepts a detected binary; arguments are passed as an array (no shell). |
 | **Privacy** | Diagram content, file names and paths never leave the machine; telemetry (§20) contains no content. |
-| **Supply chain** | Lockfile committed; dependencies pinned; `npm audit` and licence checks in CI; SBOM (CycloneDX) generated per release; VSIX signed via Marketplace signing. |
+| **Supply chain** | Lockfile committed; dependencies pinned; `npm audit` and licence checks in CI; SBOM (CycloneDX 1.5, `mermaid-animator.cdx.json`) generated by the production build from the components actually bundled — the same set as `ThirdPartyNotices.txt`; VSIX signed via Marketplace signing. |
 
 ---
 

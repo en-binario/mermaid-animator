@@ -51,9 +51,24 @@ export interface DocumentLoadPayload {
   diagrams?: DiagramSummary[];
   /** Manual topology positions saved for this diagram (M2b), node id → centre. */
   layout?: Record<string, { x: number; y: number }>;
+  /** This diagram's entry of `<file>.animator.json` (M3). */
+  sidecar?: SidecarEntry;
+}
+
+/** A diagram's entry in a sidecar file (spec sidecar-files). Step keys are resolved by the webview. */
+export interface SidecarEntry {
+  settings?: Record<string, unknown>;
+  /** Step key (`@step-id`, content id, structural id or `#<n>`) → caption. */
+  captions?: Record<string, string>;
+  /** Step key → chapter title starting at that step. */
+  chapters?: Record<string, string>;
+  /** Topology node id → centre. */
+  layout?: Record<string, { x: number; y: number }>;
 }
 
 export interface DocumentUpdatePayload {
+  /** The refreshed sidecar entry when the sidecar file changed (M3). */
+  sidecar?: SidecarEntry;
   source: string;
   version: number;
   origin: { line: number; character: number };
@@ -71,15 +86,17 @@ export type CommandAction =
   | 'togglePlay' | 'play' | 'pause' | 'next' | 'previous' | 'first' | 'last' | 'goToStep'
   | 'export' | 'exportSvg' | 'exportPng' | 'copyImage' | 'revealSource' | 'fit'
   | 'seekToLine' | 'nextChapter' | 'previousChapter' | 'toggleTranscript' | 'toggleInspector' | 'search' | 'startPresentation' | 'stopPresentation'
-  | 'setView' | 'toggleView' | 'resetLayout';
+  | 'setView' | 'toggleView' | 'resetLayout'
+  | 'goToStepId' | 'saveLayout' | 'saveDefaults';
 
 export const COMMAND_ACTIONS: readonly CommandAction[] = [
   'togglePlay', 'play', 'pause', 'next', 'previous', 'first', 'last', 'goToStep', 'export', 'exportSvg', 'exportPng', 'copyImage', 'revealSource', 'fit',
   'seekToLine', 'nextChapter', 'previousChapter', 'toggleTranscript', 'toggleInspector', 'search', 'startPresentation', 'stopPresentation',
   'setView', 'toggleView', 'resetLayout',
+  'goToStepId', 'saveLayout', 'saveDefaults',
 ];
 
-export type ExportFormat = 'svg' | 'png';
+export type ExportFormat = 'svg' | 'png' | 'gif' | 'webm' | 'mp4' | 'html';
 
 export type HostMessage =
   | { v: 1; type: 'init'; payload: InitPayload }
@@ -89,6 +106,8 @@ export type HostMessage =
   | { v: 1; type: 'command'; payload: { action: CommandAction; args?: Record<string, unknown> } }
   | { v: 1; type: 'editor/cursor'; payload: { line: number; character: number } }
   | { v: 1; type: 'export/ack'; payload: { path: string } }
+  /** The user cancelled the export's progress notification (M3). */
+  | { v: 1; type: 'export/cancel'; payload: Record<string, never> }
   /** The host's presentation layout is on or off (confirms `presentation/toggle`, or reports an exit by other means). */
   | { v: 1; type: 'presentation/state'; payload: { on: boolean } };
 
@@ -112,6 +131,18 @@ export interface ExportDataPayload {
   /** 0-based chunk index and total chunk count (files over 8 MB are chunked). */
   index: number;
   total: number;
+  /** Half of a light/dark animated-SVG pair; the host writes both beside each other (M3). */
+  pair?: 'light' | 'dark';
+}
+
+/** Data for the self-contained HTML player (M3 D5); the host inlines the player bundle around it. */
+export interface PlayerExportPayload {
+  suggestedName: string;
+  title: string;
+  /** JSON document read by the player bundle. */
+  data: string;
+  /** `light`, `dark` or `auto` (follow the viewer's colour scheme). */
+  theme: 'light' | 'dark' | 'auto';
 }
 
 export type WebviewMessage =
@@ -125,7 +156,16 @@ export type WebviewMessage =
   /** Asks the host to enter or leave the presentation layout (spec presentation-mode). */
   | { v: 1; type: 'presentation/toggle'; payload: { on: boolean } }
   /** Manual topology positions changed (M2b); `key` identifies the diagram within its document. */
-  | { v: 1; type: 'layout/save'; payload: { key: string; positions: Record<string, { x: number; y: number }> } };
+  | { v: 1; type: 'layout/save'; payload: { key: string; positions: Record<string, { x: number; y: number }> } }
+  /** Animated-export progress (M3); the first message opens the host's progress notification. */
+  | { v: 1; type: 'export/progress'; payload: { fraction: number; phase: string } }
+  /** The export stopped after `export/cancel` (or a sheet cancel); nothing will be written. */
+  | { v: 1; type: 'export/cancelled'; payload: Record<string, never> }
+  | { v: 1; type: 'export/player'; payload: PlayerExportPayload }
+  /** Merge a patch into this diagram's sidecar entry (Save Topology Layout, Save as Diagram Defaults). */
+  | { v: 1; type: 'sidecar/write'; payload: { patch: SidecarEntry } }
+  /** Sidecar keys that no longer resolve to a step, for diagnostics on the sidecar file. */
+  | { v: 1; type: 'sidecar/unresolved'; payload: { entries: { section: 'captions' | 'chapters'; key: string }[] } };
 
 export type HostMessageType = HostMessage['type'];
 export type WebviewMessageType = WebviewMessage['type'];
@@ -184,15 +224,17 @@ const positions: Guard = (v) => {
   }
   return undefined;
 };
+const sidecarEntry = shape({ settings: optional(record), captions: optional(stringRecord), chapters: optional(stringRecord), layout: optional(positions) });
 
 const hostPayloads: Record<HostMessageType, Guard> = {
   init: shape({ settings, themeKind, reduceMotion: nullable(bool), locale: str, strings: stringRecord }),
-  'document/load': shape({ uri: str, fileName: str, source: str, version: num, origin: position, diagramIndex: optional(num), diagrams: optional(arrayOf(diagramSummary)), layout: optional(positions) }),
-  'document/update': shape({ source: str, version: num, origin: position, unbound: optional(bool) }),
+  'document/load': shape({ uri: str, fileName: str, source: str, version: num, origin: position, diagramIndex: optional(num), diagrams: optional(arrayOf(diagramSummary)), layout: optional(positions), sidecar: optional(sidecarEntry) }),
+  'document/update': shape({ source: str, version: num, origin: position, unbound: optional(bool), sidecar: optional(sidecarEntry) }),
   'settings/changed': shape({ settings, themeKind, reduceMotion: nullable(bool) }),
   command: shape({ action: oneOf(...COMMAND_ACTIONS), args: optional(record) }),
   'editor/cursor': shape({ line: num, character: num }),
   'export/ack': shape({ path: str }),
+  'export/cancel': record,
   'presentation/state': shape({ on: bool }),
 };
 
@@ -202,7 +244,12 @@ const webviewPayloads: Record<WebviewMessageType, Guard> = {
   log: shape({ level: oneOf('info', 'warn', 'error'), message: str }),
   'diagram/select': shape({ index: num }),
   'source/reveal': shape({ range }),
-  'export/data': shape({ format: oneOf('svg', 'png'), suggestedName: str, data: bytes, index: num, total: num }),
+  'export/data': shape({ format: oneOf('svg', 'png', 'gif', 'webm', 'mp4', 'html'), suggestedName: str, data: bytes, index: num, total: num, pair: optional(oneOf('light', 'dark')) }),
+  'export/progress': shape({ fraction: num, phase: str }),
+  'export/cancelled': record,
+  'export/player': shape({ suggestedName: str, title: str, data: str, theme: oneOf('light', 'dark', 'auto') }),
+  'sidecar/write': shape({ patch: sidecarEntry }),
+  'sidecar/unresolved': shape({ entries: arrayOf(shape({ section: oneOf('captions', 'chapters'), key: str })) }),
   'clipboard/fallback': shape({ reason: str }),
   'presentation/toggle': shape({ on: bool }),
   'layout/save': shape({ key: str, positions }),

@@ -54,6 +54,7 @@ export function reduce(state: HostState, message: HostMessage): HostState {
     case 'command':
     case 'export/ack':
     case 'presentation/state':
+    case 'export/cancel':
       return state;
   }
 }

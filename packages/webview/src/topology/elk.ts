@@ -1,20 +1,14 @@
 /**
- * ELK in a web worker (M2b D2). Webview resources cannot be loaded as worker scripts directly, so
- * the worker is a blob that `importScripts` the shipped `workers/elk-worker.min.js` (the blob shim
- * of spec §13.2; the CSP allows `worker-src blob:` and scripts from the resource origin).
+ * ELK in a web worker (M2b D2), started from a blob that holds the worker's source (see
+ * workers/embedded.ts; the CSP allows `worker-src blob:`).
  */
 import ElkConstructor, { type ELK } from 'elkjs/lib/elk-api.js';
-import { assetUrl } from '../assetBase';
+import { elkWorkerUrl } from '../workers/embedded';
 
-let instance: ELK | undefined;
-
-export function blobWorker(scriptUrl: string): Worker {
-  const source = `importScripts(${JSON.stringify(scriptUrl)});`;
-  return new Worker(URL.createObjectURL(new Blob([source], { type: 'text/javascript' })));
-}
+let instance: Promise<ELK> | undefined;
 
 /** The shared ELK instance, started on first use. */
-export function elk(): ELK {
-  instance ??= new ElkConstructor({ workerFactory: () => blobWorker(assetUrl('workers/elk-worker.min.js')) });
+export function elk(): Promise<ELK> {
+  instance ??= elkWorkerUrl().then((url) => new ElkConstructor({ workerFactory: () => new Worker(url) }));
   return instance;
 }

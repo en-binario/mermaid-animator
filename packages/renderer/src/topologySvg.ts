@@ -174,7 +174,7 @@ export class TopologySvgRenderer {
       const label = el('text', { class: 'ma-topo-label', 'text-anchor': 'middle', opacity: 0 }, layers.edgeLabels);
       if (edge.messages.length > 0) {
         // The weighted width rides on a custom property so the token CSS stays in charge.
-        group.setAttribute('style', `--ma-edge-width: ${round(edgeWidth(edge.messages.length))}px`);
+        group.style.setProperty('--ma-edge-width', `${round(edgeWidth(edge.messages.length))}px`);
       }
       this.edges.set(edge.key, { group, hit, line, highlight, head, badge, label, edge });
     }

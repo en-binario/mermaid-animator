@@ -7,3 +7,5 @@ export * from './measure';
 export * from './topologyScene';
 export * from './topologySvg';
 export * from './morph';
+export * from './canvas';
+export * from './animatedSvg';

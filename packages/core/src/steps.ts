@@ -83,6 +83,9 @@ export interface CompileOptions {
   parallel?: 'concurrent' | 'sequential';
   /** Choices made in the inspector, keyed by fragment key (0-based branch index). */
   branchChoices?: Record<string, BranchChoice>;
+  /** Sidecar captions and chapters by step index, used where no annotation provides one (M3). */
+  stepCaptions?: Record<number, string>;
+  stepChapters?: Record<number, string>;
 }
 
 /** A fragment as seen by the inspector's branch chooser. */
@@ -533,8 +536,9 @@ export function compileSequence(model: SequenceModel, annotations: Annotation[] 
     contentCount.set(cSig, cOcc + 1);
     const explicitId = find('step-id');
 
-    const caption = list.filter((a) => a.name === 'caption').map((a) => a.args.map((x) => valueText(x.value)).join(' ')).join(' ') || undefined;
-    const chapter = find('chapter') ? find('chapter')!.args.map((x) => valueText(x.value)).join(' ') : undefined;
+    // Annotations win over sidecar entries (spec sidecar-files: sidecars sit below annotations).
+    const caption = list.filter((a) => a.name === 'caption').map((a) => a.args.map((x) => valueText(x.value)).join(' ')).join(' ') || options.stepCaptions?.[index] || undefined;
+    const chapter = find('chapter') ? find('chapter')!.args.map((x) => valueText(x.value)).join(' ') : options.stepChapters?.[index];
     const spans = draft.messages.map((m) => Math.abs((column.get(m.to) ?? 0) - (column.get(m.from) ?? 0)) || 1);
     let transitionMs = travelMs(Math.max(1, ...spans));
     let dwellMs = options.dwell === 'fixed' ? (options.dwellMs ?? 900) : adaptiveDwellMs(draft.label, caption);
@@ -600,4 +604,20 @@ export function compileSequence(model: SequenceModel, annotations: Annotation[] 
 /** Participants as seen after compilation (kinds overridden by `@type`). */
 export function effectiveParticipants(model: SequenceModel, compiled: CompiledSequence): Participant[] {
   return model.participants.map((p) => ({ ...p, kind: compiled.participantKinds[p.id] ?? p.kind }));
+}
+
+/**
+ * Resolves a sidecar step key (spec sidecar-files): `#<n>` (1-based step number), an `@step-id`
+ * or content id, or a structural id. Returns the step index, or undefined when nothing matches.
+ */
+export function resolveStepKey(steps: readonly Pick<Step, 'id' | 'structuralId'>[], key: string): number | undefined {
+  const numbered = /^#(\d+)$/.exec(key.trim());
+  if (numbered) {
+    const n = Number(numbered[1]);
+    return n >= 1 && n <= steps.length ? n - 1 : undefined;
+  }
+  const byId = steps.findIndex((s) => s.id === key);
+  if (byId >= 0) return byId;
+  const byStructure = steps.findIndex((s) => s.structuralId === key);
+  return byStructure >= 0 ? byStructure : undefined;
 }

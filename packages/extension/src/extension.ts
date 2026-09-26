@@ -6,6 +6,10 @@ import { DiagramCodeLensProvider, DiagramDiagnostics, forwardCursor, StepDecorat
 import { config } from './environment';
 import { PresentationLayout } from './presentation';
 import { LayoutStore } from './layouts';
+import { SidecarService } from './sidecar';
+import { registerDiagramsView, type DiagramIndex, type DiagramsTreeProvider } from './diagramsView';
+import { annotateSample, openSample } from './walkthrough';
+import { copyStepLink, StepLinkHandler } from './deepLinks';
 import { AnnotationCodeActionProvider, AnnotationCompletionProvider, AnnotationHighlighter, AnnotationHoverProvider, insertAnnotation } from './annotationEditing';
 
 /** Test hook: exposed from `activate` so integration tests can inspect panels. */
@@ -15,10 +19,18 @@ export interface MermaidAnimatorApi {
   readonly diagnostics: DiagramDiagnostics;
   readonly presentation: PresentationLayout;
   readonly highlighter: AnnotationHighlighter;
+  /** The deep-link handler (tests call it directly; VS Code routes vscode:// links to it). */
+  readonly links: StepLinkHandler;
+  /** Sidecar files (tests inspect their diagnostics). */
+  readonly sidecars: SidecarService;
+  /** The Mermaid Diagrams view (tests inspect the index and tree). */
+  readonly diagrams: { index: DiagramIndex; tree: DiagramsTreeProvider };
   /** The restore path used by the panel serializer after a window reload. */
   restore(panel: vscode.WebviewPanel, state: unknown): Promise<void>;
   /** Test hook: replaces the export save dialog (undefined restores it). */
   setSaveTarget(pick: ((suggested: vscode.Uri) => vscode.Uri | undefined) | undefined): void;
+  /** Test hook: answers export completion notifications (undefined restores them). */
+  setNotificationAnswer(answer: ((choices: string[]) => string | undefined) | undefined): void;
 }
 
 const PLAYBACK_COMMANDS: [string, CommandAction][] = [
@@ -44,6 +56,14 @@ const PLAYBACK_COMMANDS: [string, CommandAction][] = [
   ['mermaidAnimator.toggleView', 'toggleView'],
 ];
 
+/** Format commands open the export sheet with that format selected (spec §15.1). */
+const EXPORT_FORMAT_COMMANDS: [string, string][] = [
+  ['mermaidAnimator.export.gif', 'gif'],
+  ['mermaidAnimator.export.video', 'mp4'],
+  ['mermaidAnimator.export.animatedSvg', 'animated-svg'],
+  ['mermaidAnimator.export.html', 'html'],
+];
+
 /** View commands (spec view-switching), routed as `setView` with a `view` argument. */
 const VIEW_COMMANDS: [string, 'sequence' | 'topology' | 'split'][] = [
   ['mermaidAnimator.setView.sequence', 'sequence'],
@@ -59,6 +79,8 @@ export function activate(context: vscode.ExtensionContext): MermaidAnimatorApi {
   let diagnostics: DiagramDiagnostics;
   const presentation = new PresentationLayout();
   const layouts = new LayoutStore(context.workspaceState);
+  const sidecars = new SidecarService();
+  context.subscriptions.push(sidecars);
   const setPresenting = () => void vscode.commands.executeCommand('setContext', 'mermaidAnimator.presenting', presentation.presenting);
   const panels = new PanelManager(context.extensionUri, output, {
     onStep: (panel, ranges) => decorations.set(panel.uri, ranges),
@@ -81,8 +103,10 @@ export function activate(context: vscode.ExtensionContext): MermaidAnimatorApi {
       setPresenting();
     },
     layouts,
+    sidecars,
   });
   diagnostics = new DiagramDiagnostics(panels);
+  const linkHandler = new StepLinkHandler(panels);
 
   const openDiagram = (uri: vscode.Uri, index: number, toSide: boolean) => panels.open(uri, index, toSide);
 
@@ -131,20 +155,27 @@ export function activate(context: vscode.ExtensionContext): MermaidAnimatorApi {
     target?.command(action, args && typeof args === 'object' && !(args instanceof vscode.Uri) ? args : undefined);
   };
 
-  const exportQuickPick = async (panel: AnimatorPanel | undefined) => {
+  /** The save commands ask the panel for its layout or settings; it answers with `sidecar/write`. */
+  const saveToSidecar = (action: 'saveLayout' | 'saveDefaults') => {
+    if (!vscode.workspace.isTrusted) {
+      void vscode.window.showInformationMessage(vscode.l10n.t('Sidecar files are not written in untrusted workspaces.'));
+      return;
+    }
+    const panel = panels.active() ?? (panels.count === 1 ? panels.all()[0] : undefined);
+    if (!panel) void vscode.window.showInformationMessage(vscode.l10n.t('Open an animated diagram first.'));
+    else panel.command(action);
+  };
+
+  /**
+   * *Export…* opens the export sheet in the panel (spec animated-export); from an editor without a
+   * panel it first animates the diagram at the cursor. `format` preselects a format.
+   */
+  const openExportSheet = async (format?: string, start = false) => {
+    let panel = panels.active() ?? (panels.count === 1 ? panels.all()[0] : undefined);
+    if (!panel) panel = await openFor(undefined, true);
     if (!panel) return;
-    const items: (vscode.QuickPickItem & { action: CommandAction; args?: Record<string, unknown> })[] = [
-      { label: vscode.l10n.t('SVG'), description: vscode.l10n.t('Vector image of the current frame'), action: 'exportSvg' },
-      { label: vscode.l10n.t('PNG · 2×'), description: vscode.l10n.t('Raster image of the current frame'), action: 'exportPng', args: { scale: 2 } },
-      { label: vscode.l10n.t('PNG · 1×'), action: 'exportPng', args: { scale: 1 } },
-      { label: vscode.l10n.t('PNG · 3×'), action: 'exportPng', args: { scale: 3 } },
-      { label: vscode.l10n.t('PNG · 2× · transparent'), action: 'exportPng', args: { scale: 2, transparent: true } },
-      { label: vscode.l10n.t('Copy image'), description: vscode.l10n.t('PNG to the clipboard'), action: 'copyImage' },
-    ];
-    const pick = await vscode.window.showQuickPick(items, { placeHolder: vscode.l10n.t('Export the current frame as…') });
-    if (!pick) return;
     panel.reveal();
-    panel.command(pick.action, pick.args);
+    panel.commandWhenShown('export', format ? { format, ...(start ? { start } : {}) } : undefined);
   };
 
   const restore = async (panel: vscode.WebviewPanel, state: unknown): Promise<void> => {
@@ -182,10 +213,18 @@ export function activate(context: vscode.ExtensionContext): MermaidAnimatorApi {
       for (const d of diagramsIn(document)) openDiagram(uri, d.index, true);
     }),
     vscode.commands.registerCommand('mermaidAnimator.openFromExplorer', openFromExplorer),
-    vscode.commands.registerCommand('mermaidAnimator.export', () => exportQuickPick(panels.active() ?? (panels.count === 1 ? panels.all()[0] : undefined))),
-    vscode.commands.registerCommand('mermaidAnimator.exportDiagram', async (uri: vscode.Uri, index: number) => exportQuickPick(openDiagram(uri, index, true))),
+    vscode.commands.registerCommand('mermaidAnimator.export', (args?: { format?: string; start?: boolean }) => openExportSheet(typeof args?.format === 'string' ? args.format : undefined, args?.start === true)),
+    // `{ "start": true }` (e.g. from a keybinding) exports right away with the sheet's initial choices.
+    ...EXPORT_FORMAT_COMMANDS.map(([id, format]) => vscode.commands.registerCommand(id, (args?: { start?: boolean }) => openExportSheet(format, args?.start === true))),
+    vscode.commands.registerCommand('mermaidAnimator.exportDiagram', (uri: vscode.Uri, index: number) => openDiagram(uri, index, true).commandWhenShown('export')),
     ...PLAYBACK_COMMANDS.map(([id, action]) => vscode.commands.registerCommand(id, route(action))),
     ...VIEW_COMMANDS.map(([id, view]) => vscode.commands.registerCommand(id, () => route('setView')({ view }))),
+    vscode.commands.registerCommand('mermaidAnimator.copyStepLink', () => copyStepLink(panels.active() ?? (panels.count === 1 ? panels.all()[0] : undefined))),
+    vscode.window.registerUriHandler(linkHandler),
+    vscode.commands.registerCommand('mermaidAnimator.walkthrough.openSample', () => openSample(openDiagram)),
+    vscode.commands.registerCommand('mermaidAnimator.walkthrough.annotate', annotateSample),
+    vscode.commands.registerCommand('mermaidAnimator.saveLayout', () => saveToSidecar('saveLayout')),
+    vscode.commands.registerCommand('mermaidAnimator.saveDefaults', () => saveToSidecar('saveDefaults')),
     vscode.commands.registerCommand('mermaidAnimator.resetLayout', () => (panels.active() ?? (panels.count === 1 ? panels.all()[0] : undefined))?.resetLayout()),
     vscode.languages.registerCodeLensProvider(markdownSelector, codeLens),
     highlighter,
@@ -215,16 +254,23 @@ export function activate(context: vscode.ExtensionContext): MermaidAnimatorApi {
   );
   updateContextKeys(vscode.window.activeTextEditor);
   highlighter.refresh();
+  const diagramsView = registerDiagramsView(context);
 
   return {
     panels,
     presentation,
     highlighter,
+    links: linkHandler,
+    sidecars,
+    diagrams: diagramsView,
     decorations,
     diagnostics,
     restore,
     setSaveTarget: (pick) => {
       AnimatorPanel.saveDialogOverride = pick;
+    },
+    setNotificationAnswer: (answer) => {
+      AnimatorPanel.notificationOverride = answer;
     },
   };
 }

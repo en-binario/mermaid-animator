@@ -8,6 +8,7 @@ import {
   type DocumentRange,
   type ExportDataPayload,
   type HostMessage,
+  type SidecarEntry,
   type StatePayload,
   type WebviewMessage,
 } from '@mermaid-animator/protocol';
@@ -16,6 +17,8 @@ import { affectsWebview, config, currentReduceMotion, currentSettings, currentTh
 import { basename, diagramLabel, diagramsIn } from './diagrams';
 import { webviewStrings } from './strings';
 import type { LayoutStore } from './layouts';
+import { ExportWriter, type ExportContext } from './exports';
+import type { SidecarService } from './sidecar';
 
 export const PANEL_VIEW_TYPE = 'mermaidAnimator.panel';
 
@@ -36,6 +39,8 @@ export interface PanelEvents {
   onPresentation(panel: AnimatorPanel, on: boolean): Promise<void>;
   /** Manual topology layouts (M2b). */
   layouts: LayoutStore;
+  /** Sidecar files (M3). */
+  sidecars: SidecarService;
 }
 
 const toRange = (r: DocumentRange) => new vscode.Range(r.startLine, r.startCol, r.endLine, r.endCol);
@@ -53,7 +58,8 @@ export class AnimatorPanel implements vscode.Disposable {
   readonly onDidReceiveState = this.stateEmitter.event;
   /** Last state reported by the webview. */
   lastState: StatePayload | undefined;
-  private exportChunks: Uint8Array[] = [];
+  private exportChunks = new Map<string, Uint8Array[]>();
+  private readonly exports = new ExportWriter(() => this.post(hostMessage('export/cancel', {})));
   private binding: DiagramBinding;
   private diagram: DiagramInfo | undefined;
   lastRanges: DocumentRange[] = [];
@@ -85,6 +91,9 @@ export class AnimatorPanel implements vscode.Disposable {
       vscode.window.onDidChangeActiveColorTheme(() => this.pushSettings()),
       vscode.workspace.onDidChangeConfiguration((event) => {
         if (affectsWebview(event)) this.pushSettings();
+      }),
+      events.sidecars.onDidChange((source) => {
+        if (source.toString() === uri.toString()) void this.pushSidecar();
       }),
     );
   }
@@ -143,6 +152,19 @@ export class AnimatorPanel implements vscode.Disposable {
 
   command(action: CommandAction, args?: Record<string, unknown>): void {
     this.post(hostMessage('command', { action, args }));
+  }
+
+  /** Sends a command once the webview has shown the diagram (for panels that are just opening). */
+  commandWhenShown(action: CommandAction, args?: Record<string, unknown>): void {
+    if (this.lastState) {
+      this.command(action, args);
+      return;
+    }
+    const subscription = this.onDidReceiveState(() => {
+      subscription.dispose();
+      this.command(action, args);
+    });
+    this.disposables.push(subscription);
   }
 
   private receive(raw: unknown): void {
@@ -204,10 +226,35 @@ export class AnimatorPanel implements vscode.Disposable {
         this.presenting = message.payload.on;
         this.post(hostMessage('presentation/state', { on: message.payload.on }));
         break;
+      case 'export/progress':
+        this.exports.progressed(message.payload.fraction, vscode.l10n.t('Exporting {0}…', this.diagram?.title ?? basename(this.uri)));
+        break;
+      case 'export/cancelled':
+        this.exports.settled(true);
+        break;
+      case 'export/player':
+        await this.exports.writePlayer(this.exportContext(), message.payload);
+        break;
       case 'layout/save':
         if (this.diagram) await this.events.layouts.set(this.uri, this.diagram, message.payload.positions);
         break;
+      case 'sidecar/write':
+        await this.writeSidecar(message.payload.patch);
+        break;
+      case 'sidecar/unresolved':
+        if (this.diagram) await this.events.sidecars.report(this.uri, this.diagram, message.payload.entries);
+        break;
     }
+  }
+
+  /** Test hook: the user pressed *Cancel* on the export progress notification. */
+  cancelExportForTest(): void {
+    this.exports.cancel();
+  }
+
+  /** Whether an export progress notification is showing (used by tests). */
+  get exporting(): boolean {
+    return this.exports.inProgress;
   }
 
   /** Test hook: handles a message as if the webview had sent it. */
@@ -244,6 +291,7 @@ export class AnimatorPanel implements vscode.Disposable {
           diagramIndex: diagram.index,
           diagrams: diagrams.map((d) => ({ index: d.index, type: d.type, title: d.title, summary: diagramLabel(d) })),
           layout: this.events.layouts.get(this.uri, diagram),
+          sidecar: await this.events.sidecars.entry(this.uri, diagram),
         }),
       );
     } catch (error) {
@@ -275,6 +323,36 @@ export class AnimatorPanel implements vscode.Disposable {
     this.post(hostMessage('document/update', { source: diagram.source, version: document.version, origin: { line: diagram.contentStartLine, character: 0 } }));
   }
 
+  /**
+   * Writes a *Save Topology Layout* / *Save as Diagram Defaults* patch (spec sidecar-files). Saving a
+   * layout moves this diagram's workspace-state positions into the sidecar. Never in untrusted workspaces.
+   */
+  private async writeSidecar(patch: SidecarEntry): Promise<void> {
+    const diagram = this.diagram;
+    if (!diagram) return;
+    if (!vscode.workspace.isTrusted) {
+      void vscode.window.showInformationMessage(vscode.l10n.t('Sidecar files are not written in untrusted workspaces.'));
+      return;
+    }
+    const target = await this.events.sidecars.write(this.uri, diagram, { settings: patch.settings, positions: patch.layout });
+    if (patch.layout) await this.events.layouts.clear(this.uri, diagram);
+    const name = target.path.split('/').pop() ?? target.path;
+    const open = vscode.l10n.t('Open');
+    const message = patch.layout ? vscode.l10n.t('Topology layout saved to {0}.', name) : vscode.l10n.t('Diagram defaults saved to {0}.', name);
+    void vscode.window.showInformationMessage(message, open).then((choice) => {
+      if (choice === open) void vscode.window.showTextDocument(target);
+    });
+  }
+
+  /** The sidecar changed on disk or in an editor: apply it live (spec sidecar-files). */
+  private async pushSidecar(): Promise<void> {
+    const diagram = this.diagram;
+    if (!diagram) return;
+    const document = await vscode.workspace.openTextDocument(this.uri);
+    const sidecar = (await this.events.sidecars.entry(this.uri, diagram)) ?? {};
+    this.post(hostMessage('document/update', { source: diagram.source, version: document.version, origin: { line: diagram.contentStartLine, character: 0 }, sidecar }));
+  }
+
   private async revealRange(range: DocumentRange): Promise<void> {
     const document = await vscode.workspace.openTextDocument(this.uri);
     const visible = vscode.window.visibleTextEditors.find((e) => e.document.uri.toString() === this.uri.toString());
@@ -284,37 +362,41 @@ export class AnimatorPanel implements vscode.Disposable {
     editor.revealRange(r, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
   }
 
+  private exportContext(): ExportContext {
+    return {
+      uri: this.uri,
+      diagram: this.diagram,
+      extensionUri: this.extensionUri,
+      pick: AnimatorPanel.saveDialogOverride,
+      answer: AnimatorPanel.notificationOverride,
+      onWritten: (path) => this.post(hostMessage('export/ack', { path })),
+    };
+  }
+
   private async receiveExport(payload: ExportDataPayload): Promise<void> {
-    this.exportChunks[payload.index] = payload.data;
-    if (this.exportChunks.filter(Boolean).length < payload.total) return;
-    const parts = this.exportChunks;
-    this.exportChunks = [];
+    if (this.exports.discarding) {
+      this.exportChunks.clear();
+      return;
+    }
+    const key = payload.pair ?? 'single';
+    const parts = (this.exportChunks.get(key) ?? []) as Uint8Array[];
+    parts[payload.index] = payload.data;
+    this.exportChunks.set(key, parts);
+    if (parts.filter(Boolean).length < payload.total) return;
+    this.exportChunks.delete(key);
     const bytes = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
     let offset = 0;
     for (const p of parts) {
       bytes.set(p, offset);
       offset += p.length;
     }
-    const suggested = vscode.Uri.joinPath(this.uri, '..', payload.suggestedName);
-    const target = AnimatorPanel.saveDialogOverride
-      ? AnimatorPanel.saveDialogOverride(suggested)
-      : await vscode.window.showSaveDialog({
-          defaultUri: suggested,
-          filters: payload.format === 'svg' ? { SVG: ['svg'] } : { PNG: ['png'] },
-          saveLabel: vscode.l10n.t('Export'),
-        });
-    if (!target) return;
-    await vscode.workspace.fs.writeFile(target, bytes);
-    this.post(hostMessage('export/ack', { path: target.fsPath || target.path }));
-    const open = vscode.l10n.t('Open');
-    const reveal = vscode.l10n.t('Reveal');
-    const choice = await vscode.window.showInformationMessage(vscode.l10n.t('Exported {0}', basename(target)), open, reveal);
-    if (choice === open) await vscode.commands.executeCommand('vscode.open', target);
-    else if (choice === reveal) await vscode.commands.executeCommand(vscode.env.uiKind === vscode.UIKind.Desktop ? 'revealFileInOS' : 'revealInExplorer', target);
+    await this.exports.write(this.exportContext(), payload.format, payload.suggestedName, bytes, payload.pair);
   }
 
   /** Test hook: waits for an export to be written, bypassing the save dialog. */
   static saveDialogOverride: ((suggested: vscode.Uri) => vscode.Uri | undefined) | undefined;
+  /** Test hook: answers export completion notifications (e.g. *Insert below diagram*). */
+  static notificationOverride: ((choices: string[]) => string | undefined) | undefined;
 
   private pushSettings(): void {
     this.post(hostMessage('settings/changed', { settings: currentSettings(), themeKind: currentThemeKind(), reduceMotion: currentReduceMotion() }));

@@ -2,7 +2,7 @@
   "name": "mermaid-animator",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "publisher": "enbinario",
   "license": "MIT",
   "private": true,
@@ -231,6 +231,82 @@
         "command": "mermaidAnimator.resetLayout",
         "title": "%command.resetLayout%",
         "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.copyStepLink",
+        "title": "%command.copyStepLink%",
+        "category": "Mermaid Animator",
+        "icon": "$(link)"
+      },
+      {
+        "command": "mermaidAnimator.saveLayout",
+        "title": "%command.saveLayout%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.saveDefaults",
+        "title": "%command.saveDefaults%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.export.gif",
+        "title": "%command.export.gif%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.export.video",
+        "title": "%command.export.video%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.export.animatedSvg",
+        "title": "%command.export.animatedSvg%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.export.html",
+        "title": "%command.export.html%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.diagramsView.refresh",
+        "title": "%command.diagramsView.refresh%",
+        "category": "Mermaid Animator",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "mermaidAnimator.diagramsView.filter",
+        "title": "%command.diagramsView.filter%",
+        "category": "Mermaid Animator",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "mermaidAnimator.diagramsView.animate",
+        "title": "%command.diagramsView.animate%",
+        "category": "Mermaid Animator",
+        "icon": "$(play)"
+      },
+      {
+        "command": "mermaidAnimator.diagramsView.openSource",
+        "title": "%command.diagramsView.openSource%",
+        "category": "Mermaid Animator",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "mermaidAnimator.diagramsView.export",
+        "title": "%command.diagramsView.export%",
+        "category": "Mermaid Animator",
+        "icon": "$(export)"
+      },
+      {
+        "command": "mermaidAnimator.walkthrough.openSample",
+        "title": "%command.walkthrough.openSample%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.walkthrough.annotate",
+        "title": "%command.walkthrough.annotate%",
+        "category": "Mermaid Animator"
       }
     ],
     "menus": {
@@ -366,6 +442,58 @@
         {
           "command": "mermaidAnimator.resetLayout",
           "when": "mermaidAnimator.panelActive"
+        },
+        {
+          "command": "mermaidAnimator.copyStepLink",
+          "when": "mermaidAnimator.panelActive"
+        },
+        {
+          "command": "mermaidAnimator.saveLayout",
+          "when": "mermaidAnimator.panelActive && isWorkspaceTrusted"
+        },
+        {
+          "command": "mermaidAnimator.saveDefaults",
+          "when": "mermaidAnimator.panelActive && isWorkspaceTrusted"
+        },
+        {
+          "command": "mermaidAnimator.export.gif",
+          "when": "mermaidAnimator.panelActive || mermaidAnimator.editorHasDiagram"
+        },
+        {
+          "command": "mermaidAnimator.export.video",
+          "when": "mermaidAnimator.panelActive || mermaidAnimator.editorHasDiagram"
+        },
+        {
+          "command": "mermaidAnimator.export.animatedSvg",
+          "when": "mermaidAnimator.panelActive || mermaidAnimator.editorHasDiagram"
+        },
+        {
+          "command": "mermaidAnimator.export.html",
+          "when": "mermaidAnimator.panelActive || mermaidAnimator.editorHasDiagram"
+        },
+        {
+          "command": "mermaidAnimator.diagramsView.filter",
+          "when": "false"
+        },
+        {
+          "command": "mermaidAnimator.diagramsView.animate",
+          "when": "false"
+        },
+        {
+          "command": "mermaidAnimator.diagramsView.openSource",
+          "when": "false"
+        },
+        {
+          "command": "mermaidAnimator.diagramsView.export",
+          "when": "false"
+        },
+        {
+          "command": "mermaidAnimator.walkthrough.annotate",
+          "when": "false"
+        },
+        {
+          "command": "mermaidAnimator.diagramsView.refresh",
+          "when": "config.mermaidAnimator.diagramsView.enabled"
         }
       ],
       "editor/title": [
@@ -387,6 +515,40 @@
           "command": "mermaidAnimator.openFromExplorer",
           "when": "resourceExtname =~ /^\\.(mmd|mermaid|md|mdx)$/i",
           "group": "navigation@90"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "mermaidAnimator.diagramsView.filter",
+          "when": "view == mermaidAnimator.diagrams",
+          "group": "navigation@1"
+        },
+        {
+          "command": "mermaidAnimator.diagramsView.refresh",
+          "when": "view == mermaidAnimator.diagrams",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "mermaidAnimator.diagramsView.animate",
+          "when": "view == mermaidAnimator.diagrams && viewItem == mermaidAnimator.diagram",
+          "group": "inline"
+        },
+        {
+          "command": "mermaidAnimator.diagramsView.animate",
+          "when": "view == mermaidAnimator.diagrams && viewItem == mermaidAnimator.diagram",
+          "group": "1_open@1"
+        },
+        {
+          "command": "mermaidAnimator.diagramsView.openSource",
+          "when": "view == mermaidAnimator.diagrams && viewItem == mermaidAnimator.diagram",
+          "group": "1_open@2"
+        },
+        {
+          "command": "mermaidAnimator.diagramsView.export",
+          "when": "view == mermaidAnimator.diagrams && viewItem == mermaidAnimator.diagram",
+          "group": "2_export@1"
         }
       ]
     },
@@ -814,6 +976,89 @@
             "%config.display.showMinimap.always%",
             "%config.display.showMinimap.never%"
           ]
+        },
+        "mermaidAnimator.export.defaultFormat": {
+          "type": "string",
+          "enum": [
+            "gif",
+            "webm",
+            "mp4",
+            "animatedSvg",
+            "html",
+            "svg",
+            "png"
+          ],
+          "default": "animatedSvg",
+          "markdownDescription": "%config.export.defaultFormat%",
+          "enumDescriptions": [
+            "%config.export.defaultFormat.gif%",
+            "%config.export.defaultFormat.webm%",
+            "%config.export.defaultFormat.mp4%",
+            "%config.export.defaultFormat.animatedSvg%",
+            "%config.export.defaultFormat.html%",
+            "%config.export.defaultFormat.svg%",
+            "%config.export.defaultFormat.png%"
+          ]
+        },
+        "mermaidAnimator.export.fps": {
+          "type": "number",
+          "enum": [
+            12,
+            15,
+            24,
+            30,
+            60
+          ],
+          "default": 30,
+          "markdownDescription": "%config.export.fps%"
+        },
+        "mermaidAnimator.export.scale": {
+          "type": "number",
+          "enum": [
+            1,
+            2,
+            3
+          ],
+          "default": 2,
+          "markdownDescription": "%config.export.scale%"
+        },
+        "mermaidAnimator.export.background": {
+          "type": "string",
+          "default": "theme",
+          "pattern": "^(theme|transparent|#[0-9a-fA-F]{6})$",
+          "patternErrorMessage": "%config.export.background.error%",
+          "markdownDescription": "%config.export.background%"
+        },
+        "mermaidAnimator.export.includeCaptions": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%config.export.includeCaptions%"
+        },
+        "mermaidAnimator.export.outputDirectory": {
+          "type": "string",
+          "default": "${fileDirname}",
+          "markdownDescription": "%config.export.outputDirectory%"
+        },
+        "mermaidAnimator.export.svgAdaptiveTheme": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%config.export.svgAdaptiveTheme%"
+        },
+        "mermaidAnimator.diagramsView.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%config.diagramsView.enabled%"
+        },
+        "mermaidAnimator.diagramsView.maxFiles": {
+          "type": "number",
+          "default": 10000,
+          "minimum": 1,
+          "markdownDescription": "%config.diagramsView.maxFiles%"
+        },
+        "mermaidAnimator.files.include": {
+          "type": "string",
+          "default": "**/*.{md,mdx,mmd,mermaid}",
+          "markdownDescription": "%config.files.include%"
         }
       }
     },
@@ -842,6 +1087,98 @@
         "mac": "cmd+alt+left",
         "when": "mermaidAnimator.panelActive"
       }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "mermaidAnimator.diagrams",
+          "name": "%view.diagrams%",
+          "when": "config.mermaidAnimator.diagramsView.enabled",
+          "icon": "media/types/sequence-dark.svg",
+          "contextualTitle": "Mermaid Animator"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "mermaidAnimator.diagrams",
+        "contents": "%view.diagrams.empty%"
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "getStarted",
+        "title": "%walkthrough.title%",
+        "description": "%walkthrough.description%",
+        "steps": [
+          {
+            "id": "openSample",
+            "title": "%walkthrough.openSample.title%",
+            "description": "%walkthrough.openSample.description%",
+            "media": {
+              "image": "media/walkthrough/open-sample.svg",
+              "altText": "%walkthrough.openSample.alt%"
+            },
+            "completionEvents": [
+              "onCommand:mermaidAnimator.walkthrough.openSample"
+            ]
+          },
+          {
+            "id": "stepThrough",
+            "title": "%walkthrough.stepThrough.title%",
+            "description": "%walkthrough.stepThrough.description%",
+            "media": {
+              "image": "media/walkthrough/step-through.svg",
+              "altText": "%walkthrough.stepThrough.alt%"
+            },
+            "completionEvents": [
+              "onCommand:mermaidAnimator.nextStep"
+            ]
+          },
+          {
+            "id": "switchViews",
+            "title": "%walkthrough.switchViews.title%",
+            "description": "%walkthrough.switchViews.description%",
+            "media": {
+              "image": "media/walkthrough/switch-views.svg",
+              "altText": "%walkthrough.switchViews.alt%"
+            },
+            "completionEvents": [
+              "onCommand:mermaidAnimator.setView.split"
+            ]
+          },
+          {
+            "id": "annotate",
+            "title": "%walkthrough.annotate.title%",
+            "description": "%walkthrough.annotate.description%",
+            "media": {
+              "image": "media/walkthrough/annotate.svg",
+              "altText": "%walkthrough.annotate.alt%"
+            },
+            "completionEvents": [
+              "onCommand:mermaidAnimator.walkthrough.annotate"
+            ]
+          },
+          {
+            "id": "export",
+            "title": "%walkthrough.export.title%",
+            "description": "%walkthrough.export.description%",
+            "media": {
+              "image": "media/walkthrough/export.svg",
+              "altText": "%walkthrough.export.alt%"
+            },
+            "completionEvents": [
+              "onCommand:mermaidAnimator.export"
+            ]
+          }
+        ]
+      }
+    ],
+    "jsonValidation": [
+      {
+        "fileMatch": "*.animator.json",
+        "url": "./schemas/animator.schema.json"
+      }
     ]
   },
   "scripts": {
@@ -850,5 +1187,8 @@
   "devDependencies": {
     "@mermaid-animator/core": "*",
     "@mermaid-animator/protocol": "*"
+  },
+  "dependencies": {
+    "jsonc-parser": "3.3.1"
   }
 }

@@ -1,0 +1,511 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://enbinario.dev/schemas/mermaid-animator/animator.schema.json",
+  "title": "Mermaid Animator sidecar",
+  "description": "Animation settings, narration and layout for the Mermaid diagrams of the file this sidecar sits beside (`<file>.animator.json`).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "description": "Sidecar format version."
+    },
+    "diagrams": {
+      "type": "object",
+      "description": "Entries keyed by the diagram's `@id`, or by `#<index>` (1-based position in the file).",
+      "additionalProperties": {
+        "$ref": "#/definitions/diagram"
+      }
+    }
+  },
+  "definitions": {
+    "diagram": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "settings": {
+          "type": "object",
+          "description": "Settings for this diagram, above user and workspace settings and below front matter and annotations.",
+          "properties": {
+            "playback.autoplay": {
+              "type": "boolean",
+              "default": false,
+              "markdownDescription": "Start playing when a panel opens."
+            },
+            "playback.speed": {
+              "type": "number",
+              "minimum": 0.25,
+              "maximum": 4,
+              "default": 1,
+              "markdownDescription": "Initial playback speed (0.25–4)."
+            },
+            "playback.dwell": {
+              "type": "string",
+              "enum": [
+                "adaptive",
+                "fixed"
+              ],
+              "default": "adaptive",
+              "markdownDescription": "How long each step rests before the next one plays.",
+              "enumDescriptions": [
+                "Reading time based on the length of the label and caption.",
+                "Always `playback.dwellMs` milliseconds."
+              ]
+            },
+            "playback.dwellMs": {
+              "type": "number",
+              "minimum": 0,
+              "default": 900,
+              "markdownDescription": "Rest time in milliseconds when `playback.dwell` is `fixed`."
+            },
+            "playback.onEnd": {
+              "type": "string",
+              "enum": [
+                "stop",
+                "loop",
+                "rewind"
+              ],
+              "default": "stop",
+              "markdownDescription": "What happens when autoplay reaches the last step.",
+              "enumDescriptions": [
+                "Stop on the complete diagram.",
+                "Start again from the beginning.",
+                "Return to the beginning and stop."
+              ]
+            },
+            "playback.reverse": {
+              "type": "string",
+              "enum": [
+                "animate",
+                "cut"
+              ],
+              "default": "animate",
+              "markdownDescription": "How stepping backwards behaves.",
+              "enumDescriptions": [
+                "Play the step backwards at double speed.",
+                "Jump back immediately."
+              ]
+            },
+            "playback.pauseOnHover": {
+              "type": "boolean",
+              "default": true,
+              "markdownDescription": "Pause autoplay while the pointer is over the diagram."
+            },
+            "playback.startAt": {
+              "type": "string",
+              "enum": [
+                "beginning",
+                "end"
+              ],
+              "default": "beginning",
+              "markdownDescription": "Where playback starts when a panel opens.",
+              "enumDescriptions": [
+                "Before the first step.",
+                "On the complete diagram."
+              ]
+            },
+            "playback.notes": {
+              "type": "string",
+              "enum": [
+                "step",
+                "attach",
+                "hidden"
+              ],
+              "default": "step",
+              "markdownDescription": "How notes take part in playback.",
+              "enumDescriptions": [
+                "Each note is its own step.",
+                "Notes appear with the preceding step.",
+                "Notes are not shown."
+              ]
+            },
+            "scrubber.snap": {
+              "type": "boolean",
+              "default": true,
+              "markdownDescription": "Snap to the nearest step when you release the scrubber."
+            },
+            "display.futureSteps": {
+              "type": "string",
+              "enum": [
+                "hidden",
+                "ghosted",
+                "visible"
+              ],
+              "default": "hidden",
+              "markdownDescription": "How steps that have not played yet are shown.",
+              "enumDescriptions": [
+                "Not drawn.",
+                "Drawn faintly.",
+                "Drawn in full."
+              ]
+            },
+            "display.pastSteps": {
+              "type": "string",
+              "enum": [
+                "full",
+                "muted",
+                "trail"
+              ],
+              "default": "full",
+              "markdownDescription": "How steps that have played are shown.",
+              "enumDescriptions": [
+                "At full strength.",
+                "Muted.",
+                "Fading with age over the last steps."
+              ]
+            },
+            "display.trailLength": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20,
+              "default": 3,
+              "markdownDescription": "Number of recent steps in the trail."
+            },
+            "motion.profile": {
+              "type": "string",
+              "enum": [
+                "formal",
+                "expressive",
+                "minimal",
+                "none"
+              ],
+              "default": "formal",
+              "markdownDescription": "Character of the animation. `formal` uses decelerating curves without overshoot.",
+              "enumDescriptions": [
+                "Calm, precise motion (default).",
+                "A gentle spring on arrival.",
+                "Short fades only.",
+                "No animation."
+              ]
+            },
+            "motion.respectReducedMotion": {
+              "type": "boolean",
+              "default": true,
+              "markdownDescription": "Use minimal motion when the editor or the operating system asks for reduced motion."
+            },
+            "motion.travelIndicator": {
+              "type": "string",
+              "enum": [
+                "pulse",
+                "comet",
+                "none"
+              ],
+              "default": "pulse",
+              "markdownDescription": "Indicator that travels along each message as it is drawn.",
+              "enumDescriptions": [
+                "A small pulse.",
+                "A pulse with a short tail.",
+                "No indicator."
+              ]
+            },
+            "camera.mode": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "fit",
+                "follow",
+                "cinematic",
+                "manual"
+              ],
+              "default": "auto",
+              "markdownDescription": "How the camera behaves during playback.",
+              "enumDescriptions": [
+                "Fit small diagrams; follow large ones.",
+                "Always show the whole diagram.",
+                "Keep the current step in view.",
+                "Frame each step tightly, gliding between steps.",
+                "Never move automatically."
+              ]
+            },
+            "playback.loopIterations": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 1,
+              "markdownDescription": "How many times loops play when `@iterations` is not given."
+            },
+            "playback.compressRepeats": {
+              "type": "boolean",
+              "default": true,
+              "markdownDescription": "Play loop repetitions after the first at double speed."
+            },
+            "playback.altBranches": {
+              "type": "string",
+              "enum": [
+                "first",
+                "all",
+                "ask"
+              ],
+              "default": "first",
+              "markdownDescription": "Which branches of `alt` and `critical` fragments play (`@branch` and the inspector override it).",
+              "enumDescriptions": [
+                "Only the first branch.",
+                "Every branch, one after another.",
+                "Stop and ask which branch to play."
+              ]
+            },
+            "playback.parallel": {
+              "type": "string",
+              "enum": [
+                "concurrent",
+                "sequential"
+              ],
+              "default": "concurrent",
+              "markdownDescription": "How the lanes of `par` fragments play.",
+              "enumDescriptions": [
+                "Together: the k-th step of every lane at once.",
+                "One lane after another."
+              ]
+            },
+            "display.showCaptions": {
+              "type": "boolean",
+              "default": true,
+              "markdownDescription": "Show the caption strip for steps with `@caption`."
+            },
+            "display.showInspector": {
+              "type": "boolean",
+              "default": true,
+              "markdownDescription": "Show the inspector beside the diagram on wide panels (toggle with `D`)."
+            },
+            "presentation.chapterCards": {
+              "type": "boolean",
+              "default": true,
+              "markdownDescription": "Introduce each chapter with a card during presentations."
+            },
+            "view.default": {
+              "type": "string",
+              "enum": [
+                "sequence",
+                "topology",
+                "split"
+              ],
+              "default": "sequence",
+              "markdownDescription": "The view a panel opens in (`%% @animator view=` overrides it).",
+              "enumDescriptions": [
+                "Participants in columns, messages in order.",
+                "Participants as a map of who talks to whom.",
+                "Both views side by side on one timeline."
+              ]
+            },
+            "topology.layout": {
+              "type": "string",
+              "enum": [
+                "layered",
+                "force",
+                "manual"
+              ],
+              "default": "layered",
+              "markdownDescription": "How the topology view places its nodes.",
+              "enumDescriptions": [
+                "Layers in first-call order (computed off the main thread).",
+                "A force-directed map, identical every time for the same diagram.",
+                "Drag nodes; positions are remembered per diagram."
+              ]
+            },
+            "topology.direction": {
+              "type": "string",
+              "enum": [
+                "LR",
+                "TB"
+              ],
+              "default": "LR",
+              "markdownDescription": "Direction of the layered topology layout.",
+              "enumDescriptions": [
+                "Left to right.",
+                "Top to bottom."
+              ]
+            },
+            "topology.edgeStyle": {
+              "type": "string",
+              "enum": [
+                "curved",
+                "orthogonal",
+                "straight"
+              ],
+              "default": "curved",
+              "markdownDescription": "Shape of topology edges.",
+              "enumDescriptions": [
+                "Gentle curves.",
+                "Right-angled routes.",
+                "Straight lines."
+              ]
+            },
+            "topology.returnMessages": {
+              "type": "string",
+              "enum": [
+                "merge",
+                "separate",
+                "hide"
+              ],
+              "default": "merge",
+              "markdownDescription": "How return messages (dashed arrows) appear in the topology view.",
+              "enumDescriptions": [
+                "As a dashed lane beside their request edge.",
+                "As their own edges.",
+                "Not at all."
+              ]
+            },
+            "topology.edgeWeight": {
+              "type": "string",
+              "enum": [
+                "count",
+                "uniform"
+              ],
+              "default": "count",
+              "markdownDescription": "Whether edge width grows with the number of messages.",
+              "enumDescriptions": [
+                "Wider for more messages (up to 5 px).",
+                "Uniform width."
+              ]
+            },
+            "display.showMinimap": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "always",
+                "never"
+              ],
+              "default": "auto",
+              "markdownDescription": "When to show the minimap in the corner of the canvas.",
+              "enumDescriptions": [
+                "Only while the drawing is larger than the view.",
+                "Always.",
+                "Never."
+              ]
+            },
+            "export.defaultFormat": {
+              "type": "string",
+              "enum": [
+                "gif",
+                "webm",
+                "mp4",
+                "animatedSvg",
+                "html",
+                "svg",
+                "png"
+              ],
+              "default": "animatedSvg",
+              "markdownDescription": "Format preselected in the export sheet.",
+              "enumDescriptions": [
+                "Animated GIF.",
+                "WebM video (VP9).",
+                "MP4 video (H.264), where the editor supports it.",
+                "Animated SVG, plays as an image (for example in a GitHub README).",
+                "Self-contained HTML player.",
+                "SVG image of the current frame.",
+                "PNG image of the current frame."
+              ]
+            },
+            "export.fps": {
+              "type": "number",
+              "enum": [
+                12,
+                15,
+                24,
+                30,
+                60
+              ],
+              "default": 30,
+              "markdownDescription": "Frame rate for video exports. GIF uses 15 fps unless you set this."
+            },
+            "export.scale": {
+              "type": "number",
+              "enum": [
+                1,
+                2,
+                3
+              ],
+              "default": 2,
+              "markdownDescription": "Scale for raster exports."
+            },
+            "export.background": {
+              "type": "string",
+              "pattern": "^(theme|transparent|#[0-9a-fA-F]{6})$",
+              "default": "theme",
+              "markdownDescription": "Export background: `theme`, `transparent` (where the format allows) or a colour such as `#ffffff`."
+            },
+            "export.includeCaptions": {
+              "type": "boolean",
+              "default": true,
+              "markdownDescription": "Burn captions into GIF and video exports."
+            },
+            "export.svgAdaptiveTheme": {
+              "type": "boolean",
+              "default": false,
+              "markdownDescription": "Also embed a `prefers-color-scheme: dark` palette in animated SVGs. Off by default because GitHub does not apply the viewer's theme to images predictably; use *Export for GitHub (light + dark pair)* instead."
+            }
+          },
+          "additionalProperties": true
+        },
+        "captions": {
+          "type": "object",
+          "description": "Captions by step.",
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "description": "A step: `#<step number>`, an `@step-id` slug, a content step id or a structural id."
+          },
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "chapters": {
+          "type": "array",
+          "description": "Chapters, each starting at a step.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "title",
+              "firstStep"
+            ],
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "firstStep": {
+                "type": "string",
+                "minLength": 1,
+                "description": "A step: `#<step number>`, an `@step-id` slug, a content step id or a structural id."
+              }
+            }
+          }
+        },
+        "topology": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "layout": {
+              "enum": [
+                "layered",
+                "force",
+                "manual"
+              ],
+              "description": "Topology layout; `manual` uses the positions below."
+            },
+            "positions": {
+              "type": "object",
+              "description": "Node centres by participant id, as `[x, y]`.",
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 2,
+                "maxItems": 2
+              }
+            }
+          }
+        },
+        "flowchart": {
+          "type": "object",
+          "description": "Flowchart options (applied when flowcharts are animated natively)."
+        }
+      }
+    }
+  }
+}

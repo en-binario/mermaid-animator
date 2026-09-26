@@ -32,6 +32,15 @@ export interface AnimatorSettings {
   returnMessages: 'merge' | 'separate' | 'hide';
   edgeWeight: 'count' | 'uniform';
   showMinimap: 'auto' | 'always' | 'never';
+  exportDefaults: {
+    format: 'svg' | 'png' | 'gif' | 'webm' | 'mp4' | 'animated-svg' | 'html';
+    /** Undefined when not set: GIF then uses 15 fps and video 30 fps. */
+    fps?: number;
+    scale: number;
+    background: 'theme' | 'transparent' | string;
+    captions: boolean;
+    svgAdaptiveTheme: boolean;
+  };
 }
 
 export const DEFAULT_SETTINGS: AnimatorSettings = {
@@ -62,6 +71,7 @@ export const DEFAULT_SETTINGS: AnimatorSettings = {
   returnMessages: 'merge',
   edgeWeight: 'count',
   showMinimap: 'auto',
+  exportDefaults: { format: 'animated-svg', scale: 2, background: 'theme', captions: true, svgAdaptiveTheme: false },
 };
 
 const pick = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T => (typeof value === 'string' && (allowed as readonly string[]).includes(value) ? (value as T) : fallback);
@@ -113,5 +123,14 @@ export function resolveSettings(host: WebviewSettings, annotations: Record<strin
     returnMessages: pick(get('returns', 'topology.returnMessages'), ['merge', 'separate', 'hide'], d.returnMessages),
     edgeWeight: pick(host['topology.edgeWeight'], ['count', 'uniform'], d.edgeWeight),
     showMinimap: pick(host['display.showMinimap'], ['auto', 'always', 'never'], d.showMinimap),
+    exportDefaults: {
+      // The manifest spells it `animatedSvg`.
+      format: pick(host['export.defaultFormat'] === 'animatedSvg' ? 'animated-svg' : host['export.defaultFormat'], ['svg', 'png', 'gif', 'webm', 'mp4', 'animated-svg', 'html'], d.exportDefaults.format),
+      fps: [12, 15, 24, 30, 60].includes(Number(host['export.fps'])) ? Number(host['export.fps']) : undefined,
+      scale: [1, 2, 3].includes(Number(host['export.scale'])) ? Number(host['export.scale']) : d.exportDefaults.scale,
+      background: typeof host['export.background'] === 'string' && (/^(theme|transparent)$/.test(host['export.background'] as string) || /^#[0-9a-f]{6}$/i.test(host['export.background'] as string)) ? (host['export.background'] as string) : d.exportDefaults.background,
+      captions: bool(host['export.includeCaptions'], d.exportDefaults.captions),
+      svgAdaptiveTheme: bool(host['export.svgAdaptiveTheme'], d.exportDefaults.svgAdaptiveTheme),
+    },
   };
 }

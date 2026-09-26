@@ -2,7 +2,7 @@
 
 Play the Mermaid diagrams already in your repository as elegant, navigable animations — in `.mmd` / `.mermaid` files and in ` ```mermaid ` blocks inside Markdown.
 
-> **Status: preview (0.1).** Sequence diagrams are fully animated; every other Mermaid diagram type opens with a generic, ordered reveal.
+Sequence diagrams are animated natively (sequence, topology and split views); every other Mermaid diagram type opens with a generic, ordered reveal. Export animations as GIF, video, animated SVG for your README, or a self-contained HTML player.
 
 ## Getting started
 
@@ -10,6 +10,8 @@ Play the Mermaid diagrams already in your repository as elegant, navigable anima
 - **Mermaid files:** click the ▶ button in the editor title bar, or run **Mermaid Animator: Open Animated Preview to the Side** (`Ctrl+K Alt+M` / `Cmd+K Alt+M`).
 - **Explorer:** right-click a `.md`, `.mdx`, `.mmd` or `.mermaid` file → **Animate Mermaid Diagram**.
 - **Several diagrams in one file:** **Animate All Diagrams in File**, or switch diagrams from the panel toolbar.
+- **Every diagram in the workspace:** the **Mermaid Diagrams** view in the Explorer lists each file with its diagrams (by title, `@id` or first line, with a type icon). Click to animate; the context menu offers *Open Source* and *Export…*; the title bar has *Filter by Diagram Type…* and *Refresh*. It indexes `mermaidAnimator.files.include`, honours `files.exclude` and `search.exclude`, updates as files are saved, and stops after `mermaidAnimator.diagramsView.maxFiles` files.
+- **New here?** *Help → Get Started* has the walkthrough **Get started with Mermaid Animator**: open a sample, step through it, switch views, add an annotation and export.
 
 Nothing in your diagrams needs to change. Edits appear live, and the panel keeps your place while you type.
 
@@ -57,9 +59,25 @@ Nothing in your diagrams needs to change. Edits appear live, and the panel keeps
 
 From the editor: **Play / Pause** `Ctrl+Alt+Space`, **Next / Previous Step** `Ctrl+Alt+→ / ←` (`Cmd` on macOS) while a panel is active.
 
-## Export
+## Export and share
 
-**Export…** (toolbar, `E`, or the CodeLens) saves the current frame as **SVG** (self-contained: fonts embedded, no scripts or external references) or **PNG** at 1×/2×/3×, optionally transparent, or copies it to the clipboard.
+**Export…** (toolbar, `E`, the CodeLens, or *Mermaid Animator: Export…*) opens the export sheet: pick a format and see a live preview with the estimated duration and file size. Options that do not apply to the chosen format are disabled.
+
+| Format | What you get |
+|---|---|
+| **GIF** | Animated GIF with a global palette (optional dithering) and transparency; loops forever, once or *n* times. |
+| **WebM / MP4** | VP9 video; MP4 (H.264) where the editor's encoder supports it — otherwise the sheet says so and WebM is offered. |
+| **Animated SVG** | Plays as an image, for example in a GitHub README; CSS keyframes, no scripts. *Export for GitHub (light + dark pair)* writes `name.light.anim.svg` and `name.dark.anim.svg`. |
+| **HTML player** | One self-contained, offline file with transport, keyboard control, chapters and `#step=` / `#chapter=` links. |
+| **SVG / PNG** | The current frame (SVG self-contained with fonts embedded; PNG at 1×/2×/3×, optionally transparent), or copy it to the clipboard. |
+
+For GIF and video you choose the range (all steps, current chapter, A–B range, current step), view, camera (fit, cinematic, current), size preset, frame rate (12–60 fps), speed, theme, background, what to burn in (captions, title card, step counter, progress bar), end hold and quality. Frames are rendered and encoded in a background worker with frame-exact timing, and the progress notification has **Cancel**. *Export as GIF… / Video… / Animated SVG… / HTML Player…* open the sheet with that format selected; bind them with `"args": { "start": true }` to export straight away with your defaults.
+
+After exporting from a Markdown file, **Insert below diagram** adds an image reference (or a `<picture>` element for a light/dark pair) after the diagram's closing fence.
+
+**Animated SVG notes.** Motion is sampled at 30 Hz into merged keyframes, so a long flow can pass 1 MB — the sheet warns and suggests a GIF. By default the file has a transparent background and a palette meant to read on both GitHub's light and dark backgrounds; because no single colour reaches 4.5:1 contrast on both `#ffffff` and `#0d1117`, lines and text carry a thin contrasting halo. For the best result on GitHub use the light + dark pair.
+
+**Copy Link to Current Step** (palette) copies `vscode://enbinario.mermaid-animator/open?path=…&diagram=…&step=…`. Opening it in VS Code opens the file, the diagram (by `@id` or position) and the step (by step id, then by number), or says what could not be found.
 
 ## Annotations (optional)
 
@@ -77,6 +95,26 @@ sequenceDiagram
 Supported in this release: `@animator`, `@id`, `@title`, `@step-id`, `@skip`, `@pause`, `@duration`, `@speed`, `@emphasis`, `@with-next`, `@type`, `@caption`, `@chapter`, `@focus` (Cinematic framing), `@latency` (shown in the inspector), `@iterations` and `@branch` (`1`, `"label"`, `all`, `ask`, `skip`). Mistakes are reported in the Problems panel.
 
 The editor helps as you write: typing `%% @` suggests directives and their values (participants, branch labels, `@animator` keys and values); hovering a directive shows what it does and which statement and step it applies to; unknown names get a one-click fix; **Mermaid Animator: Insert Annotation…** adds one above the current statement.
+
+## Sidecar files (optional)
+
+Prefer your Mermaid source free of annotations? Keep settings, captions, chapters and topology positions beside it in `<file>.animator.json` (for example `README.md.animator.json`), with completion and validation from the bundled JSON schema:
+
+```jsonc
+{
+  "version": 1,
+  "diagrams": {
+    "sign-in": {                                   // the diagram's @id, or "#2" for the second diagram
+      "settings": { "view.default": "split", "playback.speed": 1.25 },
+      "captions": { "lookup-user": "Auth looks the user up.", "#4": "The database returns the hash." },
+      "chapters": [{ "title": "Credentials", "firstStep": "#1" }],
+      "topology": { "layout": "manual", "positions": { "U": [40, 160], "G": [260, 160] } }
+    }
+  }
+}
+```
+
+Steps are referenced by `#<number>`, `@step-id`, or the step's content or structural id; entries that no longer match a step are flagged with a warning in the sidecar instead of being dropped silently. Sidecar settings sit above your user and workspace settings and below front matter and annotations, and edits apply to open panels immediately. **Save Topology Layout** and **Save Current Settings as Diagram Defaults** (speed, view and camera) write the sidecar, keeping its comments and formatting; saving a layout moves positions you dragged (kept per workspace until then) into the file. In untrusted workspaces sidecars are read but never written.
 
 ## Settings
 
@@ -114,6 +152,15 @@ The editor helps as you write: typing `%% @` suggests directives and their value
 | `mermaidAnimator.presentation.chapterCards` / `.zenMode` | `true` / `false` | Chapter cards while presenting; also enter Zen Mode. |
 | `mermaidAnimator.annotations.highlight` | `true` | Highlight `%% @…` directive names in the editor. |
 | `mermaidAnimator.files.languages` | `markdown, mdx, mermaid` | Languages scanned for diagrams. |
+| `mermaidAnimator.files.include` | `**/*.{md,mdx,mmd,mermaid}` | Files the *Mermaid Diagrams* view indexes. |
+| `mermaidAnimator.diagramsView.enabled` / `.maxFiles` | `true` / `10000` | Show the *Mermaid Diagrams* view; files it scans at most. |
+| `mermaidAnimator.export.defaultFormat` | `animatedSvg` | Format preselected in the export sheet (`gif`, `webm`, `mp4`, `animatedSvg`, `html`, `svg`, `png`). |
+| `mermaidAnimator.export.fps` | `30` | Video frame rate; GIF uses 15 fps unless you set this. |
+| `mermaidAnimator.export.scale` | `2` | Raster scale (1, 2 or 3). |
+| `mermaidAnimator.export.background` | `theme` | `theme`, `transparent` or a colour such as `#ffffff`. |
+| `mermaidAnimator.export.includeCaptions` | `true` | Burn captions into GIF and video. |
+| `mermaidAnimator.export.outputDirectory` | `${fileDirname}` | Where the save dialog starts (`${workspaceFolder}`, relative or absolute paths work too). |
+| `mermaidAnimator.export.svgAdaptiveTheme` | `false` | Also embed a `prefers-color-scheme: dark` palette in animated SVGs. |
 
 ## Accessibility and languages
 
@@ -121,4 +168,4 @@ Every control is keyboard operable and labelled; each step is announced to scree
 
 ## Privacy
 
-Diagram content never leaves your machine. The animator makes no network requests.
+Diagram content never leaves your machine. The animator makes no network requests, and exported HTML players and SVGs reference nothing outside themselves.

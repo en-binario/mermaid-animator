@@ -306,6 +306,40 @@ export class GenericDiagram {
     });
   }
 
+  /**
+   * A standalone SVG document of the reveal at `t` with full motion, for animated exports
+   * (M3 D3). The live drawing is re-rendered by the controller on its next frame.
+   */
+  frameSvgText(t: number): string | undefined {
+    const inner = this.holder.firstElementChild as SVGSVGElement | null;
+    if (!inner) return undefined;
+    this.renderAt(t, false);
+    const svg = inner.cloneNode(true) as SVGSVGElement;
+    svg.setAttribute('xmlns', SVG_NS);
+    svg.setAttribute('width', String(Math.ceil(this.bounds.w)));
+    svg.setAttribute('height', String(Math.ceil(this.bounds.h)));
+    if (this.sheet) {
+      const style = document.createElementNS(SVG_NS, 'style');
+      style.textContent = [...this.sheet.cssRules].map((r) => r.cssText).join('\n');
+      svg.insertBefore(style, svg.firstChild);
+    }
+    return new XMLSerializer().serializeToString(svg);
+  }
+
+  /** Group reveal data for exports that replay the reveal themselves (animated SVG, HTML player). */
+  revealGroups(): { element: SVGGraphicsElement; extra: Element[]; kind: string; paths: { el: SVGGeometryElement; length: number; dashed: boolean }[] }[] {
+    return this.groups.map((g) => ({ element: g.element, extra: g.extra, kind: g.info.kind, paths: g.paths }));
+  }
+
+  /** The inner Mermaid <svg>, for exports that embed the drawing. */
+  get drawingElement(): SVGSVGElement | undefined {
+    return (this.holder.firstElementChild as SVGSVGElement | null) ?? undefined;
+  }
+
+  get stylesheetText(): string {
+    return this.sheet ? [...this.sheet.cssRules].map((r) => r.cssText).join('\n') : '';
+  }
+
   exportDrawing(t: number): { svg: SVGSVGElement; width: number; height: number } | undefined {
     const inner = this.holder.firstElementChild as SVGSVGElement | null;
     if (!inner) return undefined;

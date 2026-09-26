@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <!-- Harness only: loads the built HTML-player bundle with data exported from the panel harness (sessionStorage). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Player harness</title>
+    <link rel="stylesheet" href="../../extension/dist/player/player.css">
+  </head>
+  <body>
+    <div id="ma-player"></div>
+    <script>
+      (function () {
+        const data = sessionStorage.getItem('player-data');
+        const script = document.createElement('script');
+        script.type = 'application/json';
+        script.id = 'ma-player-data';
+        script.textContent = data || '';
+        document.body.appendChild(script);
+        const bundle = document.createElement('script');
+        bundle.src = '../../extension/dist/player/player.js';
+        document.body.appendChild(bundle);
+      })();
+    </script>
+  </body>
+</html>

@@ -7,7 +7,7 @@ import {
   compileDiagram, layoutSequence, offsetRange, resolvePosition, stepEnd, unionRects,
   type BranchChoice, type CompiledDiagram, type Diagnostic, type FragmentInfo, type Rect, type SequenceLayout, type Step,
 } from '@mermaid-animator/core';
-import { webviewMessage, type DocumentRange, type WebviewSettings } from '@mermaid-animator/protocol';
+import { webviewMessage, type DocumentRange, type SidecarEntry, type WebviewSettings } from '@mermaid-animator/protocol';
 import { createCanvasMeasure, EASE, effectiveDisplay, morphAt, MORPH_FADE_MS, MORPH_MS, MorphRenderer, prepareScene, sceneAt, SequenceSvgRenderer, SVG_NS, type SceneModel } from '@mermaid-animator/renderer';
 import { announcement } from './announce';
 import { autoFits, Camera, cinematicView, fitView, focusTarget, followView, type View, type Viewport } from './camera';
@@ -15,11 +15,15 @@ import { Minimap } from './minimap';
 import { TopologyView } from './topology/view';
 import { chapterTarget, deriveChapters, focusSkipSet, stepInvolves, stepText, type Chapter } from './narrative';
 import { buildSearchIndex, type SearchEntry } from './search';
+import { parseInline } from './narrative';
+import type { ExportMaterial } from './animated/material';
+import type { PaletteName } from '@mermaid-animator/renderer';
 import { Player, type PlayerSnapshot } from './player';
 import { resolveSettings, type AnimatorSettings } from './settings';
 import type { Host } from './host';
 import { GenericDiagram } from './fallback';
 import { chooseEngine } from './engine';
+import { resolveGenericSidecar, resolveSidecar, withSidecarSettings, type UnresolvedKey } from './sidecar';
 
 export type Translate = (key: string, ...args: (string | number)[]) => string;
 
@@ -107,6 +111,12 @@ export class DiagramController {
   private generic?: GenericDiagram;
   private settings: AnimatorSettings = resolveSettings({ themeMode: 'auto' });
   private hostSettings: WebviewSettings = { themeMode: 'auto' };
+  /** The diagram's sidecar entry (M3), and whether workspace state holds this user's own manual layout. */
+  private sidecar: SidecarEntry | undefined;
+  private ownLayout = false;
+  private lastUnresolved = '';
+  /** Captions for generic diagrams, which come only from the sidecar (by step number). */
+  readonly genericCaptions = signal<(string | undefined)[]>([]);
   private reducedMotion = false;
   private origin = { line: 0, character: 0 };
   private source = '';
@@ -116,6 +126,8 @@ export class DiagramController {
   private lastStep = -2;
   private lastAnnounced = -2;
   private cameraMode: CameraMode = 'fit';
+  /** Mermaid diagram type of a generic drawing (export titles fall back to it). */
+  private diagramType = '';
   private readonly container: HTMLElement;
   private readonly views: HTMLDivElement;
   private readonly seqSlotEl: HTMLDivElement;
@@ -201,7 +213,10 @@ export class DiagramController {
       measure: this.measure,
       onUserMove,
       requestFrame: () => this.requestFrame(),
-      onSave: (positions) => this.host.post(webviewMessage('layout/save', { key: this.sequence?.compiled.id ?? '', positions })),
+      onSave: (positions) => {
+        this.ownLayout = true;
+        this.host.post(webviewMessage('layout/save', { key: this.sequence?.compiled.id ?? '', positions }));
+      },
       reducedMotion: () => this.reducedMotion,
       minimapLabel: t('minimap.label'),
     });
@@ -262,9 +277,13 @@ export class DiagramController {
 
   // -- loading -------------------------------------------------------------------------------------------------
 
-  async load(source: string, origin: { line: number; character: number }, settings: WebviewSettings, reducedMotion: boolean, layout?: Record<string, { x: number; y: number }>): Promise<void> {
+  async load(source: string, origin: { line: number; character: number }, settings: WebviewSettings, reducedMotion: boolean, layout?: Record<string, { x: number; y: number }>, sidecar?: SidecarEntry): Promise<void> {
     await document.fonts?.ready;
-    this.topologyView.setStored(layout);
+    this.sidecar = sidecar;
+    this.ownLayout = !!layout && Object.keys(layout).length > 0;
+    this.lastUnresolved = '';
+    // Workspace-state positions are this user's unsaved arrangement; the sidecar's are shared.
+    this.topologyView.setStored(this.ownLayout ? layout : sidecar?.layout);
     this.hostSettings = settings;
     this.reducedMotion = reducedMotion;
     this.origin = origin;
@@ -290,6 +309,24 @@ export class DiagramController {
     this.source = source;
     await this.build(source, { preserve: true });
     this.requestFrame();
+  }
+
+  /** The sidecar changed: apply its settings, narration and positions live (spec sidecar-files). */
+  async applySidecar(entry: SidecarEntry, source: string, origin: { line: number; character: number }): Promise<void> {
+    this.sidecar = entry;
+    this.source = source;
+    this.origin = origin;
+    if (!this.ownLayout) {
+      this.topologyView.setStored(entry.layout);
+      if (this.topologyView.hasLayout) void this.updateTopology();
+    }
+    await this.build(this.source, { preserve: true });
+    this.requestFrame();
+  }
+
+  /** The user's own manual positions were saved into the sidecar (or dragged anew). */
+  set hasOwnLayout(value: boolean) {
+    this.ownLayout = value;
   }
 
   /** The bound diagram disappeared from the document: keep the drawing, show a notice. */
@@ -319,14 +356,28 @@ export class DiagramController {
     return this.sequence?.compiled.sequence?.timeline ?? this.generic?.timeline ?? EMPTY_TIMELINE;
   }
 
+  /**
+   * Loads the font subsets the diagram's text needs before measuring: unicode-range faces load on
+   * demand, and canvas measurement does not trigger that, so e.g. latin-ext labels would otherwise
+   * be measured with a fallback font.
+   */
+  private async loadFonts(source: string): Promise<void> {
+    const fonts = document.fonts;
+    if (!fonts?.load) return;
+    const text = source.slice(0, 20_000);
+    await Promise.all(['450 13px "Inter Variable"', '560 13.5px "Inter Variable"'].map((f) => fonts.load(f, text).catch(() => [])));
+  }
+
   /** Compiles and mounts; on errors keeps the last good drawing and shows a banner. Returns success. */
   private async build(source: string, { preserve }: { preserve: boolean }): Promise<boolean> {
+    await this.loadFonts(source);
     const previousSteps = this.steps();
     const previousIndex = this.snapshot.value.displayStep - 1;
     const compiled = compileDiagram(source, {});
-    this.settings = resolveSettings(this.hostSettings, compiled.settings);
+    // Precedence (spec §11.8): settings < sidecar < front matter and annotations.
+    this.settings = resolveSettings(withSidecarSettings(this.hostSettings, this.sidecar), compiled.settings);
     this.effective.value = this.settings;
-    const recompiled = compileDiagram(source, {
+    const options = {
       notes: this.settings.notes,
       dwell: this.settings.dwell,
       dwellMs: this.settings.dwellMs,
@@ -335,7 +386,14 @@ export class DiagramController {
       altBranches: this.settings.altBranches,
       parallel: this.settings.parallel,
       branchChoices: this.branchChoices,
-    });
+    };
+    let recompiled = compileDiagram(source, options);
+    if (recompiled.sequence && (this.sidecar?.captions || this.sidecar?.chapters)) {
+      // Step keys resolve against the compiled steps; captions change dwell, not the step list.
+      const resolved = resolveSidecar(recompiled.sequence.compiled.steps, this.sidecar);
+      recompiled = compileDiagram(source, { ...options, stepCaptions: resolved.stepCaptions, stepChapters: resolved.stepChapters });
+      this.reportUnresolved(resolved.unresolved);
+    } else if (recompiled.sequence) this.reportUnresolved([]);
     this.player.setOptions({ speed: this.settings.speed, loop: this.settings.onEnd === 'loop', onEnd: this.settings.onEnd, reverse: this.settings.reverse, snap: this.settings.snap });
 
     const firstError = recompiled.diagnostics.find((d) => d.severity === 'error');
@@ -348,6 +406,7 @@ export class DiagramController {
       const renderer = this.sequence?.renderer ?? new SequenceSvgRenderer(this.viewport);
       renderer.mount(layout);
       this.sequence = { compiled: recompiled, layout, scene: prepareScene(layout, steps, timeline), renderer };
+      this.genericCaptions.value = [];
       this.banner.value = undefined;
       this.notice.value = undefined;
       this.stale.value = false;
@@ -385,12 +444,16 @@ export class DiagramController {
     this.notice.value = recompiled.type === 'sequence' ? this.t('banner.fallbackNative') : this.t('banner.fallback');
     this.svg.setAttribute('aria-label', recompiled.title ?? recompiled.type);
     this.stepLabels.value = this.generic.labels;
+    const generic = resolveGenericSidecar(this.generic.stepCount, this.sidecar);
+    this.genericCaptions.value = Array.from({ length: this.generic.stepCount }, (_, i) => generic.stepCaptions[i]);
+    this.reportUnresolved(generic.unresolved);
     this.stepList.value = [];
     this.fragments.value = [];
     this.participants.value = [];
     this.chapters.value = [];
     this.searchIndex.value = [];
     this.title.value = recompiled.title ?? '';
+    this.diagramType = recompiled.type;
     // Generic diagrams offer only their own view.
     this.canSwitch.value = false;
     this.showView('sequence');
@@ -421,6 +484,9 @@ export class DiagramController {
   /** Clears manual topology positions (Reset Topology Layout) and lays out again. */
   resetLayout(): void {
     this.topologyView.resetManual();
+    // Without this user's positions, the sidecar's shared positions (if any) apply again.
+    this.ownLayout = false;
+    if (this.sidecar?.layout) this.topologyView.setStored(this.sidecar.layout);
     void this.updateTopology();
   }
 
@@ -470,6 +536,36 @@ export class DiagramController {
     this.views.dataset.morphing = fade ? 'fade' : 'morph';
     this.showView(to);
     this.requestFrame();
+  }
+
+  /** Lays out the topology if it has not been yet (exports that include the topology view). */
+  async ensureTopology(): Promise<void> {
+    if (!this.sequence) return;
+    if (!this.topologyView.hasLayout) void this.updateTopology();
+    await this.topologyView.ready();
+  }
+
+  /** The topology positions to save into the sidecar (lays the topology out first if needed). */
+  async sidecarLayout(): Promise<Record<string, { x: number; y: number }> | undefined> {
+    if (!this.sequence) return undefined;
+    await this.ensureTopology();
+    const positions = this.topologyView.positions();
+    // From now on the sidecar holds this arrangement; later sidecar edits apply live again.
+    if (positions) this.ownLayout = false;
+    return positions;
+  }
+
+  /**
+   * Runtime choices saved by *Save Current Settings as Diagram Defaults* (spec §11.8, level 8):
+   * playback speed, the current view and the camera mode.
+   */
+  sidecarDefaults(): Record<string, unknown> {
+    const settings: Record<string, unknown> = { 'playback.speed': this.snapshot.value.speed };
+    if (this.sequence) settings['view.default'] = this.view.value;
+    const configured = this.settings.camera;
+    const automatic = configured === 'auto' && this.cameraMode === (autoFits(this.contentBounds(), this.viewportSize) ? 'fit' : 'follow');
+    settings['camera.mode'] = automatic || this.cameraMode === 'manual' ? configured : this.cameraMode;
+    return settings;
   }
 
   /** Starts the topology layout in the background (e.g. when the pointer reaches the view switcher). */
@@ -600,6 +696,14 @@ export class DiagramController {
     }, 250);
   }
 
+  /** Tells the host which sidecar keys match no step (for diagnostics), only when that changes. */
+  private reportUnresolved(entries: UnresolvedKey[]): void {
+    const key = JSON.stringify(entries);
+    if (key === this.lastUnresolved || (!this.sidecar && !entries.length)) return;
+    this.lastUnresolved = key;
+    this.host.post(webviewMessage('sidecar/unresolved', { entries }));
+  }
+
   private showError(error: Diagnostic): void {
     const range = offsetRange(error.range, this.origin);
     this.banner.value = { kind: 'error', text: this.t('banner.error', range.startLine + 1, range.startCol + 1, error.message), range };
@@ -703,7 +807,7 @@ export class DiagramController {
     const count = this.stepCount();
     const current = steps[step];
     const ranges = (current?.sources ?? []).map((r) => offsetRange(r, this.origin));
-    this.host.post(webviewMessage('state/changed', { stepIndex: step, stepCount: count, playing: this.snapshot.value.playing, sourceRanges: ranges }));
+    this.host.post(webviewMessage('state/changed', { stepIndex: step, stepCount: count, playing: this.snapshot.value.playing, sourceRanges: ranges, stepId: current?.id, structuralId: current?.structuralId, caption: current ? current.caption : step >= 0 ? this.genericCaptions.value[step] : undefined }));
     if (this.snapshot.value.speed <= 2 && step !== this.lastAnnounced) {
       this.lastAnnounced = step;
       const participants = this.sequence?.compiled.sequence?.model.participants ?? [];
@@ -898,6 +1002,11 @@ export class DiagramController {
     return this.sequence?.compiled;
   }
 
+  /** The generic (Mermaid-rendered) drawing, when one is shown. */
+  get genericDiagram(): GenericDiagram | undefined {
+    return this.generic;
+  }
+
   get hasGeneric(): boolean {
     return !!this.generic;
   }
@@ -1056,6 +1165,24 @@ export class DiagramController {
     if (hit) this.player.goTo(hit.index + 1);
   }
 
+  /**
+   * Rests on the step a deep link names (spec deep-links): by step id, then structural id, then the
+   * nearest step to the link's 1-based step number (when given). Returns whether a step was found.
+   */
+  goToStepId(id: string, near?: number): boolean {
+    const steps = this.steps();
+    const hit = steps.find((s) => s.id === id) ?? steps.find((s) => s.structuralId === id);
+    if (hit) {
+      this.player.goTo(hit.index + 1);
+      return true;
+    }
+    if (near !== undefined && steps.length) {
+      this.player.goTo(Math.min(Math.max(1, near), steps.length));
+      return true;
+    }
+    return false;
+  }
+
   /** 1-based document line for a line of the diagram source. */
   documentLine(line: number): number {
     return line + this.origin.line + 1;
@@ -1070,6 +1197,90 @@ export class DiagramController {
 
   revealBanner(): void {
     if (this.banner.value?.range) this.host.post(webviewMessage('source/reveal', { range: this.banner.value.range }));
+  }
+
+  /** What exports need for one view (M3): drawing source, bounds, camera, narrative and position. */
+  exportMaterial(view: 'sequence' | 'topology'): ExportMaterial | undefined {
+    const timeline = this.timeline();
+    const steps = this.steps();
+    const palette = (document.documentElement.dataset.palette ?? 'ivory') as PaletteName;
+    const display = effectiveDisplay(this.settings.display, false);
+    const count = this.stepCount();
+    const common = {
+      timeline,
+      display,
+      palette,
+      text: {
+        title: this.title.value || (this.sequence ? this.t('aria.sequence') : this.diagramType.charAt(0).toUpperCase() + this.diagramType.slice(1)),
+        subtitle: this.t('presentation.subtitle', this.participants.value.length, this.chapters.value.length, count),
+        captions: this.sequence ? steps.map((s) => (s.caption ? parseInline(s.caption).map((n) => n.text).join('') : undefined)) : this.genericCaptions.value.map((c) => (c ? parseInline(c).map((n) => n.text).join('') : undefined)),
+        stepCount: count,
+      },
+      rest: this.player.restingIndex(),
+      chapters: this.chapters.value,
+      ab: this.snapshot.value.range,
+    };
+    const seq = this.sequence;
+    const compiled = seq?.compiled.sequence?.compiled;
+    if (seq && compiled && view === 'sequence') {
+      return {
+        kind: 'sequence',
+        ...common,
+        content: this.contentBounds(),
+        view: this.camera.view,
+        viewport: this.viewportSize,
+        stepBounds: (k) => this.stepBounds(k),
+        cinematicTarget: (k, b) => this.seqSlot.cinematicTarget(k, b),
+        source: () => ({ kind: 'sequence', layout: seq.layout, compiled, timeline }),
+      };
+    }
+    const topo = this.topologyView;
+    if (seq && compiled && view === 'topology' && topo.hasLayout && topo.topology && topo.geometry) {
+      const topology = topo.topology;
+      const geometry = topo.geometry;
+      return {
+        kind: 'sequence',
+        ...common,
+        content: topo.content(),
+        view: topo.camera.view,
+        viewport: topo.size,
+        stepBounds: (k) => this.topoSlot.stepBounds(k),
+        cinematicTarget: (k, b) => this.topoSlot.cinematicTarget(k, b),
+        source: () => ({ kind: 'topology', topology, geometry, labels: topo.labels, compiled, timeline, weight: topo.edgeWeight }),
+      };
+    }
+    const generic = this.generic;
+    if (!generic) return undefined;
+    const bounds = generic.bounds;
+    return {
+      kind: 'generic',
+      ...common,
+      content: bounds,
+      view: this.camera.view,
+      viewport: this.viewportSize,
+      stepBounds: (k) => generic.stepBounds(k),
+      source: () => ({ kind: 'external', timeline }),
+      externalFrame: async (t, width, height, v) => {
+        const text = generic.frameSvgText(t) ?? '<svg xmlns="http://www.w3.org/2000/svg"/>';
+        this.requestFrame();
+        const url = URL.createObjectURL(new Blob([text], { type: 'image/svg+xml' }));
+        try {
+          const image = new Image();
+          await new Promise<void>((resolve, reject) => {
+            image.onload = () => resolve();
+            image.onerror = () => reject(new Error('A frame could not be rasterised.'));
+            image.src = url;
+          });
+          const canvas = new OffscreenCanvas(width, height);
+          const ctx = canvas.getContext('2d')!;
+          ctx.setTransform(v.k, 0, 0, v.k, v.x, v.y);
+          ctx.drawImage(image, bounds.x, bounds.y, bounds.w, bounds.h);
+          return canvas.transferToImageBitmap();
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      },
+    };
   }
 
   /** The drawing's content box, for export. */

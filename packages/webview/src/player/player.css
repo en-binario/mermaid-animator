@@ -1,0 +1,204 @@
+/* HTML player shell (spec html-player). Colours come only from tokens.css. */
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--ma-canvas);
+  color: var(--ma-ink-1);
+  font-family: var(--ma-font-ui);
+  font-size: var(--ma-type-label);
+}
+
+.mp {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  height: 100vh;
+}
+
+.mp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ma-space-3);
+  padding: var(--ma-space-3) var(--ma-space-5);
+  border-bottom: 1px solid var(--ma-hairline);
+}
+
+.mp-title {
+  margin: 0;
+  font-family: var(--ma-font-serif);
+  font-size: var(--ma-type-lead);
+  font-weight: 500;
+}
+
+.mp-views {
+  display: inline-flex;
+  border: 1px solid var(--ma-rule);
+  border-radius: var(--ma-radius-sm);
+  overflow: hidden;
+}
+
+.mp-view {
+  height: 26px;
+  padding: 0 var(--ma-space-3);
+  border: 0;
+  background: transparent;
+  color: var(--ma-ink-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.mp-view + .mp-view {
+  border-left: 1px solid var(--ma-rule);
+}
+
+.mp-view[aria-checked='true'] {
+  background: var(--ma-accent-muted);
+  color: var(--ma-ink-1);
+  font-weight: 560;
+}
+
+.mp-stage {
+  position: relative;
+  display: grid;
+  min-height: 0;
+  padding: var(--ma-space-4);
+}
+
+.mp-stage .ma-svg,
+.mp-generic,
+.mp-generic svg {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.mp-stage[data-view='sequence'] .mp-topology,
+.mp-stage[data-view='topology'] .mp-sequence {
+  display: none;
+}
+
+.mp-stage[data-view='split'] {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--ma-space-4);
+}
+
+@media (max-width: 1099px) {
+  .mp-stage[data-view='split'] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+.mp-caption {
+  max-width: 68ch;
+  min-height: 1.45em;
+  margin: 0 auto;
+  padding: var(--ma-space-2) var(--ma-space-5);
+  font-size: var(--ma-type-body);
+  line-height: 1.45;
+  text-align: center;
+}
+
+.mp-caption[hidden] {
+  display: none;
+}
+
+.mp-transport {
+  display: flex;
+  align-items: center;
+  gap: var(--ma-space-1);
+  padding: var(--ma-space-2) var(--ma-space-4);
+  border-top: 1px solid var(--ma-hairline);
+  background: var(--ma-surface);
+}
+
+.mp-button,
+.mp-speed {
+  min-width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--ma-radius-sm);
+  background: transparent;
+  color: var(--ma-ink-2);
+  font: inherit;
+  cursor: pointer;
+}
+
+.mp-button:hover,
+.mp-speed:hover {
+  background: var(--ma-surface-sunken);
+}
+
+.mp-primary {
+  background: var(--ma-accent);
+  color: var(--ma-canvas);
+  border-radius: 50%;
+}
+
+.mp-primary:hover {
+  background: var(--ma-accent);
+}
+
+.mp-button[aria-pressed='true'] {
+  background: var(--ma-accent-muted);
+  color: var(--ma-ink-1);
+}
+
+.mp-button:focus-visible,
+.mp-speed:focus-visible,
+.mp-scrubber:focus-visible,
+.mp-view:focus-visible {
+  outline: 1px solid var(--ma-focus);
+  outline-offset: 2px;
+}
+
+.mp-scrubber {
+  position: relative;
+  flex: 1;
+  height: 32px;
+  margin: 0 var(--ma-space-3);
+  cursor: pointer;
+  touch-action: none;
+}
+
+.mp-track {
+  position: absolute;
+  top: 15px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--ma-hairline);
+}
+
+.mp-played {
+  height: 100%;
+  background: var(--ma-ink-2);
+}
+
+.mp-chapter {
+  position: absolute;
+  top: -7px;
+  width: 2px;
+  height: 16px;
+  background: var(--ma-brass);
+  transform: translateX(-1px);
+}
+
+.mp-thumb {
+  position: absolute;
+  top: 11px;
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--ma-ink-1);
+  border-radius: 50%;
+  background: var(--ma-surface);
+  transform: translateX(-50%);
+}
+
+.mp-counter {
+  min-width: 64px;
+  color: var(--ma-ink-2);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}

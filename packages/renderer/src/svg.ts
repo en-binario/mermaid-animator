@@ -31,7 +31,7 @@ function textLines(parent: Element, lines: string[], x: number, y: number, cls: 
 const round = (n: number) => Math.round(n * 100) / 100;
 
 /** Arrowhead geometry drawn at the origin pointing along +x. */
-function arrowHead(kind: ArrowKind): { d: string; filled: boolean; atStart: boolean; bothEnds: boolean } {
+export function arrowHead(kind: ArrowKind): { d: string; filled: boolean; atStart: boolean; bothEnds: boolean } {
   switch (kind) {
     case 'solidArrow':
       return { d: 'M0 0 L-8.5 -3 L-8.5 3 Z', filled: true, atStart: false, bothEnds: false };

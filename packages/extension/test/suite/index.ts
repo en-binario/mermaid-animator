@@ -4,7 +4,7 @@ import path from 'node:path';
 
 /** Entry point called by @vscode/test-electron inside the VS Code instance. */
 export function run(): Promise<void> {
-  const mocha = new Mocha({ ui: 'bdd', color: true, timeout: 30_000 });
+  const mocha = new Mocha({ ui: 'bdd', color: true, timeout: 30_000, ...(process.env.MOCHA_GREP ? { grep: process.env.MOCHA_GREP } : {}) });
   for (const file of readdirSync(__dirname)) {
     if (file.endsWith('.test.js')) mocha.addFile(path.join(__dirname, file));
   }

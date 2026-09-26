@@ -9,6 +9,7 @@ import { chapterIndexAt } from './narrative';
 import { CaptionStrip, ChoiceChips } from './Captions';
 import { Inspector, type InspectorSection } from './Inspector';
 import { SearchBox } from './SearchBox';
+import { ExportSheet, type SheetActions } from './ExportSheet';
 import { Transcript } from './Transcript';
 import { BlankScreen, ChapterCard, Hairline, LaserPointer, TitleCard } from './Presentation';
 
@@ -20,6 +21,7 @@ interface AppProps {
   mountCanvas: (el: HTMLElement) => void;
   onSelectDiagram: (index: number) => void;
   onExport: (action: ExportAction) => void;
+  sheetActions: SheetActions;
   onTogglePresentation: () => void;
   onToggleInspector: () => void;
   reducedMotion: boolean;
@@ -30,6 +32,10 @@ interface AppProps {
 export interface UiState {
   shortcuts: boolean;
   exportMenu: boolean;
+  /** Format preselected when the sheet was opened by a format command (`export.gif`, …). */
+  exportFormat?: string;
+  /** Export right away with the sheet's initial choices (`{ "start": true }` on a format command). */
+  exportStart?: boolean;
   goTo: boolean;
   speedMenu: boolean;
   toast?: string;
@@ -355,7 +361,7 @@ function ExportMenu({ t, onExport, close }: { t: T; onExport: (a: ExportAction) 
   );
 }
 
-export function App({ state, controller, mountCanvas, onSelectDiagram, onExport, onTogglePresentation, onToggleInspector, reducedMotion, ui }: AppProps) {
+export function App({ state, controller, mountCanvas, onSelectDiagram, onExport, sheetActions, onTogglePresentation, onToggleInspector, reducedMotion, ui }: AppProps) {
   const t = (key: string, ...args: (string | number)[]) => format({ ...WEBVIEW_STRINGS, ...state.strings }, key, ...args);
   const doc = state.document;
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -399,7 +405,7 @@ export function App({ state, controller, mountCanvas, onSelectDiagram, onExport,
         <span class="ma-toolbar__rule" aria-hidden="true" />
         <div class="ma-anchor">
           <IconButton icon="export" label={t('toolbar.export')} onClick={() => ui.set({ exportMenu: !ui.exportMenu })} disabled={!controller} />
-          {ui.exportMenu && <ExportMenu t={t} onExport={onExport} close={() => ui.set({ exportMenu: false })} />}
+          {ui.exportMenu && !controller && <ExportMenu t={t} onExport={onExport} close={() => ui.set({ exportMenu: false })} />}
         </div>
         <IconButton icon="keyboard" label={t('toolbar.shortcuts')} onClick={() => ui.set({ shortcuts: true })} />
       </header>
@@ -452,6 +458,9 @@ export function App({ state, controller, mountCanvas, onSelectDiagram, onExport,
           )}
         </main>
         {ui.transcript && controller && native && <Transcript controller={controller} t={t} />}
+        {ui.exportMenu && controller && (
+          <ExportSheet controller={controller} t={t} format={ui.exportFormat} start={ui.exportStart} close={() => ui.set({ exportMenu: false, exportFormat: undefined, exportStart: undefined })} actions={sheetActions} svgAdaptive={controller.effective.value.exportDefaults.svgAdaptiveTheme} />
+        )}
         {inspectorOpen && controller && (
           <Inspector controller={controller} t={t} collapsed={ui.sections} onToggleSection={toggleSection} overlay={!ui.wide} onClose={onToggleInspector} />
         )}

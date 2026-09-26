@@ -15,9 +15,10 @@ export function InlineText({ text }: { text: string }) {
 /** The caption strip below the canvas (spec narrative); hidden when no step has a caption. */
 export function CaptionStrip({ controller, presenting }: { controller: DiagramController; presenting: boolean }) {
   const steps = controller.stepList.value;
-  if (!controller.effective.value.showCaptions || !steps.some((s) => s.caption || s.lanes?.some((l) => l.caption))) return null;
-  const step = steps[controller.snapshot.value.displayStep - 1];
-  const caption = step?.caption ?? '';
+  // Generic diagrams take captions from the sidecar only, by step number.
+  const captions: (string | undefined)[] = steps.length ? steps.map((s) => s.caption) : controller.genericCaptions.value;
+  if (!controller.effective.value.showCaptions || !(captions.some(Boolean) || steps.some((s) => s.lanes?.some((l) => l.caption)))) return null;
+  const caption = captions[controller.snapshot.value.displayStep - 1] ?? '';
   return (
     <div class={`ma-caption${presenting ? ' ma-caption--presenting' : ''}`} aria-hidden="true">
       {/* Keyed by text so a change cross-fades; the live region announces captions separately. */}

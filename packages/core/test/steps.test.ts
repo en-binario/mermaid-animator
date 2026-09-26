@@ -228,3 +228,20 @@ describe('resolvePosition', () => {
     expect(resolvePosition(before, -1, before)).toBe(-1);
   });
 });
+
+describe('sidecar step keys', () => {
+  it('resolves #n, step ids and structural ids, and applies captions below annotations', async () => {
+    const { compileDiagram, resolveStepKey } = await import('../src');
+    const src = 'sequenceDiagram\nA->>B: one\n%% @step-id sign-in\nB->>A: two\n%% @caption "From the annotation"\nA->>B: three';
+    const steps = compileDiagram(src).sequence!.compiled.steps;
+    expect(resolveStepKey(steps, '#3')).toBe(2);
+    expect(resolveStepKey(steps, '#9')).toBeUndefined();
+    expect(resolveStepKey(steps, 'sign-in')).toBe(1);
+    expect(resolveStepKey(steps, steps[0]!.structuralId)).toBe(0);
+    expect(resolveStepKey(steps, 'missing')).toBeUndefined();
+    const withSidecar = compileDiagram(src, { stepCaptions: { 0: 'From the sidecar', 2: 'Ignored' }, stepChapters: { 1: 'Session' } }).sequence!.compiled.steps;
+    expect(withSidecar[0]!.caption).toBe('From the sidecar');
+    expect(withSidecar[2]!.caption).toBe('From the annotation');
+    expect(withSidecar[1]!.chapter).toBe('Session');
+  });
+});
