@@ -557,11 +557,11 @@ While a fragment's contents play, its frame border transitions to **brass** at 1
 
 Activated with `P` or *Mermaid Animator: Start Presentation*.
 
-- Executes `workbench.action.maximizeEditorHideSidebar` (a state VS Code restores deterministically) and restores the previous layout on exit (`Esc`). Zen Mode is **opt-in** (`presentation.zenMode`, default `false`): `workbench.action.toggleZenMode` is a blind toggle and the API exposes no Zen-Mode state, so if the user leaves Zen Mode by other means, toggling again on exit would re-enter it. When opted in, the extension only toggles back through a command whose keybinding-style `when` clause requires the `inZenMode` context key.
+- The webview asks the host to change the layout (`presentation/toggle`); the host executes `workbench.action.maximizeEditorHideSidebar` and confirms with `presentation/state`, so both sides agree however the presentation ends. On exit (`Esc`, *Stop Presentation*, closing the panel, or another panel starting to present) the host runs `workbench.action.toggleMaximizeEditorGroup` only if it maximised the group itself. Zen Mode is **opt-in** (`presentation.zenMode`, default `false`): `workbench.action.toggleZenMode` is a blind toggle and the API exposes no Zen-Mode state, so on exit the extension uses `workbench.action.exitZenMode`, which acts only while the `inZenMode` context key is true — a Zen Mode the user already left is never re-entered. Layout commands missing from the running VS Code degrade to a webview-only presentation.
 - Canvas uses **Cinematic** camera; the inspector and minimap hide; toolbar and transport auto-hide after 2 s of pointer inactivity.
 - Captions render in the serif caption face at 22–28 px (responsive), centred, max 68 characters per line.
 - **Title card** at start: the diagram title set in the serif display size, with a subtitle (`6 participants · 4 chapters · 24 steps`), fading after 1.6 s or on first key press. Chapter title cards appear at each chapter boundary (`presentation.chapterCards`, default on).
-- **Presenter clickers** are supported: `PageDown`/`PageUp`, `→`/`←`, `Space`, `B`/`.` (blank screen toggle).
+- **Presenter clickers** are supported: `PageDown`/`PageUp`, `→`/`←`, `Space` (advances while presenting), `B`/`.` (blank screen toggle).
 - A thin 2 px progress hairline runs along the bottom edge.
 - **Laser pointer** (`Z` held): the cursor becomes a soft brass dot with a short trail.
 
@@ -626,7 +626,7 @@ Keyboard shortcuts below apply when the animator panel has focus. `?` displays t
 | `[` / `]` | Slower / faster | `C` | Toggle camera follow |
 | `L` | Loop | `F` | Frame current step |
 | `I` / `O` | Set A–B loop in / out (`Shift`: clear) | `0` | Fit diagram |
-| `+` / `-` | Zoom in / out | `/` | Search |
+| `+` / `-` | Zoom in / out | `/` or `Ctrl`/`Cmd`+`F` | Search |
 | `Esc` | Clear focus / exit presentation / close overlay | `?` | Shortcut overlay |
 | `PageDown` / `PageUp` | Next / previous (clicker) | `B` / `.` | Blank screen (presentation) |
 | `E` | Export… | `Z` (hold) | Laser pointer (presentation) |
@@ -1779,9 +1779,11 @@ All command IDs are prefixed `mermaidAnimator.`; titles are prefixed with the ca
 | `nextStep` · `previousStep` · `firstStep` · `lastStep` | Next / Previous / First / Last Step | `mermaidAnimator.panelActive` |
 | `nextChapter` · `previousChapter` | Next / Previous Chapter | `mermaidAnimator.panelActive` |
 | `goToStep` | Go to Step… | `mermaidAnimator.panelActive` |
-| `setView.sequence` · `setView.topology` · `setView.split` · `setView.trace` · `setView.transcript` | Show Sequence / Topology / Split / Trace / Transcript View | `mermaidAnimator.panelActive` |
+| `setView.sequence` · `setView.topology` · `setView.split` · `setView.trace` | Show Sequence / Topology / Split / Trace View | `mermaidAnimator.panelActive` |
+| `showTranscript` | Show Transcript View (toggles, like `R`) | `mermaidAnimator.panelActive` |
+| `toggleInspector` · `search` | Toggle Inspector · Search Diagram | `mermaidAnimator.panelActive` |
 | `toggleView` | Toggle Sequence / Topology | `mermaidAnimator.panelActive` |
-| `presentation.start` · `presentation.stop` | Start / Stop Presentation | `mermaidAnimator.panelActive` |
+| `startPresentation` · `stopPresentation` | Start / Stop Presentation | `mermaidAnimator.panelActive && !mermaidAnimator.presenting` · `mermaidAnimator.presenting` |
 | `export` | Export… | `mermaidAnimator.panelActive \|\| mermaidAnimator.editorHasDiagram` |
 | `export.gif` · `export.video` · `export.animatedSvg` · `export.html` · `export.svg` · `export.png` · `copyImage` | Export as … / Copy Image | same |
 | `copyStepLink` | Copy Link to Current Step | `mermaidAnimator.panelActive` |

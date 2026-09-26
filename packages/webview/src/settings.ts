@@ -18,6 +18,13 @@ export interface AnimatorSettings {
   display: DisplayOptions;
   respectReducedMotion: boolean;
   camera: CameraMode;
+  loopIterations: number;
+  compressRepeats: boolean;
+  altBranches: 'first' | 'all' | 'ask';
+  parallel: 'concurrent' | 'sequential';
+  showCaptions: boolean;
+  showInspector: boolean;
+  chapterCards: boolean;
 }
 
 export const DEFAULT_SETTINGS: AnimatorSettings = {
@@ -34,6 +41,13 @@ export const DEFAULT_SETTINGS: AnimatorSettings = {
   display: { futureSteps: 'hidden', pastSteps: 'full', trailLength: 3, motion: 'formal', indicator: 'pulse' },
   respectReducedMotion: true,
   camera: 'auto',
+  loopIterations: 1,
+  compressRepeats: true,
+  altBranches: 'first',
+  parallel: 'concurrent',
+  showCaptions: true,
+  showInspector: true,
+  chapterCards: true,
 };
 
 const pick = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T => (typeof value === 'string' && (allowed as readonly string[]).includes(value) ? (value as T) : fallback);
@@ -70,6 +84,13 @@ export function resolveSettings(host: WebviewSettings, annotations: Record<strin
       indicator: pick(get('indicator', 'motion.travelIndicator'), ['pulse', 'comet', 'none'], d.display.indicator),
     },
     respectReducedMotion: bool(host['motion.respectReducedMotion'], d.respectReducedMotion),
-    camera: pick(get('camera', 'camera.mode'), ['auto', 'fit', 'follow', 'manual'], d.camera),
+    camera: pick(get('camera', 'camera.mode'), ['auto', 'fit', 'follow', 'cinematic', 'manual'], d.camera),
+    loopIterations: Math.round(num(get('iterations', 'playback.loopIterations'), d.loopIterations, 1, 50)),
+    compressRepeats: bool(host['playback.compressRepeats'], d.compressRepeats),
+    altBranches: pick(get('branches', 'playback.altBranches'), ['first', 'all', 'ask'], d.altBranches),
+    parallel: pick(get('parallel', 'playback.parallel'), ['concurrent', 'sequential'], d.parallel),
+    showCaptions: bool(host['display.showCaptions'], d.showCaptions),
+    showInspector: bool(host['display.showInspector'], d.showInspector),
+    chapterCards: bool(host['presentation.chapterCards'], d.chapterCards),
   };
 }

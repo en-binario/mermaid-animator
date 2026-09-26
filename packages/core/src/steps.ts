@@ -11,6 +11,8 @@ export type StepKind = 'message' | 'note' | 'activation' | 'create' | 'destroy';
 
 export interface FragmentFrame {
   fragmentId: string;
+  /** Stable key (kind, label, occurrence) used for branch choices (spec step-compilation). */
+  key: string;
   kind: Fragment['kind'];
   label: string;
   branch: number;
@@ -48,13 +50,56 @@ export interface Step {
   timing: { transitionMs: number; dwellMs: number; hold: boolean; latencyMs?: number };
   source: SourceRange;
   sources: SourceRange[];
+  /** Concurrent `par` lanes merged into this step. */
+  lanes?: StepLane[];
+  /** Participants to frame for this step (`@focus`). */
+  focus?: string[];
+  /** Set on the first step of an `alt`/`critical` whose branch must be chosen (`altBranches = ask`). */
+  choice?: { fragmentKey: string; labels: string[] };
 }
+
+export interface StepLane {
+  lane: number;
+  label: string;
+  /** Message and note ids of this lane in the step. */
+  targets: string[];
+  source: SourceRange;
+  caption?: string;
+}
+
+export type BranchChoice = number | 'all' | 'skip';
 
 export interface CompileOptions {
   notes?: 'step' | 'attach' | 'hidden';
   dwell?: 'adaptive' | 'fixed';
   dwellMs?: number;
+  /** Default loop repetitions (`playback.loopIterations`). */
+  loopIterations?: number;
+  /** Play repetitions after the first at double speed (`playback.compressRepeats`). */
+  compressRepeats?: boolean;
+  /** Default branch policy for `alt` / `critical` (`playback.altBranches`). */
+  altBranches?: 'first' | 'all' | 'ask';
+  /** `par` lanes together or one after another (`playback.parallel`). */
+  parallel?: 'concurrent' | 'sequential';
+  /** Choices made in the inspector, keyed by fragment key (0-based branch index). */
+  branchChoices?: Record<string, BranchChoice>;
 }
+
+/** A fragment as seen by the inspector's branch chooser. */
+export interface FragmentInfo {
+  key: string;
+  id: string;
+  kind: Fragment['kind'];
+  label: string;
+  branches: string[];
+  /** Effective selection for alt/critical/opt (0-based branch, `all` or `skip`). */
+  selected?: BranchChoice;
+  iterations?: number;
+  /** Branch choice pending (`ask`, nothing chosen yet). */
+  pending?: boolean;
+}
+
+export const MAX_LOOP_ITERATIONS = 50;
 
 export interface CompiledSequence {
   steps: Step[];
@@ -65,6 +110,8 @@ export interface CompiledSequence {
   hiddenNotes: boolean;
   /** Participant kinds after `@type` overrides. */
   participantKinds: Record<string, ParticipantKind>;
+  /** Every fragment in document order with its key and branch selection. */
+  fragments: FragmentInfo[];
   diagnostics: Diagnostic[];
 }
 
@@ -104,9 +151,73 @@ interface Draft {
   anchors: SourceRange[];
   structuralSig: string;
   label: string;
+  /** Later loop repetitions play at double speed. */
+  compressed?: boolean;
+  lanes?: StepLane[];
+  choice?: { fragmentKey: string; labels: string[] };
 }
 
-const pathSig = (path: FragmentFrame[]) => path.map((f) => `${f.kind}:${f.branch}`).join('/');
+const pathSig = (path: FragmentFrame[]) => path.map((f) => `${f.kind}:${f.branch}${f.iteration ? `@${f.iteration}` : ''}`).join('/');
+
+/** Stable keys for every fragment: `kind|label#occurrence` in document order. */
+export function fragmentKeys(model: SequenceModel): Map<string, string> {
+  const keys = new Map<string, string>();
+  const seen = new Map<string, number>();
+  const visit = (nodes: SequenceNode[]) => {
+    for (const n of nodes) {
+      if (n.type !== 'fragment') continue;
+      const base = `${n.fragment.kind}|${normalise(n.fragment.label)}`;
+      const occ = seen.get(base) ?? 0;
+      seen.set(base, occ + 1);
+      keys.set(n.fragment.id, `${base}#${occ}`);
+      for (const b of n.fragment.branches) visit(b.children);
+    }
+  };
+  visit(model.body);
+  return keys;
+}
+
+export interface AnnotationTarget {
+  annotation: Annotation;
+  kind: 'statement' | 'fragment' | 'declaration';
+  /** Message, note, fragment or participant id. */
+  id: string;
+  range: SourceRange;
+}
+
+/**
+ * Resolves what each statement-, fragment- and declaration-scoped annotation applies to: the next
+ * message/note, fragment or participant declaration after it (spec §11.3). Unresolved annotations
+ * are returned in `dangling`.
+ */
+export function annotationTargets(model: SequenceModel, annotations: Annotation[]): { targets: AnnotationTarget[]; dangling: Annotation[] } {
+  const statements: { range: SourceRange; id: string }[] = [];
+  const fragments: { range: SourceRange; id: string }[] = [];
+  const collect = (nodes: SequenceNode[]) => {
+    for (const n of nodes) {
+      if (n.type === 'message') statements.push({ range: n.message.range, id: n.message.id });
+      else if (n.type === 'note') statements.push({ range: n.note.range, id: n.note.id });
+      else if (n.type === 'fragment') {
+        fragments.push({ range: n.fragment.range, id: n.fragment.id });
+        for (const b of n.fragment.branches) collect(b.children);
+      }
+    }
+  };
+  collect(model.body);
+  statements.sort((a, b) => a.range.startLine - b.range.startLine);
+  fragments.sort((a, b) => a.range.startLine - b.range.startLine);
+  const declarations = [...model.participants].sort((x, y) => x.range.startLine - y.range.startLine);
+  const targets: AnnotationTarget[] = [];
+  const dangling: Annotation[] = [];
+  for (const a of annotations) {
+    const pool = a.scope === 'statement' ? statements : a.scope === 'fragment' ? fragments : a.scope === 'declaration' ? declarations.map((p) => ({ range: p.range, id: p.id })) : undefined;
+    if (!pool) continue;
+    const target = pool.find((s) => s.range.startLine > a.line);
+    if (!target) dangling.push(a);
+    else targets.push({ annotation: a, kind: a.scope as AnnotationTarget['kind'], id: target.id, range: target.range });
+  }
+  return { targets, dangling };
+}
 
 export function compileSequence(model: SequenceModel, annotations: Annotation[] = [], options: CompileOptions = {}): CompiledSequence {
   const notesMode = options.notes ?? 'step';
@@ -117,45 +228,24 @@ export function compileSequence(model: SequenceModel, annotations: Annotation[] 
   const participantKinds: Record<string, ParticipantKind> = Object.fromEntries(model.participants.map((p) => [p.id, p.kind]));
   const column = new Map(model.participants.map((p, i) => [p.id, i]));
 
-  // Statement-scoped annotations, keyed by the statement they attach to.
-  const statementAnchors: { range: SourceRange; key: string }[] = [];
-  const fragmentAnchors: { range: SourceRange; key: string }[] = [];
-  const collectAnchors = (nodes: SequenceNode[]) => {
-    for (const n of nodes) {
-      if (n.type === 'message') statementAnchors.push({ range: n.message.range, key: n.message.id });
-      else if (n.type === 'note') statementAnchors.push({ range: n.note.range, key: n.note.id });
-      else if (n.type === 'fragment') {
-        fragmentAnchors.push({ range: n.fragment.range, key: n.fragment.id });
-        for (const b of n.fragment.branches) collectAnchors(b.children);
-      }
-    }
-  };
-  collectAnchors(model.body);
-  statementAnchors.sort((a, b) => a.range.startLine - b.range.startLine);
-  fragmentAnchors.sort((a, b) => a.range.startLine - b.range.startLine);
-
+  // Statement-, fragment- and declaration-scoped annotations, keyed by their targets.
+  const { targets, dangling } = annotationTargets(model, annotations);
   const byStatement = new Map<string, Annotation[]>();
-  for (const a of annotations) {
-    if (a.scope === 'statement') {
-      const target = statementAnchors.find((s) => s.range.startLine > a.line);
-      if (!target) {
-        diagnostics.push({ message: `'@${a.name}' is not followed by a message or note.`, severity: 'warning', range: a.range, code: 'annotation/no-target' });
-        continue;
-      }
-      byStatement.set(target.key, [...(byStatement.get(target.key) ?? []), a]);
-    } else if (a.scope === 'fragment') {
-      if (!fragmentAnchors.some((f) => f.range.startLine > a.line)) {
-        diagnostics.push({ message: `'@${a.name}' is not followed by a fragment.`, severity: 'warning', range: a.range, code: 'annotation/no-target' });
-      }
-    } else if (a.scope === 'declaration') {
-      const target = model.participants.filter((p) => p.range.startLine > a.line).sort((x, y) => x.range.startLine - y.range.startLine)[0];
-      if (!target) {
-        diagnostics.push({ message: `'@${a.name}' is not followed by a participant declaration.`, severity: 'warning', range: a.range, code: 'annotation/no-target' });
-        continue;
-      }
-      participantKinds[target.id] = valueText(a.args[0]!.value) as ParticipantKind;
-    }
+  const byFragment = new Map<string, Annotation[]>();
+  for (const t of targets) {
+    if (t.kind === 'statement') byStatement.set(t.id, [...(byStatement.get(t.id) ?? []), t.annotation]);
+    else if (t.kind === 'fragment') byFragment.set(t.id, [...(byFragment.get(t.id) ?? []), t.annotation]);
+    else participantKinds[t.id] = valueText(t.annotation.args[0]!.value) as ParticipantKind;
   }
+  for (const a of dangling) {
+    const what = a.scope === 'statement' ? 'a message or note' : a.scope === 'fragment' ? 'a fragment' : 'a participant declaration';
+    diagnostics.push({ message: `'@${a.name}' is not followed by ${what}.`, severity: 'warning', range: a.range, code: 'annotation/no-target' });
+  }
+  const keys = fragmentKeys(model);
+  const fragmentInfo: FragmentInfo[] = [];
+  const loopDefault = Math.max(1, Math.floor(options.loopIterations ?? 1));
+  const altPolicy = options.altBranches ?? 'first';
+  const concurrent = (options.parallel ?? 'sequential') === 'concurrent';
   const has = (key: string, name: string) => (byStatement.get(key) ?? []).find((a) => a.name === name);
 
   const markUnplayed = (nodes: SequenceNode[]) => {
@@ -166,7 +256,7 @@ export function compileSequence(model: SequenceModel, annotations: Annotation[] 
     }
   };
 
-  const walk = (nodes: SequenceNode[], path: FragmentFrame[]) => {
+  const walk = (nodes: SequenceNode[], path: FragmentFrame[], out: Draft[], compressed: boolean) => {
     /** The last message step in this block, while only activation/create/destroy statements follow it. */
     let previous: Draft | undefined;
     /** Effects waiting for the next message in this block. */
@@ -180,7 +270,7 @@ export function compileSequence(model: SequenceModel, annotations: Annotation[] 
       return undefined;
     };
     const standalone = (kind: StepKind, sig: string, source: SourceRange, fill: Partial<Draft>) => {
-      drafts.push({ kind, messages: [], noteIds: [], noteTexts: [], activations: [], creates: [], destroys: [], path, sources: [source], anchors: [source], structuralSig: sig, label: '', ...fill });
+      out.push({ kind, messages: [], noteIds: [], noteTexts: [], activations: [], creates: [], destroys: [], path, sources: [source], anchors: [source], structuralSig: sig, label: '', compressed, ...fill });
     };
     const flushPending = () => {
       // Pending effects with no following message become their own steps.
@@ -220,9 +310,10 @@ export function compileSequence(model: SequenceModel, annotations: Annotation[] 
             anchors: [m.range],
             structuralSig: `message|${m.from}|${m.to}|${pathSig(path)}`,
             label: m.label,
+            compressed,
           };
           pending = { activations: [], creates: [], destroys: [], sources: [] };
-          drafts.push(draft);
+          out.push(draft);
           previous = draft;
           return;
         }
@@ -276,7 +367,7 @@ export function compileSequence(model: SequenceModel, annotations: Annotation[] 
             initial.notes.push(n.id);
             return;
           }
-          const last = drafts[drafts.length - 1];
+          const last = out[out.length - 1];
           if (notesMode === 'attach' && last) {
             last.noteIds.push(n.id);
             last.noteTexts.push(n.text);
@@ -284,34 +375,117 @@ export function compileSequence(model: SequenceModel, annotations: Annotation[] 
             last.anchors.push(n.range);
             return;
           }
-          drafts.push({
+          out.push({
             kind: 'note', messages: [], noteIds: [n.id], noteTexts: [n.text], activations: [], creates: [], destroys: [], path,
-            sources: [n.range], anchors: [n.range], structuralSig: `note|${n.participants.join(',')}|${pathSig(path)}`, label: n.text,
+            sources: [n.range], anchors: [n.range], structuralSig: `note|${n.participants.join(',')}|${pathSig(path)}`, label: n.text, compressed,
           });
           return;
         }
         case 'fragment': {
           flushPending();
           previous = undefined;
-          const f = node.fragment;
-          // M1 semantics (spec §23.2): alt/critical play their first branch; loop plays once; par lanes play in sequence.
-          const playAll = f.kind === 'par' || f.kind === 'loop' || f.kind === 'opt' || f.kind === 'break' || f.kind === 'rect';
-          f.branches.forEach((branch, b) => {
-            if (!playAll && b > 0) {
-              markUnplayed(branch.children);
-              return;
-            }
-            const frame: FragmentFrame = { fragmentId: f.id, kind: f.kind, label: f.label, branch: b, branchLabel: branch.label };
-            if (f.kind === 'loop') Object.assign(frame, { iteration: 1, of: 1 });
-            walk(branch.children, [...path, frame]);
-          });
+          walkFragment(node.fragment, path, out, compressed);
           return;
         }
       }
     });
     flushPending();
   };
-  walk(model.body, []);
+
+  /** Branch selection for alt/critical/opt: inspector choice → `@branch` → setting (spec step-compilation). */
+  const selection = (f: Fragment, key: string): { selected: BranchChoice; pending: boolean } => {
+    const chosen = options.branchChoices?.[key];
+    if (chosen !== undefined) return { selected: chosen, pending: false };
+    const annotation = (byFragment.get(f.id) ?? []).find((a) => a.name === 'branch');
+    if (annotation) {
+      const v = annotation.args[0]!.value;
+      if (v.kind === 'number') return { selected: Math.min(f.branches.length, Math.max(1, v.value)) - 1, pending: false };
+      const text = valueText(v);
+      if (text === 'all' || text === 'skip') return { selected: text, pending: false };
+      if (text === 'ask') return { selected: 0, pending: f.kind !== 'opt' };
+      const byLabel = f.branches.findIndex((b) => normalise(b.label) === normalise(text));
+      if (byLabel >= 0) return { selected: byLabel, pending: false };
+      diagnostics.push({ message: `No branch labelled '${text}' in '${f.kind} ${f.label}'.`, severity: 'warning', range: annotation.range, code: 'annotation/unknown-branch' });
+    }
+    if (f.kind === 'opt') return { selected: 0, pending: false };
+    if (altPolicy === 'all') return { selected: 'all', pending: false };
+    return { selected: 0, pending: altPolicy === 'ask' };
+  };
+
+  const walkFragment = (f: Fragment, path: FragmentFrame[], out: Draft[], compressed: boolean) => {
+    const key = keys.get(f.id) ?? f.id;
+    const frame = (b: number, extra: Partial<FragmentFrame> = {}): FragmentFrame => ({ fragmentId: f.id, key, kind: f.kind, label: f.label, branch: b, branchLabel: f.branches[b]?.label ?? '', ...extra });
+    const info: FragmentInfo = { key, id: f.id, kind: f.kind, label: f.label, branches: f.branches.map((b) => b.label) };
+    fragmentInfo.push(info);
+
+    if (f.kind === 'loop') {
+      const annotation = (byFragment.get(f.id) ?? []).find((a) => a.name === 'iterations');
+      let n = annotation ? Math.floor(asNumber(annotation.args[0]?.value) ?? loopDefault) : loopDefault;
+      if (n > MAX_LOOP_ITERATIONS) {
+        diagnostics.push({ message: `Loops play at most ${MAX_LOOP_ITERATIONS} times; '${f.label}' is capped.`, severity: 'warning', range: annotation?.range ?? f.range, code: 'annotation/iterations-capped' });
+        n = MAX_LOOP_ITERATIONS;
+      }
+      info.iterations = n;
+      for (let i = 1; i <= n; i++) walk(f.branches[0]?.children ?? [], [...path, frame(0, { iteration: i, of: n })], out, compressed || (i > 1 && options.compressRepeats !== false));
+      return;
+    }
+
+    if (f.kind === 'par' && concurrent && f.branches.length > 1) {
+      const lanes = f.branches.map((branch, b) => {
+        const laneOut: Draft[] = [];
+        walk(branch.children, [...path, frame(b)], laneOut, compressed);
+        return laneOut;
+      });
+      const longest = Math.max(0, ...lanes.map((l) => l.length));
+      for (let k = 0; k < longest; k++) {
+        const parts = lanes.map((l, lane) => ({ lane, draft: l[k] })).filter((p): p is { lane: number; draft: Draft } => !!p.draft);
+        if (parts.length === 1) {
+          out.push(parts[0]!.draft);
+          continue;
+        }
+        const first = parts[0]!.draft;
+        out.push({
+          kind: parts.some((p) => p.draft.kind === 'message') ? 'message' : first.kind,
+          messages: parts.flatMap((p) => p.draft.messages),
+          noteIds: parts.flatMap((p) => p.draft.noteIds),
+          noteTexts: parts.flatMap((p) => p.draft.noteTexts),
+          activations: parts.flatMap((p) => p.draft.activations),
+          creates: parts.flatMap((p) => p.draft.creates),
+          destroys: parts.flatMap((p) => p.draft.destroys),
+          path: [...path, frame(parts[0]!.lane)],
+          sources: parts.flatMap((p) => p.draft.sources),
+          anchors: parts.flatMap((p) => p.draft.anchors),
+          structuralSig: parts.map((p) => p.draft.structuralSig).join('&'),
+          label: parts.map((p) => p.draft.label).filter(Boolean).join(' ‖ '),
+          compressed,
+          lanes: parts.map((p) => ({ lane: p.lane, label: f.branches[p.lane]?.label ?? '', targets: [...p.draft.messages.map((m) => m.id), ...p.draft.noteIds], source: p.draft.sources[0]! })),
+        });
+      }
+      return;
+    }
+
+    if (f.kind === 'alt' || f.kind === 'critical' || f.kind === 'opt') {
+      const { selected, pending } = selection(f, key);
+      info.selected = selected;
+      info.pending = pending || undefined;
+      f.branches.forEach((branch, b) => {
+        const plays = selected === 'all' || (selected !== 'skip' && selected === b);
+        if (!plays) {
+          markUnplayed(branch.children);
+          return;
+        }
+        const before = out.length;
+        walk(branch.children, [...path, frame(b)], out, compressed);
+        if (pending && out.length > before) out[before]!.choice = { fragmentKey: key, labels: f.branches.map((x) => x.label) };
+      });
+      return;
+    }
+
+    // par (sequential), break, rect: every branch plays in order.
+    f.branches.forEach((branch, b) => walk(branch.children, [...path, frame(b)], out, compressed));
+  };
+
+  walk(model.body, [], drafts, false);
 
   // Apply statement annotations and @with-next merges.
   const annotated = drafts.map((d) => {
@@ -378,6 +552,16 @@ export function compileSequence(model: SequenceModel, annotations: Annotation[] 
       transitionMs /= speed;
       dwellMs /= speed;
     }
+    if (draft.compressed) {
+      transitionMs /= 2;
+      dwellMs /= 2;
+    }
+    const focusArg = find('focus')?.args[0]?.value;
+    const focus = focusArg ? (focusArg.kind === 'list' ? focusArg.items.map(valueText) : [valueText(focusArg)]) : undefined;
+    const lanes = draft.lanes?.map((lane) => {
+      const laneCaption = list.filter((a) => a.name === 'caption' && lane.targets.some((t) => (byStatement.get(t) ?? []).includes(a))).map((a) => a.args.map((x) => valueText(x.value)).join(' ')).join(' ');
+      return laneCaption ? { ...lane, caption: laneCaption } : lane;
+    });
     const latency = asDuration(find('latency')?.args[0]?.value);
 
     return {
@@ -400,10 +584,17 @@ export function compileSequence(model: SequenceModel, annotations: Annotation[] 
       timing: { transitionMs, dwellMs, hold, latencyMs: latency },
       source: draft.sources[0] as SourceRange,
       sources: draft.sources,
+      lanes,
+      focus,
+      choice: draft.choice,
     };
   });
+  // A pending branch choice stops autoplay at the rest point of the step before it.
+  steps.forEach((step, i) => {
+    if (step.choice && i > 0) steps[i - 1]!.timing.hold = true;
+  });
 
-  return { steps, initial, unplayed, hiddenNotes: notesMode === 'hidden', participantKinds, diagnostics };
+  return { steps, initial, unplayed, hiddenNotes: notesMode === 'hidden', participantKinds, fragments: fragmentInfo, diagnostics };
 }
 
 /** Participants as seen after compilation (kinds overridden by `@type`). */

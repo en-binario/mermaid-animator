@@ -1,0 +1,38 @@
+sequenceDiagram
+    %% @id checkout-story
+    %% @title "Checkout — the full story"
+    %% @animator branches=ask
+    actor U as Customer
+    participant W as Web App
+    participant P as Payments
+    participant L@{ "type": "database" } as Ledger
+    participant N as Notifier
+
+    %% @chapter "Place order"
+    %% @caption "The customer **confirms** the basket."
+    U->>+W: Confirm order
+    %% @caption "The web app asks *Payments* to authorise the card."
+    %% @focus W, P
+    W->>+P: Authorise card
+    %% @iterations 2
+    loop Retry on contention
+        P->>L: Write entry
+        L-->>P: Ack
+    end
+    alt Card accepted
+        %% @caption "Authorised — the ledger holds the entry."
+        P-->>W: Authorised
+    else Card declined
+        P-->>W: Declined
+    end
+    deactivate P
+
+    %% @chapter "Confirm"
+    par Receipt
+        W->>N: Send receipt
+    and Response
+        W-->>U: Order confirmed
+    end
+    deactivate W
+    %% @caption "The key `idem-42` guards against double charges."
+    Note over W,P: Idempotency key stored for 24h

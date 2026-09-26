@@ -161,6 +161,48 @@
         "command": "mermaidAnimator.revealSource",
         "title": "%command.revealSource%",
         "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.startPresentation",
+        "title": "%command.startPresentation%",
+        "category": "Mermaid Animator",
+        "icon": "$(play-circle)"
+      },
+      {
+        "command": "mermaidAnimator.stopPresentation",
+        "title": "%command.stopPresentation%",
+        "category": "Mermaid Animator",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "mermaidAnimator.nextChapter",
+        "title": "%command.nextChapter%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.previousChapter",
+        "title": "%command.previousChapter%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.showTranscript",
+        "title": "%command.showTranscript%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.toggleInspector",
+        "title": "%command.toggleInspector%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.search",
+        "title": "%command.search%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.insertAnnotation",
+        "title": "%command.insertAnnotation%",
+        "category": "Mermaid Animator"
       }
     ],
     "menus": {
@@ -244,6 +286,38 @@
         {
           "command": "mermaidAnimator.revealSource",
           "when": "mermaidAnimator.panelActive"
+        },
+        {
+          "command": "mermaidAnimator.startPresentation",
+          "when": "mermaidAnimator.panelActive && !mermaidAnimator.presenting"
+        },
+        {
+          "command": "mermaidAnimator.stopPresentation",
+          "when": "mermaidAnimator.presenting"
+        },
+        {
+          "command": "mermaidAnimator.nextChapter",
+          "when": "mermaidAnimator.panelActive"
+        },
+        {
+          "command": "mermaidAnimator.previousChapter",
+          "when": "mermaidAnimator.panelActive"
+        },
+        {
+          "command": "mermaidAnimator.showTranscript",
+          "when": "mermaidAnimator.panelActive"
+        },
+        {
+          "command": "mermaidAnimator.toggleInspector",
+          "when": "mermaidAnimator.panelActive"
+        },
+        {
+          "command": "mermaidAnimator.search",
+          "when": "mermaidAnimator.panelActive"
+        },
+        {
+          "command": "mermaidAnimator.insertAnnotation",
+          "when": "mermaidAnimator.cursorInDiagram"
         }
       ],
       "editor/title": [
@@ -516,14 +590,81 @@
             "auto",
             "fit",
             "follow",
+            "cinematic",
             "manual"
           ],
           "enumDescriptions": [
             "%config.camera.mode.auto%",
             "%config.camera.mode.fit%",
             "%config.camera.mode.follow%",
+            "%config.camera.mode.cinematic%",
             "%config.camera.mode.manual%"
           ]
+        },
+        "mermaidAnimator.playback.loopIterations": {
+          "type": "integer",
+          "default": 1,
+          "minimum": 1,
+          "maximum": 50,
+          "markdownDescription": "%config.playback.loopIterations%"
+        },
+        "mermaidAnimator.playback.compressRepeats": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%config.playback.compressRepeats%"
+        },
+        "mermaidAnimator.playback.altBranches": {
+          "type": "string",
+          "default": "first",
+          "enum": [
+            "first",
+            "all",
+            "ask"
+          ],
+          "markdownDescription": "%config.playback.altBranches%",
+          "enumDescriptions": [
+            "%config.playback.altBranches.first%",
+            "%config.playback.altBranches.all%",
+            "%config.playback.altBranches.ask%"
+          ]
+        },
+        "mermaidAnimator.playback.parallel": {
+          "type": "string",
+          "default": "concurrent",
+          "enum": [
+            "concurrent",
+            "sequential"
+          ],
+          "markdownDescription": "%config.playback.parallel%",
+          "enumDescriptions": [
+            "%config.playback.parallel.concurrent%",
+            "%config.playback.parallel.sequential%"
+          ]
+        },
+        "mermaidAnimator.display.showCaptions": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%config.display.showCaptions%"
+        },
+        "mermaidAnimator.display.showInspector": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%config.display.showInspector%"
+        },
+        "mermaidAnimator.presentation.chapterCards": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%config.presentation.chapterCards%"
+        },
+        "mermaidAnimator.presentation.zenMode": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%config.presentation.zenMode%"
+        },
+        "mermaidAnimator.annotations.highlight": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%config.annotations.highlight%"
         }
       }
     },

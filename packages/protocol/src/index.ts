@@ -67,10 +67,12 @@ export interface SettingsChangedPayload {
 
 export type CommandAction =
   | 'togglePlay' | 'play' | 'pause' | 'next' | 'previous' | 'first' | 'last' | 'goToStep'
-  | 'export' | 'exportSvg' | 'exportPng' | 'copyImage' | 'revealSource' | 'fit';
+  | 'export' | 'exportSvg' | 'exportPng' | 'copyImage' | 'revealSource' | 'fit'
+  | 'seekToLine' | 'nextChapter' | 'previousChapter' | 'toggleTranscript' | 'toggleInspector' | 'search' | 'startPresentation' | 'stopPresentation';
 
 export const COMMAND_ACTIONS: readonly CommandAction[] = [
   'togglePlay', 'play', 'pause', 'next', 'previous', 'first', 'last', 'goToStep', 'export', 'exportSvg', 'exportPng', 'copyImage', 'revealSource', 'fit',
+  'seekToLine', 'nextChapter', 'previousChapter', 'toggleTranscript', 'toggleInspector', 'search', 'startPresentation', 'stopPresentation',
 ];
 
 export type ExportFormat = 'svg' | 'png';
@@ -82,7 +84,9 @@ export type HostMessage =
   | { v: 1; type: 'settings/changed'; payload: SettingsChangedPayload }
   | { v: 1; type: 'command'; payload: { action: CommandAction; args?: Record<string, unknown> } }
   | { v: 1; type: 'editor/cursor'; payload: { line: number; character: number } }
-  | { v: 1; type: 'export/ack'; payload: { path: string } };
+  | { v: 1; type: 'export/ack'; payload: { path: string } }
+  /** The host's presentation layout is on or off (confirms `presentation/toggle`, or reports an exit by other means). */
+  | { v: 1; type: 'presentation/state'; payload: { on: boolean } };
 
 export interface StatePayload {
   uri?: string;
@@ -113,7 +117,9 @@ export type WebviewMessage =
   | { v: 1; type: 'diagram/select'; payload: { index: number } }
   | { v: 1; type: 'source/reveal'; payload: { range: DocumentRange } }
   | { v: 1; type: 'export/data'; payload: ExportDataPayload }
-  | { v: 1; type: 'clipboard/fallback'; payload: { reason: string } };
+  | { v: 1; type: 'clipboard/fallback'; payload: { reason: string } }
+  /** Asks the host to enter or leave the presentation layout (spec presentation-mode). */
+  | { v: 1; type: 'presentation/toggle'; payload: { on: boolean } };
 
 export type HostMessageType = HostMessage['type'];
 export type WebviewMessageType = WebviewMessage['type'];
@@ -172,6 +178,7 @@ const hostPayloads: Record<HostMessageType, Guard> = {
   command: shape({ action: oneOf(...COMMAND_ACTIONS), args: optional(record) }),
   'editor/cursor': shape({ line: num, character: num }),
   'export/ack': shape({ path: str }),
+  'presentation/state': shape({ on: bool }),
 };
 
 const webviewPayloads: Record<WebviewMessageType, Guard> = {
@@ -182,6 +189,7 @@ const webviewPayloads: Record<WebviewMessageType, Guard> = {
   'source/reveal': shape({ range }),
   'export/data': shape({ format: oneOf('svg', 'png'), suggestedName: str, data: bytes, index: num, total: num }),
   'clipboard/fallback': shape({ reason: str }),
+  'presentation/toggle': shape({ on: bool }),
 };
 
 function validate<T>(value: unknown, payloads: Record<string, Guard>): ValidationResult<T> {

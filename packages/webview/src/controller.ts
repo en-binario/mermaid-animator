@@ -5,12 +5,14 @@
 import { signal } from '@preact/signals';
 import {
   compileDiagram, layoutSequence, offsetRange, resolvePosition, stepEnd, unionRects,
-  type CompiledDiagram, type Diagnostic, type Rect, type SequenceLayout, type Step,
+  type BranchChoice, type CompiledDiagram, type Diagnostic, type FragmentInfo, type Rect, type SequenceLayout, type Step,
 } from '@mermaid-animator/core';
 import { webviewMessage, type DocumentRange, type WebviewSettings } from '@mermaid-animator/protocol';
 import { createCanvasMeasure, effectiveDisplay, prepareScene, sceneAt, SequenceSvgRenderer, SVG_NS, type SceneModel } from '@mermaid-animator/renderer';
 import { announcement } from './announce';
-import { autoFits, Camera, fitView, followView, type Viewport } from './camera';
+import { autoFits, Camera, cinematicView, fitView, focusTarget, followView, type Viewport } from './camera';
+import { chapterTarget, deriveChapters, focusSkipSet, stepInvolves, stepText, type Chapter } from './narrative';
+import { buildSearchIndex, type SearchEntry } from './search';
 import { Player, type PlayerSnapshot } from './player';
 import { resolveSettings, type AnimatorSettings } from './settings';
 import type { Host } from './host';
@@ -46,6 +48,23 @@ export class DiagramController {
   readonly stale = signal(false);
   readonly tooltip = signal<TooltipInfo | undefined>(undefined);
   readonly stepLabels = signal<string[]>([]);
+  /** Compiled steps of the native sequence (empty for the generic fallback). */
+  readonly stepList = signal<Step[]>([]);
+  readonly fragments = signal<FragmentInfo[]>([]);
+  readonly participants = signal<{ id: string; label: string }[]>([]);
+  readonly chapters = signal<Chapter[]>([]);
+  readonly title = signal('');
+  /** Focused participants (spec exploration). */
+  readonly focus = signal<ReadonlySet<string>>(new Set());
+  readonly focusedOnly = signal(false);
+  readonly skipped = signal<ReadonlySet<number>>(new Set());
+  readonly searchIndex = signal<SearchEntry[]>([]);
+  /** Steps holding search matches, for scrubber marks. */
+  readonly matchSteps = signal<number[]>([]);
+  /** Effective settings, for components (captions, inspector, chapter cards). */
+  readonly effective = signal<AnimatorSettings>(resolveSettings({ themeMode: 'auto' }));
+  /** A chapter card to show while presenting (spec presentation-mode). */
+  readonly chapterCard = signal<{ n: number; title: string } | undefined>(undefined);
 
   private readonly measure = createCanvasMeasure();
   private readonly camera: Camera;
@@ -62,7 +81,12 @@ export class DiagramController {
   private lastFrame = 0;
   private lastStep = -2;
   private lastAnnounced = -2;
-  private cameraMode: 'fit' | 'follow' | 'manual' = 'fit';
+  private cameraMode: 'fit' | 'follow' | 'cinematic' | 'manual' = 'fit';
+  /** Branch choices from the inspector and `ask` chips, kept for the panel's lifetime. */
+  private branchChoices: Record<string, BranchChoice> = {};
+  private presenting = false;
+  private matches = new Set<string>();
+  private cardTimer: ReturnType<typeof setTimeout> | undefined;
   private viewportSize: Viewport = { width: 800, height: 600 };
   private readonly resizeObserver: ResizeObserver;
 
@@ -80,13 +104,15 @@ export class DiagramController {
     container.appendChild(this.svg);
 
     this.player = new Player(EMPTY_TIMELINE, { speed: 1, loop: false, onEnd: 'stop', reverse: 'animate', snap: true });
+    // A pending `ask` branch choice waits at rest until a chip is chosen (spec step-compilation).
+    this.player.setGate((k) => this.pendingChoice(k) !== undefined);
     this.player.subscribe((s) => {
       this.snapshot.value = s;
       this.requestFrame();
     });
     this.camera = new Camera(this.svg, this.viewport, {
       onUserMove: () => {
-        if (this.cameraMode === 'follow') this.followSuspended.value = true;
+        if (this.cameraMode === 'follow' || this.cameraMode === 'cinematic') this.followSuspended.value = true;
       },
       onChange: () => undefined,
     });
@@ -95,6 +121,7 @@ export class DiagramController {
       const rect = container.getBoundingClientRect();
       this.viewportSize = { width: rect.width, height: rect.height };
       if (this.cameraMode === 'fit') this.fit(false);
+      else if (this.cameraMode === 'cinematic' && !this.followSuspended.value) this.cinematicStep(this.snapshot.value.displayStep - 1, false, performance.now());
     });
     this.resizeObserver.observe(container);
     const rect = container.getBoundingClientRect();
@@ -109,6 +136,13 @@ export class DiagramController {
     this.svg.addEventListener('pointermove', (event) => this.hover(event));
     this.svg.addEventListener('dblclick', (event) => {
       if (event.altKey) this.revealElement(event.target);
+    });
+    // Participant focus: click a header; Ctrl/Cmd+click adds; click empty canvas clears.
+    this.svg.addEventListener('click', (event) => {
+      if (event.altKey) return;
+      const ref = SequenceSvgRenderer.elementAt(event.target);
+      if (ref?.kind === 'participant') this.toggleFocus(ref.id, event.ctrlKey || event.metaKey);
+      else if (!ref) this.clearFocus();
     });
   }
 
@@ -174,7 +208,17 @@ export class DiagramController {
     const previousIndex = this.snapshot.value.displayStep - 1;
     const compiled = compileDiagram(source, {});
     this.settings = resolveSettings(this.hostSettings, compiled.settings);
-    const recompiled = compileDiagram(source, { notes: this.settings.notes, dwell: this.settings.dwell, dwellMs: this.settings.dwellMs });
+    this.effective.value = this.settings;
+    const recompiled = compileDiagram(source, {
+      notes: this.settings.notes,
+      dwell: this.settings.dwell,
+      dwellMs: this.settings.dwellMs,
+      loopIterations: this.settings.loopIterations,
+      compressRepeats: this.settings.compressRepeats,
+      altBranches: this.settings.altBranches,
+      parallel: this.settings.parallel,
+      branchChoices: this.branchChoices,
+    });
     this.player.setOptions({ speed: this.settings.speed, loop: this.settings.onEnd === 'loop', onEnd: this.settings.onEnd, reverse: this.settings.reverse, snap: this.settings.snap });
 
     const firstError = recompiled.diagnostics.find((d) => d.severity === 'error');
@@ -195,6 +239,8 @@ export class DiagramController {
         const restIndex = resolvePosition(previousSteps, previousIndex, steps.steps, this.cursorLine);
         this.player.setTimeline(timeline, restIndex);
       }
+      this.refreshFocus();
+      this.applyMatches();
       return true;
     }
 
@@ -219,6 +265,12 @@ export class DiagramController {
     this.notice.value = recompiled.type === 'sequence' ? this.t('banner.fallbackNative') : this.t('banner.fallback');
     this.svg.setAttribute('aria-label', recompiled.title ?? recompiled.type);
     this.stepLabels.value = this.generic.labels;
+    this.stepList.value = [];
+    this.fragments.value = [];
+    this.participants.value = [];
+    this.chapters.value = [];
+    this.searchIndex.value = [];
+    this.title.value = recompiled.title ?? '';
     if (preserve) this.player.setTimeline(this.generic.timeline, Math.min(previousIndex, this.generic.stepCount - 1));
     return true;
   }
@@ -234,7 +286,23 @@ export class DiagramController {
     const title = seq.model.accTitle ?? compiled.title ?? this.t('aria.sequence');
     const label = this.t('aria.diagram', title, seq.model.participants.length, seq.compiled.steps.length);
     this.svg.setAttribute('aria-label', seq.model.accDescr ? `${label} ${seq.model.accDescr}` : label);
-    this.stepLabels.value = seq.compiled.steps.map((s) => (s.kind === 'message' ? `${s.from} → ${s.to}: ${s.label}` : s.label).replace(/\n/g, ' '));
+    this.stepLabels.value = seq.compiled.steps.map((s) => stepText(s, this.t));
+    this.stepList.value = seq.compiled.steps;
+    this.fragments.value = seq.compiled.fragments;
+    this.participants.value = seq.model.participants.map((p) => ({ id: p.id, label: p.label.replace(/\n/g, ' ') }));
+    this.chapters.value = deriveChapters(seq.compiled.steps);
+    this.title.value = title;
+    const messages: { id: string; label: string; from: string; to: string }[] = [];
+    const notes: { id: string; text: string }[] = [];
+    const visit = (nodes: typeof seq.model.body) => {
+      for (const n of nodes) {
+        if (n.type === 'message') messages.push({ id: n.message.id, label: n.message.label, from: n.message.from, to: n.message.to });
+        else if (n.type === 'note') notes.push({ id: n.note.id, text: n.note.text });
+        else if (n.type === 'fragment') n.fragment.branches.forEach((b) => visit(b.children));
+      }
+    };
+    visit(seq.model.body);
+    this.searchIndex.value = buildSearchIndex({ participants: this.participants.value, messages, notes, steps: seq.compiled.steps });
   }
 
   // -- frame loop ----------------------------------------------------------------------------------------------
@@ -261,7 +329,7 @@ export class DiagramController {
     const time = this.player.time;
     if (this.sequence) {
       const display = effectiveDisplay(this.settings.display, this.reducedMotion && this.settings.respectReducedMotion);
-      const scene = sceneAt(this.sequence.scene, time, display);
+      const scene = sceneAt(this.sequence.scene, time, display, { focus: this.focus.value });
       this.sequence.renderer.render(scene, { comet: display.indicator === 'comet' });
     } else this.generic?.renderAt(time, this.reducedMotion);
     const step = this.snapshot.value.displayStep - 1;
@@ -283,7 +351,26 @@ export class DiagramController {
       const participants = this.sequence?.compiled.sequence?.model.participants ?? [];
       this.live.value = this.sequence ? announcement(current, step, count, participants, this.t) : this.t('announce.step', step + 1, count);
     }
+    if (this.presenting && forward && step >= 0 && current?.chapter && this.settings.chapterCards) this.showChapterCard(step, current.chapter);
     if (this.cameraMode === 'follow' && !this.followSuspended.value && step >= 0 && forward) this.followStep(step, now);
+    else if (this.cameraMode === 'cinematic' && !this.followSuspended.value) this.cinematicStep(step, forward, now);
+  }
+
+  private showChapterCard(step: number, title: string): void {
+    const n = this.chapters.value.findIndex((c) => c.firstStep === step) + 1;
+    this.chapterCard.value = { n: n || 1, title };
+    // Freeze the playhead while the card is up, then draw the chapter's first step.
+    this.player.hold('card', true);
+    if (this.cardTimer) clearTimeout(this.cardTimer);
+    this.cardTimer = setTimeout(() => this.dismissChapterCard(), 1600);
+  }
+
+  dismissChapterCard(): void {
+    if (this.cardTimer) clearTimeout(this.cardTimer);
+    this.cardTimer = undefined;
+    if (this.chapterCard.value) this.chapterCard.value = undefined;
+    this.player.hold('card', false);
+    this.requestFrame();
   }
 
   // -- camera ---------------------------------------------------------------------------------------------------
@@ -302,7 +389,13 @@ export class DiagramController {
     const mode = this.settings.camera;
     const content = this.contentBounds();
     this.cameraMode = mode === 'auto' ? (autoFits(content, this.viewportSize) ? 'fit' : 'follow') : mode;
-    this.following.value = this.cameraMode === 'follow';
+    this.following.value = this.cameraMode === 'follow' || this.cameraMode === 'cinematic';
+    if (this.cameraMode === 'cinematic') {
+      const step = this.snapshot.value.displayStep - 1;
+      if (step >= 0) this.cinematicStep(step, false, performance.now());
+      else if (initial) this.fit(false);
+      return;
+    }
     if (this.cameraMode === 'fit' || (initial && this.cameraMode === 'manual')) this.fit(false);
     else if (initial) {
       // Follow: start at the top, as wide as fits (never enlarged).
@@ -338,7 +431,48 @@ export class DiagramController {
     this.requestFrame();
   }
 
+  /** Cinematic mode: frames the step (or its `@focus` participants) tightly, before it draws when moving forward. */
+  private cinematicStep(step: number, forward: boolean, now: number): void {
+    if (step < 0) {
+      this.fit(!this.reducedMotion);
+      return;
+    }
+    const bounds = this.stepBounds(step);
+    if (!bounds) return;
+    const participants = this.sequence?.layout.participants ?? [];
+    const target = focusTarget(bounds, participants, this.steps()[step]?.focus);
+    const next = cinematicView(target, this.viewportSize, this.camera.view);
+    const view = this.camera.view;
+    if (Math.abs(next.x - view.x) < 0.5 && Math.abs(next.y - view.y) < 0.5 && Math.abs(next.k - view.k) < 0.001) return;
+    const animate = !this.reducedMotion;
+    this.camera.moveTo(next, { animate, viewport: this.viewportSize, now, speed: this.snapshot.value.speed });
+    if (animate && forward) this.player.hold('camera', true);
+    this.requestFrame();
+  }
+
+  /** Presentation mode uses Cinematic framing and restores the configured camera afterwards. */
+  setPresenting(on: boolean): void {
+    if (on === this.presenting) return;
+    this.presenting = on;
+    this.followSuspended.value = false;
+    if (on) {
+      this.cameraMode = 'cinematic';
+      this.following.value = true;
+      this.cinematicStep(this.snapshot.value.displayStep - 1, false, performance.now());
+    } else {
+      this.dismissChapterCard();
+      this.applyCameraMode(false);
+      if (this.cameraMode === 'fit') this.fit();
+    }
+    this.requestFrame();
+  }
+
   toggleFollow(): void {
+    if (this.cameraMode === 'cinematic') {
+      this.followSuspended.value = !this.followSuspended.value;
+      if (!this.followSuspended.value) this.cinematicStep(this.snapshot.value.displayStep - 1, false, performance.now());
+      return;
+    }
     if (this.cameraMode !== 'follow') {
       this.cameraMode = 'follow';
       this.following.value = true;
@@ -426,6 +560,103 @@ export class DiagramController {
     if (info?.range) this.host.post(webviewMessage('source/reveal', { range: info.range }));
   }
 
+  // -- narrative & exploration ------------------------------------------------------------------------------------
+
+  /** The pending `ask` choice that must be made before step `k` plays, if any. */
+  pendingChoice(k: number): { fragmentKey: string; labels: string[] } | undefined {
+    const choice = this.steps()[k]?.choice;
+    return choice && this.branchChoices[choice.fragmentKey] === undefined ? choice : undefined;
+  }
+
+  /** Chooses a branch (inspector or `ask` chip): recompiles keeping the playhead on the current step. */
+  async choose(fragmentKey: string, choice: BranchChoice, resume = false): Promise<void> {
+    this.branchChoices = { ...this.branchChoices, [fragmentKey]: choice };
+    await this.build(this.source, { preserve: true });
+    this.requestFrame();
+    if (resume) this.player.play();
+  }
+
+  /** Seeks to the next or previous chapter's first step (`Shift+→` / `Shift+←`). */
+  chapter(direction: 1 | -1): void {
+    const target = chapterTarget(this.chapters.value, this.player.restingIndex(), direction);
+    if (target !== undefined) this.player.goTo(target + 1);
+  }
+
+  toggleFocus(id: string, additive: boolean): void {
+    const current = this.focus.value;
+    let next: Set<string>;
+    if (additive) {
+      next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+    } else next = current.size === 1 && current.has(id) ? new Set() : new Set([id]);
+    this.focus.value = next;
+    this.refreshFocus();
+  }
+
+  clearFocus(): void {
+    if (!this.focus.value.size) return;
+    this.focus.value = new Set();
+    this.refreshFocus();
+  }
+
+  setFocusedOnly(on: boolean): void {
+    this.focusedOnly.value = on;
+    this.refreshFocus();
+  }
+
+  /** Recomputes the focused-playback skip set after focus, option or step-list changes. */
+  private refreshFocus(): void {
+    const seq = this.sequence?.compiled.sequence;
+    const known = new Set(seq?.model.participants.map((p) => p.id) ?? []);
+    const focus = new Set([...this.focus.value].filter((id) => known.has(id)));
+    if (focus.size !== this.focus.value.size) this.focus.value = focus;
+    let skip = new Set<number>();
+    if (seq && this.sequence && this.focusedOnly.value && focus.size) {
+      const layout = this.sequence.layout;
+      const ends = new Map(layout.messages.map((m) => [m.id, [m.from, m.to] as const]));
+      const notes = new Map(layout.notes.map((n) => [n.id, n.participants]));
+      skip = focusSkipSet(seq.compiled.steps, focus, (step) => stepInvolves(step, ends, notes));
+      // Never skip everything.
+      if (skip.size === seq.compiled.steps.length) skip = new Set();
+    }
+    this.skipped.value = skip;
+    this.player.setSkip(skip);
+    this.requestFrame();
+  }
+
+  /** Highlights search matches on the canvas (`data-match`) and the scrubber. */
+  setMatches(entries: readonly SearchEntry[]): void {
+    this.matches = new Set(entries.flatMap((e) => (e.elementId ? [e.elementId] : [])));
+    this.matchSteps.value = [...new Set(entries.flatMap((e) => (e.step === undefined ? [] : [e.step])))];
+    this.applyMatches();
+  }
+
+  private applyMatches(): void {
+    for (const el of this.viewport.querySelectorAll('[data-kind][data-id]')) {
+      if (this.matches.has(el.getAttribute('data-id') ?? '')) el.setAttribute('data-match', 'true');
+      else el.removeAttribute('data-match');
+    }
+  }
+
+  /** Seeks to the step containing a document line (spec source-sync); lines outside every step are ignored. */
+  seekToLine(documentLine: number): void {
+    const line = documentLine - this.origin.line;
+    this.cursorLine = line;
+    const steps = this.steps();
+    const contains = (s: Step) => s.sources.some((r) => r.startLine <= line && line <= r.endLine);
+    const rest = this.player.restingIndex();
+    const resting = steps[rest];
+    if (resting && contains(resting)) return;
+    const hit = steps.find(contains);
+    if (hit) this.player.goTo(hit.index + 1);
+  }
+
+  /** 1-based document line for a line of the diagram source. */
+  documentLine(line: number): number {
+    return line + this.origin.line + 1;
+  }
+
   /** Reveals the current step's statement in the editor. */
   revealCurrent(): void {
     const step = this.steps()[this.snapshot.value.displayStep - 1];
@@ -466,6 +697,7 @@ export class DiagramController {
   }
 
   destroy(): void {
+    if (this.cardTimer) clearTimeout(this.cardTimer);
     this.resizeObserver.disconnect();
     if (this.frame) cancelAnimationFrame(this.frame);
     this.generic?.destroy();

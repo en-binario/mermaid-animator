@@ -10,7 +10,13 @@
     settings[key.slice(2)] = value === 'true' ? true : value === 'false' ? false : Number.isFinite(Number(value)) && value.trim() !== '' ? Number(value) : value;
   }
   window.harnessSettings = Object.assign({}, window.harnessSettings || {}, settings);
+  // Webview state survives reloads like VS Code's getState/setState (session storage per tab).
   let persisted;
+  try {
+    persisted = JSON.parse(sessionStorage.getItem('harness-state') || 'null') || undefined;
+  } catch {
+    persisted = undefined;
+  }
   const byId = (id) => document.getElementById(id);
 
   // English comes from the webview's built-in catalogue; Spanish from the real l10n bundle.
@@ -59,7 +65,14 @@
         if (window.harnessOnMessage) window.harnessOnMessage(message);
       },
       getState: () => persisted,
-      setState: (state) => (persisted = state),
+      setState: (state) => {
+        persisted = state;
+        try {
+          sessionStorage.setItem('harness-state', JSON.stringify(state));
+        } catch {
+          /* storage unavailable */
+        }
+      },
     };
   };
 

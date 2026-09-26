@@ -4,12 +4,16 @@ import { AnimatorPanel, PANEL_VIEW_TYPE, PanelManager, type PanelState } from '.
 import { basename, diagramLabel, diagramNear, diagramsIn } from './diagrams';
 import { DiagramCodeLensProvider, DiagramDiagnostics, forwardCursor, StepDecorations, updateContextKeys } from './editorIntegration';
 import { config } from './environment';
+import { PresentationLayout } from './presentation';
+import { AnnotationCodeActionProvider, AnnotationCompletionProvider, AnnotationHighlighter, AnnotationHoverProvider, insertAnnotation } from './annotationEditing';
 
 /** Test hook: exposed from `activate` so integration tests can inspect panels. */
 export interface MermaidAnimatorApi {
   readonly panels: PanelManager;
   readonly decorations: StepDecorations;
   readonly diagnostics: DiagramDiagnostics;
+  readonly presentation: PresentationLayout;
+  readonly highlighter: AnnotationHighlighter;
   /** The restore path used by the panel serializer after a window reload. */
   restore(panel: vscode.WebviewPanel, state: unknown): Promise<void>;
   /** Test hook: replaces the export save dialog (undefined restores it). */
@@ -29,6 +33,13 @@ const PLAYBACK_COMMANDS: [string, CommandAction][] = [
   ['mermaidAnimator.export.svg', 'exportSvg'],
   ['mermaidAnimator.export.png', 'exportPng'],
   ['mermaidAnimator.copyImage', 'copyImage'],
+  ['mermaidAnimator.nextChapter', 'nextChapter'],
+  ['mermaidAnimator.previousChapter', 'previousChapter'],
+  ['mermaidAnimator.showTranscript', 'toggleTranscript'],
+  ['mermaidAnimator.toggleInspector', 'toggleInspector'],
+  ['mermaidAnimator.search', 'search'],
+  ['mermaidAnimator.startPresentation', 'startPresentation'],
+  ['mermaidAnimator.stopPresentation', 'stopPresentation'],
 ];
 
 export function activate(context: vscode.ExtensionContext): MermaidAnimatorApi {
@@ -37,15 +48,28 @@ export function activate(context: vscode.ExtensionContext): MermaidAnimatorApi {
   const codeLens = new DiagramCodeLensProvider();
   // eslint-disable-next-line prefer-const
   let diagnostics: DiagramDiagnostics;
+  const presentation = new PresentationLayout();
+  const setPresenting = () => void vscode.commands.executeCommand('setContext', 'mermaidAnimator.presenting', presentation.presenting);
   const panels = new PanelManager(context.extensionUri, output, {
     onStep: (panel, ranges) => decorations.set(panel.uri, ranges),
     onDiagram: (panel) => diagnostics?.refresh(panel.uri),
     onDispose: (panel) => {
+      // A presenting panel that closes restores the editor layout.
+      void presentation.exit(panel).then(setPresenting);
       if (!panels.find(panel.uri)) decorations.clear(panel.uri);
       diagnostics?.refresh(panel.uri);
       void vscode.commands.executeCommand('setContext', 'mermaidAnimator.panelActive', !!panels.active());
     },
     onActive: () => void vscode.commands.executeCommand('setContext', 'mermaidAnimator.panelActive', !!panels.active()),
+    onPresentation: async (panel, on) => {
+      if (on) {
+        // Only one panel presents at a time: tell the previous one it has ended.
+        for (const other of panels.all()) if (other !== panel && other.presenting) other.endPresentation();
+        panel.reveal();
+        await presentation.enter(panel);
+      } else await presentation.exit(panel);
+      setPresenting();
+    },
   });
   diagnostics = new DiagramDiagnostics(panels);
 
@@ -127,6 +151,9 @@ export function activate(context: vscode.ExtensionContext): MermaidAnimatorApi {
     { language: 'mdx' },
     { pattern: '**/*.mdx' },
   ];
+  /** Every document that can hold a diagram: Markdown/MDX fences and Mermaid files. */
+  const mermaidSelector: vscode.DocumentSelector = [...(markdownSelector as vscode.DocumentFilter[]), { language: 'mermaid' }, { pattern: '**/*.{mmd,mermaid}' }];
+  const highlighter = new AnnotationHighlighter();
 
   context.subscriptions.push(
     output,
@@ -148,6 +175,15 @@ export function activate(context: vscode.ExtensionContext): MermaidAnimatorApi {
     vscode.commands.registerCommand('mermaidAnimator.exportDiagram', async (uri: vscode.Uri, index: number) => exportQuickPick(openDiagram(uri, index, true))),
     ...PLAYBACK_COMMANDS.map(([id, action]) => vscode.commands.registerCommand(id, route(action))),
     vscode.languages.registerCodeLensProvider(markdownSelector, codeLens),
+    highlighter,
+    vscode.languages.registerCompletionItemProvider(mermaidSelector, new AnnotationCompletionProvider(), '@', '=', ' ', ','),
+    vscode.languages.registerHoverProvider(mermaidSelector, new AnnotationHoverProvider()),
+    vscode.languages.registerCodeActionsProvider(mermaidSelector, new AnnotationCodeActionProvider(), { providedCodeActionKinds: AnnotationCodeActionProvider.kinds }),
+    vscode.commands.registerCommand('mermaidAnimator.insertAnnotation', insertAnnotation),
+    vscode.window.onDidChangeVisibleTextEditors(() => highlighter.refresh()),
+    vscode.workspace.onDidChangeTextDocument((event) => {
+      if (vscode.window.visibleTextEditors.some((e) => e.document === event.document)) highlighter.refresh();
+    }),
     vscode.window.registerWebviewPanelSerializer(PANEL_VIEW_TYPE, { deserializeWebviewPanel: restore }),
     vscode.window.onDidChangeActiveTextEditor((editor) => updateContextKeys(editor)),
     vscode.window.onDidChangeTextEditorSelection((event) => {
@@ -159,14 +195,18 @@ export function activate(context: vscode.ExtensionContext): MermaidAnimatorApi {
       if (event.document === vscode.window.activeTextEditor?.document) updateContextKeys(vscode.window.activeTextEditor);
     }),
     vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration('mermaidAnimator.annotations.highlight')) highlighter.refresh();
       if (event.affectsConfiguration('mermaidAnimator.codeLens.enabled') || event.affectsConfiguration('mermaidAnimator.files.languages')) codeLens.refresh();
       if (event.affectsConfiguration('mermaidAnimator.sync.stepToEditor')) for (const p of panels.all()) decorations.set(p.uri, config('sync.stepToEditor', true) ? p.lastRanges : []);
     }),
   );
   updateContextKeys(vscode.window.activeTextEditor);
+  highlighter.refresh();
 
   return {
     panels,
+    presentation,
+    highlighter,
     decorations,
     diagnostics,
     restore,

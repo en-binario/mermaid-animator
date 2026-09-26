@@ -26,6 +26,8 @@ export interface PlayerSnapshot {
   scrubbing: boolean;
   /** An animation toward a step is in progress (stepping, not autoplay). */
   animating: boolean;
+  /** A–B loop range as rest indices (-1 = initial state), when set. */
+  range?: { from?: number; to?: number };
 }
 
 type Listener = (snapshot: PlayerSnapshot) => void;
@@ -43,6 +45,11 @@ export class Player {
   private reverseFloor = 0;
   private readonly listeners = new Set<Listener>();
   private pausedBy = new Set<string>();
+  /** A–B range bounds as rest indices. */
+  private range: { from?: number; to?: number } = {};
+  /** Steps skipped by focused playback (spec exploration). */
+  private skip: ReadonlySet<number> | undefined;
+  private gate: ((index: number) => boolean) | undefined;
 
   constructor(
     private timeline: Timeline,
@@ -62,8 +69,13 @@ export class Player {
   }
 
   /** True while time must keep advancing (autoplay or a stepping animation). */
+  /** Reasons that freeze the playhead mid-step, not just autoplay (camera moves, presentation cards). */
+  private frozen(): boolean {
+    return this.pausedBy.has('camera') || this.pausedBy.has('card');
+  }
+
   get isActive(): boolean {
-    if (this.pausedBy.has('camera')) return false;
+    if (this.frozen()) return false;
     return (this.playing && this.pausedBy.size === 0) || this.target !== undefined;
   }
 
@@ -83,6 +95,7 @@ export class Player {
       loop: this.options.loop,
       scrubbing: this.scrubbing,
       animating: this.target !== undefined,
+      range: this.range.from !== undefined || this.range.to !== undefined ? { ...this.range } : undefined,
     };
   }
 
@@ -104,13 +117,59 @@ export class Player {
     this.emit();
   }
 
+  /** Sets the A–B loop start (`I`) or end (`O`) at the current rest point. */
+  markRange(bound: 'from' | 'to'): void {
+    this.range = { ...this.range, [bound]: this.restingIndex() };
+    if (this.range.from !== undefined && this.range.to !== undefined && this.range.from > this.range.to) this.range = { from: this.range.to, to: this.range.from };
+    this.emit();
+  }
+
+  clearRange(): void {
+    this.range = {};
+    this.emit();
+  }
+
+  /** Steps to skip in stepping and autoplay (focused playback); undefined plays every step. */
+  setSkip(skip: ReadonlySet<number> | undefined): void {
+    this.skip = skip && skip.size ? skip : undefined;
+    this.emit();
+  }
+
+  /** A gate blocks starting the given step (a pending `ask` branch choice); `play`/`next` wait at rest. */
+  setGate(gate: ((index: number) => boolean) | undefined): void {
+    this.gate = gate;
+  }
+
+  private gated(): boolean {
+    if (!this.gate || this.t !== this.restTime(this.restingIndex())) return false;
+    const k = this.nextPlayable(this.restingIndex() + 1);
+    if (k === undefined || !this.gate(k)) return false;
+    this.playing = false;
+    this.emit();
+    return true;
+  }
+
+  private skipped(index: number): boolean {
+    return !!this.skip?.has(index);
+  }
+
+  /** The next step at or after `from` that is not skipped (or undefined). */
+  private nextPlayable(from: number): number | undefined {
+    for (let k = from; k < this.timeline.starts.length; k++) if (!this.skipped(k)) return k;
+    return undefined;
+  }
+
+  private restTime(index: number): number {
+    return index < 0 ? 0 : stepEnd(this.timeline, index);
+  }
+
   setOptions(options: Partial<PlayerOptions>): void {
     this.options = { ...this.options, ...options };
     this.emit();
   }
 
   /** Index of the last step whose transition is complete (-1 = none). */
-  private restingIndex(): number {
+  restingIndex(): number {
     const pos = positionAt(this.timeline, this.t);
     if (pos.index < 0) return -1;
     return pos.phase === 'transition' ? pos.index - 1 : pos.index;
@@ -119,6 +178,7 @@ export class Player {
   play(): void {
     if (this.timeline.starts.length === 0) return;
     if (this.t >= this.timeline.duration) this.t = 0;
+    if (this.gated()) return;
     this.target = undefined;
     this.playing = true;
     this.emit();
@@ -149,7 +209,12 @@ export class Player {
       return;
     }
     this.playing = false;
-    const k = rest + 1;
+    if (this.gated()) return;
+    const k = this.nextPlayable(rest + 1);
+    if (k === undefined) {
+      this.seek(this.timeline.duration);
+      return;
+    }
     const start = this.timeline.starts[k] as number;
     if (this.t < start) this.t = start; // skip the remaining dwell
     this.target = stepEnd(this.timeline, k);
@@ -165,7 +230,9 @@ export class Player {
       this.seek(0);
       return;
     }
-    const targetT = rest === 0 ? 0 : stepEnd(this.timeline, rest - 1);
+    let previousIndex = rest - 1;
+    while (previousIndex >= 0 && this.skipped(previousIndex)) previousIndex--;
+    const targetT = this.restTime(previousIndex);
     if (this.options.reverse === 'cut') {
       this.target = undefined;
       this.t = targetT;
@@ -225,7 +292,7 @@ export class Player {
   /** Advances time by `realMs` of wall-clock time. Returns true if anything changed. */
   tick(realMs: number): boolean {
     // The camera hold (spec §8.6.2: the step must be in view before its arrow draws) also pauses stepping.
-    if (this.pausedBy.has('camera')) return false;
+    if (this.frozen()) return false;
     if (this.target !== undefined) {
       const rate = this.direction > 0 ? this.options.speed : 2 * this.options.speed;
       const next = this.t + this.direction * realMs * rate;
@@ -249,6 +316,17 @@ export class Player {
         this.emit();
         return true;
       }
+    }
+    // Focused playback: jump over skipped steps.
+    const landing = positionAt(this.timeline, next);
+    if (landing.index >= 0 && this.skipped(landing.index)) {
+      const k = this.nextPlayable(landing.index + 1);
+      next = k === undefined ? this.timeline.duration : (this.timeline.starts[k] as number) + 0.001;
+    }
+    // A–B loop: wrap from the end of the range back to its start.
+    if (this.range.to !== undefined) {
+      const b = this.restTime(this.range.to);
+      if (this.t < b && next >= b) next = this.restTime(this.range.from ?? -1);
     }
     if (next >= this.timeline.duration) {
       const mode = this.options.loop ? 'loop' : this.options.onEnd;

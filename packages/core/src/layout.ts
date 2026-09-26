@@ -53,6 +53,8 @@ export interface LaidMessage {
 
 export interface LaidNote {
   id: string;
+  /** Participants the note is attached to. */
+  participants: string[];
   lines: string[];
   rect: Rect;
 }
@@ -302,7 +304,7 @@ export function layoutSequence(model: SequenceModel, compiled: CompiledSequence,
             rw = Math.max(w, hi - lo + 40);
             rx = (lo + hi) / 2 - rw / 2;
           } else rx = a - w / 2;
-          notes.push({ id: n.note.id, lines, rect: { x: rx, y: y + 4, w: rw, h } });
+          notes.push({ id: n.note.id, participants: [...n.note.participants], lines, rect: { x: rx, y: y + 4, w: rw, h } });
           statementY.set(n.note.id, y + 4 + h / 2);
           y += h + L.noteRow + 8;
           break;

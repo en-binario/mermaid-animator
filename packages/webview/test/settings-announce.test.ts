@@ -20,6 +20,13 @@ describe('resolveSettings', () => {
     expect(s.camera).toBe('follow');
   });
 
+  it('resolves the M2a settings with annotation overrides', () => {
+    const d = compileDiagram('%% @animator branches=ask parallel=sequential camera=cinematic iterations=3\nsequenceDiagram\nA->>B: x');
+    const s = resolveSettings({ themeMode: 'auto', 'playback.altBranches': 'all', 'playback.compressRepeats': false, 'display.showCaptions': false }, d.settings);
+    expect(s).toMatchObject({ altBranches: 'ask', parallel: 'sequential', camera: 'cinematic', loopIterations: 3, compressRepeats: false, showCaptions: false, showInspector: true });
+    expect(resolveSettings({ themeMode: 'auto' }).parallel).toBe('concurrent');
+  });
+
   it('clamps speed to 0.25–4', () => {
     expect(resolveSettings({ themeMode: 'auto', 'playback.speed': 10 }).speed).toBe(4);
   });

@@ -5,6 +5,12 @@ import type { DiagramController } from './controller';
 import { SPEEDS } from './player';
 import type { HostState } from './state';
 import { format } from './state';
+import { chapterIndexAt } from './narrative';
+import { CaptionStrip, ChoiceChips } from './Captions';
+import { Inspector, type InspectorSection } from './Inspector';
+import { SearchBox } from './SearchBox';
+import { Transcript } from './Transcript';
+import { BlankScreen, ChapterCard, Hairline, LaserPointer, TitleCard } from './Presentation';
 
 export type ExportAction = { kind: 'svg' } | { kind: 'png'; scale: number; transparent: boolean } | { kind: 'copy' };
 
@@ -14,6 +20,9 @@ interface AppProps {
   mountCanvas: (el: HTMLElement) => void;
   onSelectDiagram: (index: number) => void;
   onExport: (action: ExportAction) => void;
+  onTogglePresentation: () => void;
+  onToggleInspector: () => void;
+  reducedMotion: boolean;
   ui: UiState;
 }
 
@@ -24,8 +33,26 @@ export interface UiState {
   goTo: boolean;
   speedMenu: boolean;
   toast?: string;
+  /** Panel is at least 880 px wide: the inspector sits beside the canvas. */
+  wide: boolean;
+  /** Inspector shown beside the canvas (wide panels; persisted). */
+  inspectorWide: boolean;
+  /** Inspector open as an overlay sheet (narrow panels). */
+  inspectorSheet: boolean;
+  /** Collapsed inspector sections (persisted). */
+  sections: InspectorSection[];
+  search: boolean;
+  transcript: boolean;
+  presenting: boolean;
+  titleCard: boolean;
+  blank: boolean;
+  laser: boolean;
+  /** Presentation chrome hidden after 2 s without pointer movement. */
+  idle: boolean;
   set(patch: Partial<Omit<UiState, 'set'>>): void;
 }
+
+type T = (k: string, ...a: (string | number)[]) => string;
 
 function IconButton(props: { icon: string; label: string; onClick?: () => void; primary?: boolean; pressed?: boolean; disabled?: boolean; id?: string }) {
   return (
@@ -44,7 +71,7 @@ function IconButton(props: { icon: string; label: string; onClick?: () => void; 
   );
 }
 
-function DiagramSwitcher({ diagrams, current, t, onSelect }: { diagrams: DiagramSummary[]; current: number; t: (k: string, ...a: (string | number)[]) => string; onSelect: (i: number) => void }) {
+function DiagramSwitcher({ diagrams, current, t, onSelect }: { diagrams: DiagramSummary[]; current: number; t: T; onSelect: (i: number) => void }) {
   if (diagrams.length < 2) return null;
   return (
     <label class="ma-switcher">
@@ -60,13 +87,14 @@ function DiagramSwitcher({ diagrams, current, t, onSelect }: { diagrams: Diagram
   );
 }
 
-function Scrubber({ controller, t }: { controller: DiagramController; t: (k: string, ...a: (string | number)[]) => string }) {
+function Scrubber({ controller, t }: { controller: DiagramController; t: T }) {
   const snap = controller.snapshot.value;
   const ref = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<{ x: number; label: string } | undefined>();
   const timeline = controller.playback.currentTimeline;
   const total = timeline.duration || 1;
   const fraction = Math.min(1, snap.t / total);
+  const chapters = controller.chapters.value;
   const timeAt = (clientX: number) => {
     const rect = ref.current?.getBoundingClientRect();
     if (!rect) return 0;
@@ -77,7 +105,10 @@ function Scrubber({ controller, t }: { controller: DiagramController; t: (k: str
     let index = -1;
     for (let i = 0; i < starts.length; i++) if ((starts[i] as number) < time) index = i;
     const labels = controller.stepLabels.value;
-    return index < 0 ? '—' : t('transport.stepLabel', index + 1, labels[index] ?? '');
+    if (index < 0) return '—';
+    const step = t('transport.stepLabel', index + 1, labels[index] ?? '');
+    const chapter = chapters[chapterIndexAt(chapters, index)];
+    return chapter ? `${chapter.title} · ${step}` : step;
   };
   const onPointerDown = (e: PointerEvent) => {
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -94,7 +125,8 @@ function Scrubber({ controller, t }: { controller: DiagramController; t: (k: str
     if (controller.snapshot.value.scrubbing) controller.playback.endScrub();
   };
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') controller.playback.next();
+    if (e.shiftKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) controller.chapter(e.key === 'ArrowRight' ? 1 : -1);
+    else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') controller.playback.next();
     else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') controller.playback.previous();
     else if (e.key === 'Home') controller.playback.first();
     else if (e.key === 'End') controller.playback.last();
@@ -102,7 +134,11 @@ function Scrubber({ controller, t }: { controller: DiagramController; t: (k: str
     e.preventDefault();
     e.stopPropagation();
   };
+  const pct = (time: number) => `${(time / total) * 100}%`;
+  const rest = (index: number) => (index < 0 ? 0 : stepEnd(timeline, index));
   const ticks = timeline.starts.map((_, i) => stepEnd(timeline, i) / total);
+  const range = snap.range;
+  const skipped = [...controller.skipped.value].filter((k) => k < timeline.starts.length);
   return (
     <div
       class="ma-scrubber"
@@ -121,9 +157,24 @@ function Scrubber({ controller, t }: { controller: DiagramController; t: (k: str
       onKeyDown={onKey}
     >
       <div class="ma-scrubber__track">
+        {skipped.map((k) => (
+          <span key={`s${k}`} class="ma-scrubber__skipped" style={{ left: pct(timeline.starts[k] as number), width: pct(stepEnd(timeline, k) - (timeline.starts[k] as number)) }} />
+        ))}
+        {range && (range.from !== undefined || range.to !== undefined) && (
+          <span
+            class="ma-scrubber__range"
+            style={{ left: pct(rest(range.from ?? -1)), width: pct(rest(range.to ?? timeline.starts.length - 1) - rest(range.from ?? -1)) }}
+          />
+        )}
         <div class="ma-scrubber__played" style={{ width: `${fraction * 100}%` }} />
         {ticks.length <= 120 && ticks.map((f, i) => <span key={i} class="ma-scrubber__tick" style={{ left: `${f * 100}%` }} />)}
+        {controller.matchSteps.value.map((k) => (
+          <span key={`m${k}`} class="ma-scrubber__match" style={{ left: pct(rest(k)) }} />
+        ))}
       </div>
+      {chapters.map((c) => (
+        <span key={`c${c.firstStep}`} class="ma-scrubber__chapter" style={{ left: pct(timeline.starts[c.firstStep] ?? 0) }} title={t('chapter.tick', c.title)} aria-hidden="true" />
+      ))}
       <div class="ma-scrubber__thumb" style={{ left: `${fraction * 100}%` }} />
       {hover && (
         <div class="ma-tooltip ma-scrubber__hover" style={{ left: `${hover.x}px` }}>
@@ -134,7 +185,7 @@ function Scrubber({ controller, t }: { controller: DiagramController; t: (k: str
   );
 }
 
-function GoToStep({ controller, t, close }: { controller: DiagramController; t: (k: string, ...a: (string | number)[]) => string; close: () => void }) {
+function GoToStep({ controller, t, close }: { controller: DiagramController; t: T; close: () => void }) {
   const [value, setValue] = useState('');
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => input.current?.focus(), []);
@@ -167,21 +218,32 @@ function GoToStep({ controller, t, close }: { controller: DiagramController; t: 
   );
 }
 
-function Shortcuts({ t, close }: { t: (k: string, ...a: (string | number)[]) => string; close: () => void }) {
-  const rows: [string, string][] = [
-    ['Space / K', t('shortcuts.playPause')],
-    ['→ / ←', t('shortcuts.step')],
-    ['Home / End', t('shortcuts.ends')],
-    ['G', t('shortcuts.goTo')],
-    ['[ / ]', t('shortcuts.speed')],
-    ['L', t('shortcuts.loop')],
-    ['+ / −', t('shortcuts.zoom')],
-    ['0', t('shortcuts.fit')],
-    ['F', t('shortcuts.frame')],
-    ['C', t('shortcuts.follow')],
-    ['E', t('shortcuts.export')],
-    ['Alt + ⌁', t('shortcuts.reveal')],
-  ];
+/** Documented shortcuts; kept in step with the keyboard handler in main.tsx. */
+export const SHORTCUT_ROWS: [string, string][] = [
+  ['Space / K', 'shortcuts.playPause'],
+  ['→ / ←', 'shortcuts.step'],
+  ['Shift + → / ←', 'shortcuts.chapter'],
+  ['Home / End', 'shortcuts.ends'],
+  ['G', 'shortcuts.goTo'],
+  ['[ / ]', 'shortcuts.speed'],
+  ['L', 'shortcuts.loop'],
+  ['I / O', 'shortcuts.range'],
+  ['+ / −', 'shortcuts.zoom'],
+  ['0', 'shortcuts.fit'],
+  ['F', 'shortcuts.frame'],
+  ['C', 'shortcuts.follow'],
+  ['D', 'shortcuts.inspector'],
+  ['/', 'shortcuts.search'],
+  ['R', 'shortcuts.transcript'],
+  ['P', 'shortcuts.present'],
+  ['B / .', 'shortcuts.blank'],
+  ['Z', 'shortcuts.laser'],
+  ['⌁ / Ctrl + ⌁', 'shortcuts.focus'],
+  ['E', 'shortcuts.export'],
+  ['Alt + ⌁', 'shortcuts.reveal'],
+];
+
+function Shortcuts({ t, close }: { t: T; close: () => void }) {
   return (
     <div class="ma-overlay" role="dialog" aria-modal="true" aria-labelledby="ma-shortcuts-title" onClick={close}>
       <div class="ma-sheet" onClick={(e) => e.stopPropagation()}>
@@ -189,12 +251,12 @@ function Shortcuts({ t, close }: { t: (k: string, ...a: (string | number)[]) => 
           {t('shortcuts.title')}
         </h2>
         <dl class="ma-shortcuts">
-          {rows.map(([k, v]) => (
+          {SHORTCUT_ROWS.map(([k, v]) => (
             <div key={k} class="ma-shortcuts__row">
               <dt>
                 <kbd>{k}</kbd>
               </dt>
-              <dd>{v}</dd>
+              <dd>{t(v)}</dd>
             </div>
           ))}
         </dl>
@@ -206,7 +268,7 @@ function Shortcuts({ t, close }: { t: (k: string, ...a: (string | number)[]) => 
   );
 }
 
-function ExportMenu({ t, onExport, close }: { t: (k: string, ...a: (string | number)[]) => string; onExport: (a: ExportAction) => void; close: () => void }) {
+function ExportMenu({ t, onExport, close }: { t: T; onExport: (a: ExportAction) => void; close: () => void }) {
   const choose = (a: ExportAction) => {
     close();
     onExport(a);
@@ -234,7 +296,7 @@ function ExportMenu({ t, onExport, close }: { t: (k: string, ...a: (string | num
   );
 }
 
-export function App({ state, controller, mountCanvas, onSelectDiagram, onExport, ui }: AppProps) {
+export function App({ state, controller, mountCanvas, onSelectDiagram, onExport, onTogglePresentation, onToggleInspector, reducedMotion, ui }: AppProps) {
   const t = (key: string, ...args: (string | number)[]) => format({ ...WEBVIEW_STRINGS, ...state.strings }, key, ...args);
   const doc = state.document;
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -246,11 +308,18 @@ export function App({ state, controller, mountCanvas, onSelectDiagram, onExport,
   const banner = controller?.banner.value;
   const notice = controller?.notice.value;
   const tooltip = controller?.tooltip.value;
+  const card = controller?.chapterCard.value;
   const pad = (n: number) => String(n).padStart(2, '0');
   const speedLabel = `${snap?.speed ?? 1}×`.replace(/^(\d)×$/, '$1.0×');
+  const native = !!controller?.stepList.value.length;
+  const inspectorOpen = native && !ui.presenting && !ui.transcript && (ui.wide ? ui.inspectorWide : ui.inspectorSheet);
+  const inspectorBeside = inspectorOpen && ui.wide;
+  const total = controller?.playback.currentTimeline.duration || 1;
+  const toggleSection = (s: InspectorSection) => ui.set({ sections: ui.sections.includes(s) ? ui.sections.filter((x) => x !== s) : [...ui.sections, s] });
+  const shellClass = ['ma-shell', ui.presenting && 'ma-shell--presenting', ui.presenting && ui.idle && 'ma-shell--idle'].filter(Boolean).join(' ');
 
   return (
-    <div class="ma-shell">
+    <div class={shellClass}>
       <header class="ma-toolbar" role="toolbar" aria-label={t('toolbar.label')}>
         <span class="ma-breadcrumb">{doc ? <strong>{doc.fileName}</strong> : t('app.loading')}</span>
         {doc?.diagrams && <DiagramSwitcher diagrams={doc.diagrams} current={doc.diagramIndex ?? 0} t={t} onSelect={onSelectDiagram} />}
@@ -259,6 +328,15 @@ export function App({ state, controller, mountCanvas, onSelectDiagram, onExport,
         <IconButton icon="target" label={t('toolbar.frame')} onClick={() => controller?.frameStep()} disabled={!controller} />
         <IconButton icon="eye" label={t('toolbar.follow')} pressed={!!controller?.following.value && !controller.followSuspended.value} onClick={() => controller?.toggleFollow()} disabled={!controller} />
         <IconButton icon="go-to-file" label={t('toolbar.revealSource')} onClick={() => controller?.revealCurrent()} disabled={!controller} />
+        <span class="ma-toolbar__rule" aria-hidden="true" />
+        <div class="ma-anchor">
+          <IconButton icon="search" label={t('toolbar.search')} pressed={ui.search} onClick={() => ui.set({ search: !ui.search })} disabled={!native} />
+          {ui.search && controller && <SearchBox controller={controller} t={t} close={() => ui.set({ search: false })} />}
+        </div>
+        <IconButton icon="list-flat" label={t('toolbar.transcript')} pressed={ui.transcript} onClick={() => ui.set({ transcript: !ui.transcript })} disabled={!native} />
+        <IconButton icon="layout-sidebar-right" label={t('toolbar.inspector')} pressed={inspectorOpen} onClick={onToggleInspector} disabled={!native} />
+        <IconButton icon="play-circle" label={ui.presenting ? t('presentation.exit') : t('toolbar.present')} pressed={ui.presenting} onClick={onTogglePresentation} disabled={!controller} />
+        <span class="ma-toolbar__rule" aria-hidden="true" />
         <div class="ma-anchor">
           <IconButton icon="export" label={t('toolbar.export')} onClick={() => ui.set({ exportMenu: !ui.exportMenu })} disabled={!controller} />
           {ui.exportMenu && <ExportMenu t={t} onExport={onExport} close={() => ui.set({ exportMenu: false })} />}
@@ -266,40 +344,58 @@ export function App({ state, controller, mountCanvas, onSelectDiagram, onExport,
         <IconButton icon="keyboard" label={t('toolbar.shortcuts')} onClick={() => ui.set({ shortcuts: true })} />
       </header>
 
-      <main class={`ma-canvas${controller?.stale.value ? ' ma-canvas--stale' : ''}`} ref={canvasRef}>
-        {!doc && <div class="ma-progress" role="progressbar" aria-label={t('app.loading')} />}
-        {banner && (
-          <div class={`ma-banner ma-banner--${banner.kind}`} role={banner.kind === 'error' ? 'alert' : 'status'}>
-            <span class="ma-banner__text">{banner.text}</span>
-            {banner.range && (
-              <button type="button" class="ma-text-button" onClick={() => controller?.revealBanner()}>
-                {t('banner.reveal')}
-              </button>
-            )}
-          </div>
+      <div class={`ma-body${inspectorBeside ? ' ma-body--inspector' : ''}`}>
+        <main class={`ma-canvas${controller?.stale.value ? ' ma-canvas--stale' : ''}`} ref={canvasRef} hidden={ui.transcript && native}>
+          {!doc && <div class="ma-progress" role="progressbar" aria-label={t('app.loading')} />}
+          {banner && (
+            <div class={`ma-banner ma-banner--${banner.kind}`} role={banner.kind === 'error' ? 'alert' : 'status'}>
+              <span class="ma-banner__text">{banner.text}</span>
+              {banner.range && (
+                <button type="button" class="ma-text-button" onClick={() => controller?.revealBanner()}>
+                  {t('banner.reveal')}
+                </button>
+              )}
+            </div>
+          )}
+          {!banner && notice && (
+            <div class="ma-banner ma-banner--info" role="status">
+              <span class="ma-banner__text">{notice}</span>
+            </div>
+          )}
+          {controller?.followSuspended.value && (
+            <button type="button" class="ma-chip ma-resume" onClick={() => controller.toggleFollow()}>
+              {t('camera.resume')}
+            </button>
+          )}
+          {controller && <ChoiceChips controller={controller} t={t} />}
+          {tooltip && !ui.presenting && (
+            <div class="ma-tooltip ma-canvas-tooltip" style={{ left: `${tooltip.x + 12}px`, top: `${tooltip.y + 16}px` }} role="tooltip">
+              <div class="ma-tooltip__text">{tooltip.text}</div>
+              {tooltip.line !== undefined && <div class="ma-tooltip__meta">{t('tooltip.line', tooltip.line)}</div>}
+            </div>
+          )}
+          {ui.presenting && ui.titleCard && controller && (
+            <TitleCard
+              title={controller.title.value || doc?.fileName || ''}
+              subtitle={t('presentation.subtitle', controller.participants.value.length, controller.chapters.value.length, snap?.stepCount ?? 0)}
+            />
+          )}
+          {ui.presenting && card && <ChapterCard label={t('presentation.chapterN', card.n)} title={card.title} />}
+          {ui.presenting && ui.laser && <LaserPointer reducedMotion={reducedMotion} />}
+          {ui.presenting && ui.blank && <BlankScreen />}
+          {ui.toast && (
+            <div class="ma-toast" role="status">
+              {ui.toast}
+            </div>
+          )}
+        </main>
+        {ui.transcript && controller && native && <Transcript controller={controller} t={t} />}
+        {inspectorOpen && controller && (
+          <Inspector controller={controller} t={t} collapsed={ui.sections} onToggleSection={toggleSection} overlay={!ui.wide} onClose={onToggleInspector} />
         )}
-        {!banner && notice && (
-          <div class="ma-banner ma-banner--info" role="status">
-            <span class="ma-banner__text">{notice}</span>
-          </div>
-        )}
-        {controller?.followSuspended.value && (
-          <button type="button" class="ma-chip ma-resume" onClick={() => controller.toggleFollow()}>
-            {t('camera.resume')}
-          </button>
-        )}
-        {tooltip && (
-          <div class="ma-tooltip ma-canvas-tooltip" style={{ left: `${tooltip.x + 12}px`, top: `${tooltip.y + 16}px` }} role="tooltip">
-            <div class="ma-tooltip__text">{tooltip.text}</div>
-            {tooltip.line !== undefined && <div class="ma-tooltip__meta">{t('tooltip.line', tooltip.line)}</div>}
-          </div>
-        )}
-        {ui.toast && (
-          <div class="ma-toast" role="status">
-            {ui.toast}
-          </div>
-        )}
-      </main>
+      </div>
+
+      {controller && !ui.transcript && <CaptionStrip controller={controller} presenting={ui.presenting} />}
 
       <footer class="ma-transport" role="group" aria-label={t('transport.label')}>
         <IconButton icon="debug-restart" label={t('transport.first')} onClick={() => controller?.playback.first()} disabled={!snap?.stepCount} />
@@ -353,6 +449,7 @@ export function App({ state, controller, mountCanvas, onSelectDiagram, onExport,
         <IconButton icon="sync" label={t('transport.loop')} pressed={!!snap?.loop} onClick={() => controller?.playback.setOptions({ loop: !snap?.loop })} disabled={!snap?.stepCount} />
       </footer>
 
+      {ui.presenting && <Hairline fraction={(snap?.t ?? 0) / total} />}
       <div class="ma-visually-hidden" aria-live="polite" aria-atomic="true">
         {controller?.live.value}
       </div>

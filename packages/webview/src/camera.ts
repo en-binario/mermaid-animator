@@ -7,7 +7,7 @@ import { zoom as d3zoom, zoomIdentity, type D3ZoomEvent, type ZoomBehavior, type
 import { interpolateZoom } from 'd3-interpolate';
 import type { Rect } from '@mermaid-animator/core';
 
-export type CameraMode = 'auto' | 'fit' | 'follow' | 'manual';
+export type CameraMode = 'auto' | 'fit' | 'follow' | 'cinematic' | 'manual';
 
 export interface Viewport {
   width: number;
@@ -70,6 +70,31 @@ export function followView(current: View, target: Rect, viewport: Viewport): Vie
 /** Limits a zoom change for one automatic move to at most 1.6× in either direction. */
 export function limitZoomChange(from: number, to: number): number {
   return clamp(from / 1.6, to, from * 1.6);
+}
+
+/**
+ * Cinematic mode (spec camera): frames `target` tightly with 48 px padding, centred, changing
+ * zoom by at most 1.6× from the current view and never enlarging past `maxScale`.
+ */
+export function cinematicView(target: Rect, viewport: Viewport, current: View, padding = 48, maxScale = 2.5): View {
+  const padded = { x: target.x - padding, y: target.y - padding, w: target.w + 2 * padding, h: target.h + 2 * padding };
+  const ideal = fitView(padded, viewport, 0, maxScale);
+  const k = clamp(ZOOM_MIN, limitZoomChange(current.k, ideal.k), ZOOM_MAX);
+  const cx = target.x + target.w / 2;
+  const cy = target.y + target.h / 2;
+  return { k, x: viewport.width / 2 - cx * k, y: viewport.height / 2 - cy * k };
+}
+
+/**
+ * The region `@focus` asks the camera to frame: the named participants' columns over the
+ * step's rows. Unknown ids are ignored; returns `stepBounds` when none are known.
+ */
+export function focusTarget(stepBounds: Rect, participants: readonly { id: string; header: Rect }[], focus: readonly string[] | undefined): Rect {
+  const columns = participants.filter((p) => focus?.includes(p.id)).map((p) => p.header);
+  if (!columns.length) return stepBounds;
+  const x1 = Math.min(...columns.map((c) => c.x));
+  const x2 = Math.max(...columns.map((c) => c.x + c.w));
+  return { x: x1, y: stepBounds.y, w: x2 - x1, h: stepBounds.h };
 }
 
 export interface CameraCallbacks {

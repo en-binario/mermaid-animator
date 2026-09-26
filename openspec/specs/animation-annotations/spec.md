@@ -26,13 +26,13 @@ Unknown directive names SHALL produce a warning diagnostic suggesting the closes
 - **WHEN** the source contains `%% @pasue 1s`
 - **THEN** a warning says the directive is unknown and suggests `@pause`
 
-### Requirement: Step-shaping directives in M1
-The directives `@animator` (for settings supported in this release), `@id`, `@title`, `@step-id`, `@skip`, `@pause`, `@duration`, `@speed`, `@emphasis` and `@with-next` SHALL take effect; `@caption` and `@chapter` SHALL be parsed, validated and stored on steps; other directives of the product specification SHALL be accepted without warnings and have no effect yet.
+### Requirement: Directive effects
+The directives `@animator`, `@id`, `@title`, `@step-id`, `@skip`, `@pause`, `@duration`, `@speed`, `@emphasis`, `@with-next`, `@type`, `@caption`, `@chapter`, `@latency`, `@focus`, `@iterations`, `@branch` and `@collapse` SHALL take effect: captions and chapters are shown (see `narrative`), `@latency` is shown in the inspector, `@focus` frames the listed participants for its step in Cinematic and Follow modes, `@iterations` and `@branch` drive fragment handling (see `step-compilation`), and `@collapse` is accepted and reserved for fragment collapsing; the topology and flowchart directives (`@group`, `@order`, `@path`, `@start`, `@choose`, `@events`) SHALL be accepted without warnings and take effect in later milestones.
 
-#### Scenario: Skip
-- **WHEN** `%% @skip` precedes a message
-- **THEN** that message is drawn from the start and produces no step
+#### Scenario: Caption shown
+- **WHEN** `%% @caption "Retrying once."` precedes a message
+- **THEN** the caption strip shows "Retrying once." while that message is the current step
 
-#### Scenario: With-next
-- **WHEN** `%% @with-next` precedes the first of two messages
-- **THEN** both messages animate together as one step
+#### Scenario: Focus framing
+- **WHEN** the camera mode is `cinematic` and a step is annotated `%% @focus Gateway, Auth`
+- **THEN** the camera frames the Gateway and Auth lifelines for that step

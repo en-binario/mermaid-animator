@@ -76,24 +76,40 @@ const anyList = (args: AnnotationArg[]) => (args.length ? undefined : 'expects o
 const textRun = (args: AnnotationArg[]) => (args.length && args.every((a) => !a.key && isText(a.value)) ? undefined : 'expects quoted text');
 
 /** Short names usable in `@animator key=value` (spec §15.2) and the values accepted in M1. */
+/** Enumerable values of `@animator` keys (used for validation and completions). */
+export const ANIMATOR_VALUES: Record<string, readonly string[]> = {
+  autoplay: ['true', 'false'],
+  dwell: ['adaptive', 'fixed'],
+  onEnd: ['stop', 'loop', 'rewind'],
+  reverse: ['animate', 'cut'],
+  startAt: ['beginning', 'end', 'lastPosition'],
+  notes: ['step', 'attach', 'hidden'],
+  future: ['hidden', 'ghosted', 'visible'],
+  past: ['full', 'muted', 'trail'],
+  numbers: ['auto', 'always', 'never'],
+  motion: ['formal', 'expressive', 'minimal', 'none'],
+  indicator: ['pulse', 'comet', 'none'],
+  camera: ['auto', 'fit', 'follow', 'cinematic', 'manual'],
+  branches: ['first', 'all', 'ask'],
+  parallel: ['concurrent', 'sequential'],
+  view: ['sequence', 'topology', 'split'],
+  timing: ['uniform', 'proportional'],
+  layout: ['layered', 'force', 'radial', 'grid', 'manual'],
+  direction: ['LR', 'TB'],
+  returns: ['merge', 'separate', 'hide'],
+  order: ['topological', 'source', 'bfs', 'path', 'token'],
+  engine: ['auto', 'native', 'mermaid-overlay'],
+};
+
+const oneOfValues = (key: string) => (v: AnnotationValue) => v.kind === 'word' && (ANIMATOR_VALUES[key] ?? []).includes(v.value);
+
+/** Short names usable in `@animator key=value` (spec §15.2) and how their values are validated. */
 export const ANIMATOR_KEYS: Record<string, ((v: AnnotationValue) => boolean) | null> = {
   speed: isSpeed,
-  autoplay: (v) => v.kind === 'word' && ['true', 'false'].includes(v.value),
-  dwell: (v) => v.kind === 'word' && ['fixed', 'adaptive'].includes(v.value),
   dwellMs: isDuration,
-  onEnd: (v) => v.kind === 'word' && ['stop', 'loop', 'rewind'].includes(v.value),
-  reverse: (v) => v.kind === 'word' && ['animate', 'cut'].includes(v.value),
-  startAt: (v) => v.kind === 'word' && ['beginning', 'end', 'lastPosition'].includes(v.value),
-  notes: (v) => v.kind === 'word' && ['step', 'attach', 'hidden'].includes(v.value),
-  future: (v) => v.kind === 'word' && ['hidden', 'ghosted', 'visible'].includes(v.value),
-  past: (v) => v.kind === 'word' && ['full', 'muted', 'trail'].includes(v.value),
   trail: isPositiveInt,
-  numbers: (v) => v.kind === 'word' && ['auto', 'always', 'never'].includes(v.value),
-  motion: (v) => v.kind === 'word' && ['formal', 'expressive', 'minimal', 'none'].includes(v.value),
-  indicator: (v) => v.kind === 'word' && ['pulse', 'comet', 'none'].includes(v.value),
-  camera: (v) => v.kind === 'word' && ['auto', 'fit', 'follow', 'cinematic', 'manual'].includes(v.value),
-  // Accepted for forward compatibility; take effect in later milestones.
-  view: null, iterations: null, branches: null, parallel: null, timing: null, layout: null, direction: null, returns: null, order: null, engine: null,
+  iterations: isPositiveInt,
+  ...Object.fromEntries(Object.keys(ANIMATOR_VALUES).map((k) => [k, oneOfValues(k)])),
 };
 
 const DIRECTIVES: Record<string, DirectiveSpec> = {
@@ -138,6 +154,41 @@ const DIRECTIVES: Record<string, DirectiveSpec> = {
 };
 
 export const DIRECTIVE_NAMES = Object.keys(DIRECTIVES);
+
+export interface DirectiveDoc {
+  summary: string;
+  /** Argument syntax shown in completions and hovers. */
+  args: string;
+  scope: AnnotationScope;
+}
+
+/** Documentation for every directive (spec §11.4), used by completions and hovers. */
+export const DIRECTIVE_DOCS: Record<string, DirectiveDoc> = {
+  animator: { summary: 'Per-diagram animator settings.', args: 'key=value …', scope: 'diagram' },
+  id: { summary: 'Stable identifier for sidecar keys, deep links and panel binding.', args: 'identifier', scope: 'diagram' },
+  title: { summary: 'Title for the panel, title card and exports.', args: '"text"', scope: 'diagram' },
+  chapter: { summary: 'Starts a chapter at the next step.', args: '"title"', scope: 'statement' },
+  caption: { summary: 'Caption shown with the next step.', args: '"text"', scope: 'statement' },
+  pause: { summary: 'Rest after the next step; without a duration autoplay waits for you.', args: '[duration]', scope: 'statement' },
+  duration: { summary: 'Transition duration of the next step.', args: 'duration', scope: 'statement' },
+  latency: { summary: 'Modelled latency of the next message (shown in the inspector).', args: 'duration', scope: 'statement' },
+  speed: { summary: 'Speed multiplier for the next step only.', args: 'number (e.g. 0.5x)', scope: 'statement' },
+  emphasis: { summary: 'Draws the next step in brass.', args: '', scope: 'statement' },
+  skip: { summary: 'Draws the next statement from the start without a step.', args: '', scope: 'statement' },
+  'with-next': { summary: 'Merges the next step with the following n steps.', args: '[n]', scope: 'statement' },
+  'step-id': { summary: 'Immutable identity for the next step (sidecars, links, position).', args: 'identifier', scope: 'statement' },
+  focus: { summary: 'Participants the camera frames for the next step.', args: 'A, B, …', scope: 'statement' },
+  choose: { summary: 'Route of the token at the next decision (flowcharts, later milestone).', args: 'node or label', scope: 'statement' },
+  iterations: { summary: 'How many times the next loop plays.', args: 'number', scope: 'fragment' },
+  branch: { summary: 'Branch of the next alt/critical/opt to play.', args: 'number | "label" | all | ask | skip', scope: 'fragment' },
+  collapse: { summary: 'Starts the next fragment collapsed (later milestone).', args: '', scope: 'fragment' },
+  type: { summary: 'Node shape of the next participant declaration.', args: 'participant | actor | database | …', scope: 'declaration' },
+  group: { summary: 'Topology cluster (later milestone).', args: '"label": A, B', scope: 'diagram' },
+  order: { summary: 'Traversal strategy for flowcharts (later milestone).', args: 'topological | source | bfs | path | token', scope: 'diagram' },
+  path: { summary: 'Path for order=path (later milestone).', args: 'A, B, …', scope: 'diagram' },
+  start: { summary: 'Start nodes for bfs/token (later milestone).', args: 'A, B, …', scope: 'diagram' },
+  events: { summary: 'Event script for state diagrams (later milestone).', args: 'e1, e2, …', scope: 'diagram' },
+};
 
 export function directiveScope(name: string): AnnotationScope | undefined {
   return DIRECTIVES[name]?.scope;

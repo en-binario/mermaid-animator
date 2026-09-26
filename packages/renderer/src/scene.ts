@@ -39,12 +39,15 @@ export interface MessageState {
   highlight: number;
   pulse?: { at: number; opacity: number };
   emphasis: boolean;
+  /** Outside the current focus (spec exploration). */
+  dimmed?: boolean;
 }
 
 export interface NoteState {
   state: ElementState;
   opacity: number;
   rise: number;
+  dimmed?: boolean;
 }
 
 export interface ParticipantState {
@@ -54,6 +57,8 @@ export interface ParticipantState {
   glow: number;
   /** 0–1 progress of the destruction mark; 0 means the lifeline runs to its full length. */
   destroyed: number;
+  /** Part of the current focus: lifeline emphasised. */
+  focused?: boolean;
 }
 
 export interface ActivationState {
@@ -61,12 +66,21 @@ export interface ActivationState {
   /** Current visible bottom of the bar. */
   y2: number;
   ghost: boolean;
+  dimmed?: boolean;
 }
 
 export interface FragmentState {
   opacity: number;
   /** Brass illumination while its steps play. */
   active: number;
+  /** Loop iteration shown in the tab while the loop plays. */
+  iteration?: { n: number; of: number };
+}
+
+/** Per-frame inputs that are not part of the timeline. */
+export interface SceneInputs {
+  /** Focused participants (spec exploration); empty or undefined means no focus. */
+  focus?: ReadonlySet<string>;
 }
 
 export interface Scene {
@@ -83,26 +97,32 @@ export interface SceneModel {
   layout: SequenceLayout;
   compiled: CompiledSequence;
   timeline: Timeline;
-  messageStep: Map<string, number>;
-  noteStep: Map<string, number>;
+  /** Steps in which each message animates (several across loop iterations), ascending. */
+  messageSteps: Map<string, number[]>;
+  noteSteps: Map<string, number[]>;
+  /** Furthest row reached up to each step (loops jump back up; bars must not retract). */
+  reach: number[];
+  /** Participants each note is attached to (for focus dimming). */
+  noteParticipants: Map<string, string[]>;
   createStep: Map<string, number>;
   destroyStep: Map<string, number>;
   fragmentSpan: Map<string, [number, number]>;
 }
 
 export function prepareScene(layout: SequenceLayout, compiled: CompiledSequence, timeline: Timeline): SceneModel {
-  const messageStep = new Map<string, number>();
-  const noteStep = new Map<string, number>();
+  const messageSteps = new Map<string, number[]>();
+  const noteSteps = new Map<string, number[]>();
+  const add = (map: Map<string, number[]>, id: string, i: number) => map.set(id, [...(map.get(id) ?? []), i]);
   const createStep = new Map<string, number>();
   const destroyStep = new Map<string, number>();
   const fragmentSpan = new Map<string, [number, number]>();
-  for (const id of compiled.initial.messages) messageStep.set(id, -1);
-  for (const id of compiled.initial.notes) noteStep.set(id, -1);
+  for (const id of compiled.initial.messages) add(messageSteps, id, -1);
+  for (const id of compiled.initial.notes) add(noteSteps, id, -1);
   for (const id of compiled.initial.creates) createStep.set(id, -1);
   for (const id of compiled.initial.destroys) destroyStep.set(id, -1);
   compiled.steps.forEach((s: Step, i) => {
-    for (const id of s.messages) messageStep.set(id, i);
-    for (const id of s.notes) noteStep.set(id, i);
+    for (const id of s.messages) add(messageSteps, id, i);
+    for (const id of s.notes) add(noteSteps, id, i);
     for (const id of s.creates) createStep.set(id, i);
     for (const id of s.destroys) destroyStep.set(id, i);
     for (const f of s.fragmentPath) {
@@ -110,7 +130,19 @@ export function prepareScene(layout: SequenceLayout, compiled: CompiledSequence,
       fragmentSpan.set(f.fragmentId, span ? [span[0], i] : [i, i]);
     }
   });
-  return { layout, compiled, timeline, messageStep, noteStep, createStep, destroyStep, fragmentSpan };
+  const reach: number[] = [];
+  layout.stepRows.forEach((row, i) => reach.push(Math.max(row, reach[i - 1] ?? row)));
+  const noteParticipants = new Map(layout.notes.map((n) => [n.id, n.participants]));
+  return { layout, compiled, timeline, messageSteps, noteSteps, reach, noteParticipants, createStep, destroyStep, fragmentSpan };
+}
+
+/** The step that decides an element's state at k: `k` itself if it animates then, else the latest before k, else its first. */
+function stepFor(steps: number[] | undefined, k: number): number | undefined {
+  if (!steps?.length) return undefined;
+  if (steps.includes(k)) return k;
+  let latest: number | undefined;
+  for (const s of steps) if (s <= k) latest = s;
+  return latest ?? steps[0];
 }
 
 function stateOf(step: number | undefined, k: number, unplayed: boolean): ElementState {
@@ -140,7 +172,7 @@ function restingOpacity(state: ElementState, step: number, k: number, o: Display
 }
 
 /** Computes the scene at time `t` (ms on the timeline, speed-independent). */
-export function sceneAt(model: SceneModel, t: number, options: DisplayOptions = DEFAULT_DISPLAY): Scene {
+export function sceneAt(model: SceneModel, t: number, options: DisplayOptions = DEFAULT_DISPLAY, inputs: SceneInputs = {}): Scene {
   const { layout, compiled, timeline } = model;
   const position = positionAt(timeline, t);
   const k = position.index;
@@ -150,22 +182,28 @@ export function sceneAt(model: SceneModel, t: number, options: DisplayOptions = 
   const minimal = options.motion === 'minimal';
   const current = k >= 0 ? compiled.steps[k] : undefined;
   const previous = k >= 1 ? compiled.steps[k - 1] : undefined;
+  const focus = inputs.focus && inputs.focus.size ? inputs.focus : undefined;
+  // One focused participant: anything touching it; several: interactions among them only.
+  const inFocus = (ids: string[]) => !focus || (focus.size === 1 ? ids.some((id) => focus.has(id)) : ids.every((id) => focus.has(id)));
 
   // -- messages ---------------------------------------------------------------------------------------------
   const messages = new Map<string, MessageState>();
   for (const m of layout.messages) {
-    const step = model.messageStep.get(m.id);
+    const steps = model.messageSteps.get(m.id);
+    const step = stepFor(steps, k);
     const state = stateOf(step, k, compiled.unplayed.has(m.id));
-    const emphasis = step !== undefined && step >= 0 && !!compiled.steps[step]?.emphasis;
+    const emphasis = !!steps?.some((s) => s >= 0 && compiled.steps[s]?.emphasis);
+    const dimmed = !inFocus([m.from, m.to]) || undefined;
+    const dim = (o: number) => (dimmed ? Math.min(o, OPACITY.dim) : o);
     const base = restingOpacity(state, step ?? -1, k, options);
     if (state !== 'current') {
-      const fading = step === k - 1 && k >= 0 ? 1 - windowed(e, 0, DURATION.base, EASE.exit) : 0;
-      messages.set(m.id, { state, opacity: base, draw: 1, head: 1, headScale: 1, label: 1, labelRise: 0, highlight: fading, emphasis });
+      const fading = steps?.includes(k - 1) && k >= 0 ? 1 - windowed(e, 0, DURATION.base, EASE.exit) : 0;
+      messages.set(m.id, { state, opacity: dim(base), draw: 1, head: 1, headScale: 1, label: 1, labelRise: 0, highlight: fading, emphasis, dimmed });
       continue;
     }
     if (minimal) {
       const f = windowed(e, 0, DURATION.fast, EASE.linear);
-      messages.set(m.id, { state, opacity: f, draw: 1, head: 1, headScale: 1, label: f, labelRise: 0, highlight: 1, emphasis });
+      messages.set(m.id, { state, opacity: dim(f), draw: 1, head: 1, headScale: 1, label: f, labelRise: 0, highlight: 1, emphasis, dimmed });
       continue;
     }
     const draw = windowed(e, 0, T, EASE.travel);
@@ -175,7 +213,8 @@ export function sceneAt(model: SceneModel, t: number, options: DisplayOptions = 
     const pulseOpacity = draw < 1 ? 1 : 1 - windowed(e, T - 60, T + 90, EASE.exit);
     messages.set(m.id, {
       state,
-      opacity: 1,
+      opacity: dim(1),
+      dimmed,
       draw,
       head,
       headScale: 0.6 + 0.4 * windowed(e, T - 60, T + 90, scaleEase),
@@ -189,13 +228,17 @@ export function sceneAt(model: SceneModel, t: number, options: DisplayOptions = 
 
   // -- notes --------------------------------------------------------------------------------------------------
   const notes = new Map<string, NoteState>();
+  const noteParticipants = model.noteParticipants;
   for (const n of layout.notes) {
-    const step = model.noteStep.get(n.id);
+    const step = stepFor(model.noteSteps.get(n.id), k);
     const state = stateOf(step, k, compiled.unplayed.has(n.id));
+    const involved = noteParticipants.get(n.id) ?? [];
+    const dimmed = (focus && !involved.some((p) => focus.has(p))) || undefined;
+    const dim = (o: number) => (dimmed ? Math.min(o, OPACITY.dim) : o);
     if (state === 'current') {
       const f = windowed(e, 0, minimal ? DURATION.fast : DURATION.base, EASE.enter);
-      notes.set(n.id, { state, opacity: f, rise: minimal ? 0 : 4 * (1 - f) });
-    } else notes.set(n.id, { state, opacity: restingOpacity(state, step ?? -1, k, options), rise: 0 });
+      notes.set(n.id, { state, opacity: dim(f), rise: minimal ? 0 : 4 * (1 - f), dimmed });
+    } else notes.set(n.id, { state, opacity: dim(restingOpacity(state, step ?? -1, k, options)), rise: 0, dimmed });
   }
 
   // -- participants -------------------------------------------------------------------------------------------
@@ -227,14 +270,16 @@ export function sceneAt(model: SceneModel, t: number, options: DisplayOptions = 
       if (dStep < 0 || dStep < k) destroyed = 1;
       else if (dStep === k) destroyed = minimal ? (e > 0 ? 1 : 0) : windowed(e, T, T + DURATION.fast);
     }
-    participants.set(p.id, { opacity, headerDy, glow: Math.max(0, glow), destroyed });
+    const focused = !!focus?.has(p.id) || undefined;
+    participants.set(p.id, { opacity, headerDy, glow: focused ? 1 : Math.max(0, glow), destroyed, focused });
   }
 
   // -- activations --------------------------------------------------------------------------------------------
-  const rows = layout.stepRows;
   const drawNow = k >= 0 ? (minimal ? 1 : windowed(e, 0, T, EASE.travel)) : 0;
-  const rowNow = k < 0 ? 0 : k === 0 ? (rows[0] as number) : (rows[k - 1] as number) + ((rows[k] as number) - (rows[k - 1] as number)) * drawNow;
-  const activations: ActivationState[] = layout.activations.map((a) => {
+  const reach = model.reach;
+  const rowNow = k < 0 ? 0 : k === 0 ? (reach[0] as number) : (reach[k - 1] as number) + ((reach[k] as number) - (reach[k - 1] as number)) * drawNow;
+  const activations: ActivationState[] = layout.activations.map((a) => ({ ...activationState(a), dimmed: (focus && !focus.has(a.participant)) || undefined }));
+  function activationState(a: (typeof layout.activations)[number]): ActivationState {
     const minBottom = a.y1 + 10;
     if (a.startStep >= 0 && (k < a.startStep || (k === a.startStep && e < T))) {
       const future = restingOpacity('future', a.startStep, k, options);
@@ -248,7 +293,7 @@ export function sceneAt(model: SceneModel, t: number, options: DisplayOptions = 
     if (a.endStep !== undefined && k > a.endStep) return { opacity: restingOpacity('past', a.endStep, k, options), y2: a.y2, ghost: false };
     // The bar extends with the conversation until it reaches its closing row.
     return { opacity: 1, y2: Math.min(a.y2, Math.max(minBottom, rowNow + 10)), ghost: false };
-  });
+  }
 
   // -- fragments ----------------------------------------------------------------------------------------------
   const fragments = new Map<string, FragmentState>();
@@ -265,7 +310,9 @@ export function sceneAt(model: SceneModel, t: number, options: DisplayOptions = 
     let active = 0;
     if (k >= first && k <= last) active = k === first ? windowed(e, 0, minimal ? DURATION.fast : DURATION.slow, EASE.standard) : 1;
     else if (k === last + 1) active = 1 - windowed(e, 0, DURATION.base, EASE.exit);
-    fragments.set(f.id, { opacity, active });
+    const frame = current?.fragmentPath.find((p) => p.fragmentId === f.id);
+    const iteration = frame?.iteration && frame.of && frame.of > 1 ? { n: frame.iteration, of: frame.of } : undefined;
+    fragments.set(f.id, { opacity, active, iteration });
   }
 
   return { position, messages, notes, participants, activations, fragments };

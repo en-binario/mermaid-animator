@@ -42,6 +42,13 @@ export const WEBVIEW_SETTING_KEYS = [
   'motion.respectReducedMotion',
   'motion.travelIndicator',
   'camera.mode',
+  'playback.loopIterations',
+  'playback.compressRepeats',
+  'playback.altBranches',
+  'playback.parallel',
+  'display.showCaptions',
+  'display.showInspector',
+  'presentation.chapterCards',
 ] as const;
 
 export function currentSettings(): WebviewSettings {

@@ -117,8 +117,10 @@ export class SequenceSvgRenderer {
   private notes = new Map<string, SVGGElement>();
   private participants = new Map<string, { group: SVGGElement; footer?: SVGGElement; lifeline: SVGLineElement; glow: SVGLineElement; cross?: SVGPathElement; y2: number; full: number }>();
   private activations: SVGRectElement[] = [];
-  private fragments = new Map<string, { group: SVGGElement; labels?: SVGGElement; glow: SVGRectElement }>();
-  private pulse!: { group: SVGGElement; tail: SVGPathElement };
+  private fragments = new Map<string, { group: SVGGElement; labels?: SVGGElement; glow: SVGRectElement; iteration?: SVGTextElement }>();
+  /** One pulse per concurrently animating message, grown on demand. */
+  private pulses: { group: SVGGElement; tail: SVGPathElement }[] = [];
+  private overlay!: SVGGElement;
   private layout!: SequenceLayout;
 
   constructor(parent: SVGGElement) {
@@ -178,7 +180,9 @@ export class SequenceSvgRenderer {
         label.textContent = `[${f.label}]`;
       }
       for (const sep of f.separators) if (sep.label) textLines(labels, [`[${sep.label}]`], r.x + 10, sep.y + 16, 'ma-fragment-label', 'start');
-      this.fragments.set(f.id, { group: g, labels, glow });
+      // Loop iteration counter, shown while the loop plays (spec sequence-rendering).
+      const iteration = f.kind === 'loop' ? el('text', { class: 'ma-fragment-iteration', x: r.x + r.w - 10, y: r.y + 14, 'text-anchor': 'end' }, labels) : undefined;
+      this.fragments.set(f.id, { group: g, labels, glow, iteration });
     }
 
     for (const p of layout.participants) {
@@ -247,22 +251,31 @@ export class SequenceSvgRenderer {
       this.notes.set(n.id, g);
     }
 
-    const pulse = el('g', { class: 'ma-pulse', opacity: 0 }, layers.overlay);
-    const tail = el('path', { class: 'ma-pulse-tail', d: 'M0 0' }, pulse);
-    el('circle', { class: 'ma-pulse-halo', r: 10, cx: 0, cy: 0 }, pulse);
-    el('circle', { class: 'ma-pulse-dot', r: 2.75, cx: 0, cy: 0 }, pulse);
-    this.pulse = { group: pulse, tail };
+    this.overlay = layers.overlay as SVGGElement;
+    this.pulses = [];
+  }
+
+  private pulse(index: number): { group: SVGGElement; tail: SVGPathElement } {
+    while (this.pulses.length <= index) {
+      const group = el('g', { class: 'ma-pulse', opacity: 0 }, this.overlay);
+      const tail = el('path', { class: 'ma-pulse-tail', d: 'M0 0' }, group);
+      el('circle', { class: 'ma-pulse-halo', r: 10, cx: 0, cy: 0 }, group);
+      el('circle', { class: 'ma-pulse-dot', r: 2.75, cx: 0, cy: 0 }, group);
+      this.pulses.push({ group, tail });
+    }
+    return this.pulses[index]!;
   }
 
   /** Applies a scene. Only attributes that changed since the last frame are written. */
   render(scene: Scene, options: { comet?: boolean } = {}): void {
-    let pulseShown = false;
+    let pulsesShown = 0;
     for (const [id, nodes] of this.messages) {
       const s = scene.messages.get(id);
       if (!s) continue;
       this.set(nodes.group, 'data-state', s.state);
       this.set(nodes.group, 'data-emphasis', s.emphasis ? 'true' : 'false');
       this.set(nodes.group, 'data-muted', s.state === 'past' && s.opacity < 1 ? 'true' : 'false');
+      this.set(nodes.group, 'data-dimmed', s.dimmed ? 'true' : 'false');
       this.set(nodes.group, 'opacity', s.opacity);
       this.set(nodes.group, 'display', s.opacity <= 0 ? 'none' : 'inline');
       if (s.opacity <= 0) continue;
@@ -282,23 +295,24 @@ export class SequenceSvgRenderer {
       if (nodes.heads[1]) placeHead(nodes.heads[1], { x: start.x, y: start.y, angle: start.angle + Math.PI });
       this.set(nodes.label, 'opacity', s.label);
       this.set(nodes.label, 'transform', `translate(0 ${round(s.labelRise)})`);
-      if (s.pulse && !pulseShown) {
-        pulseShown = true;
+      if (s.pulse) {
+        const pulse = this.pulse(pulsesShown++);
         const at = pointAlong(pts, s.pulse.at);
-        this.set(this.pulse.group, 'transform', `translate(${round(at.x)} ${round(at.y)})`);
-        this.set(this.pulse.group, 'opacity', s.pulse.opacity);
-        this.set(this.pulse.group, 'data-emphasis', s.emphasis ? 'true' : 'false');
+        this.set(pulse.group, 'transform', `translate(${round(at.x)} ${round(at.y)})`);
+        this.set(pulse.group, 'opacity', s.pulse.opacity * (s.dimmed ? 0.4 : 1));
+        this.set(pulse.group, 'data-emphasis', s.emphasis ? 'true' : 'false');
         const tailLength = options.comet ? 24 : 0;
         const back = { x: -Math.cos(at.angle) * tailLength, y: -Math.sin(at.angle) * tailLength };
-        this.set(this.pulse.tail, 'd', tailLength ? `M0 0 L${round(back.x)} ${round(back.y)}` : 'M0 0');
+        this.set(pulse.tail, 'd', tailLength ? `M0 0 L${round(back.x)} ${round(back.y)}` : 'M0 0');
       }
     }
-    if (!pulseShown) this.set(this.pulse.group, 'opacity', 0);
+    for (let i = pulsesShown; i < this.pulses.length; i++) this.set(this.pulses[i]!.group, 'opacity', 0);
 
     for (const [id, g] of this.notes) {
       const s = scene.notes.get(id);
       if (!s) continue;
       this.set(g, 'data-state', s.state);
+      this.set(g, 'data-dimmed', s.dimmed ? 'true' : 'false');
       this.set(g, 'opacity', s.opacity);
       this.set(g, 'display', s.opacity <= 0 ? 'none' : 'inline');
       this.set(g, 'transform', `translate(0 ${round(s.rise)})`);
@@ -309,6 +323,8 @@ export class SequenceSvgRenderer {
       if (!s) continue;
       for (const g of [p.group, p.lifeline, p.glow]) this.set(g, 'opacity', g === p.glow ? s.glow * s.opacity : s.opacity);
       this.set(p.group, 'transform', `translate(0 ${round(s.headerDy)})`);
+      this.set(p.group, 'data-focused', s.focused ? 'true' : 'false');
+      this.set(p.glow, 'data-focused', s.focused ? 'true' : 'false');
       this.set(p.group, 'display', s.opacity <= 0 ? 'none' : 'inline');
       const y2 = s.destroyed > 0 ? p.y2 : p.full;
       this.set(p.lifeline, 'y2', y2);
@@ -328,6 +344,7 @@ export class SequenceSvgRenderer {
       this.set(rect, 'display', a.opacity <= 0 ? 'none' : 'inline');
       this.set(rect, 'height', Math.max(0, a.y2 - laid.y1));
       this.set(rect, 'data-ghost', a.ghost ? 'true' : 'false');
+      this.set(rect, 'data-dimmed', a.dimmed ? 'true' : 'false');
     });
 
     for (const [id, f] of this.fragments) {
@@ -339,7 +356,12 @@ export class SequenceSvgRenderer {
         this.set(g, 'data-active', s.active > 0.5 ? 'true' : 'false');
       }
       this.set(f.glow, 'opacity', s.active);
+      if (f.iteration) this.setText(f.iteration, s.iteration ? `${s.iteration.n} / ${s.iteration.of}` : '');
     }
+  }
+
+  private setText(node: Element, text: string): void {
+    if (node.textContent !== text) node.textContent = text;
   }
 
   /** Finds the diagram element under a DOM node (for tooltips and reveal-source). */

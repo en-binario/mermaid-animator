@@ -53,6 +53,7 @@ export function reduce(state: HostState, message: HostMessage): HostState {
       return { ...state, cursor: message.payload };
     case 'command':
     case 'export/ack':
+    case 'presentation/state':
       return state;
   }
 }

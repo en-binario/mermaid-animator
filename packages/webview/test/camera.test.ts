@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { autoFits, fitView, followView, limitZoomChange } from '../src/camera';
+import { autoFits, cinematicView, fitView, focusTarget, followView, limitZoomChange } from '../src/camera';
 
 const viewport = { width: 1000, height: 600 };
 
@@ -41,5 +41,43 @@ describe('followView', () => {
     expect(limitZoomChange(1, 4)).toBeCloseTo(1.6);
     expect(limitZoomChange(1, 0.1)).toBeCloseTo(0.625);
     expect(limitZoomChange(1, 1.2)).toBe(1.2);
+  });
+});
+
+describe('cinematicView', () => {
+  const viewport = { width: 800, height: 600 };
+
+  it('frames a message tightly with 48 px padding, centred', () => {
+    const target = { x: 100, y: 200, w: 160, h: 40 };
+    const v = cinematicView(target, viewport, { x: 0, y: 0, k: 2 });
+    // 800 / (160 + 96) = 3.125, capped at 2.5 and within 1.6× of 2.
+    expect(v.k).toBeCloseTo(2.5);
+    expect(v.x + (target.x + target.w / 2) * v.k).toBeCloseTo(400);
+    expect(v.y + (target.y + target.h / 2) * v.k).toBeCloseTo(300);
+  });
+
+  it('changes zoom by at most 1.6x in one move', () => {
+    const wide = { x: 0, y: 0, w: 4000, h: 100 };
+    expect(cinematicView(wide, viewport, { x: 0, y: 0, k: 1 }).k).toBeCloseTo(1 / 1.6);
+    const tiny = { x: 0, y: 0, w: 10, h: 10 };
+    expect(cinematicView(tiny, viewport, { x: 0, y: 0, k: 1 }).k).toBeCloseTo(1.6);
+  });
+});
+
+describe('focusTarget', () => {
+  const participants = [
+    { id: 'A', header: { x: 0, y: 0, w: 100, h: 40 } },
+    { id: 'B', header: { x: 200, y: 0, w: 100, h: 40 } },
+    { id: 'C', header: { x: 400, y: 0, w: 120, h: 40 } },
+  ];
+  const step = { x: 50, y: 300, w: 200, h: 40 };
+
+  it('spans the focused columns over the step rows', () => {
+    expect(focusTarget(step, participants, ['A', 'C'])).toEqual({ x: 0, y: 300, w: 520, h: 40 });
+  });
+
+  it('falls back to the step bounds without known participants', () => {
+    expect(focusTarget(step, participants, undefined)).toBe(step);
+    expect(focusTarget(step, participants, ['Z'])).toBe(step);
   });
 });

@@ -18,6 +18,9 @@ describe('host messages', () => {
     hostMessage('command', { action: 'goToStep', args: { step: 3 } }),
     hostMessage('editor/cursor', { line: 3, character: 2 }),
     hostMessage('export/ack', { path: '/tmp/a.png' }),
+    hostMessage('command', { action: 'seekToLine', args: { line: 17 } }),
+    hostMessage('command', { action: 'nextChapter' }),
+    hostMessage('presentation/state', { on: false }),
   ];
 
   it.each(valid)('accepts $type', (message) => {
@@ -64,6 +67,7 @@ describe('webview messages', () => {
     webviewMessage('source/reveal', { range: { startLine: 1, startCol: 0, endLine: 1, endCol: 5 } }),
     webviewMessage('export/data', { format: 'png', suggestedName: 'a.png', data: new Uint8Array([1, 2]), index: 0, total: 1 }),
     webviewMessage('clipboard/fallback', { reason: 'denied' }),
+    webviewMessage('presentation/toggle', { on: true }),
   ])('accepts $type', (message) => {
     expect(validateWebviewMessage(message).ok).toBe(true);
   });
@@ -74,6 +78,7 @@ describe('webview messages', () => {
     ['state that is not an object', { v: 1, type: 'state/changed', payload: [] }],
     ['host-only type', { v: 1, type: 'init', payload: {} }],
     ['export without bytes', { v: 1, type: 'export/data', payload: { format: 'png', suggestedName: 'a', data: 'AAA', index: 0, total: 1 } }],
+    ['presentation toggle without a flag', { v: 1, type: 'presentation/toggle', payload: {} }],
     ['bad source ranges', { v: 1, type: 'state/changed', payload: { sourceRanges: [{ startLine: 'x' }] } }],
   ])('rejects %s', (_label, value) => {
     expect(validateWebviewMessage(value).ok).toBe(false);

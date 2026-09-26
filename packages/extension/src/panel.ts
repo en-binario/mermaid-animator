@@ -31,6 +31,8 @@ export interface PanelEvents {
   onDiagram(panel: AnimatorPanel): void;
   onDispose(panel: AnimatorPanel): void;
   onActive(panel: AnimatorPanel, active: boolean): void;
+  /** The webview asked to enter or leave the presentation layout. */
+  onPresentation(panel: AnimatorPanel, on: boolean): Promise<void>;
 }
 
 const toRange = (r: DocumentRange) => new vscode.Range(r.startLine, r.startCol, r.endLine, r.endCol);
@@ -52,6 +54,8 @@ export class AnimatorPanel implements vscode.Disposable {
   private binding: DiagramBinding;
   private diagram: DiagramInfo | undefined;
   lastRanges: DocumentRange[] = [];
+  /** Whether this panel is presenting (confirmed to the webview with `presentation/state`). */
+  presenting = false;
   private disposed = false;
 
   constructor(
@@ -128,6 +132,12 @@ export class AnimatorPanel implements vscode.Disposable {
     this.postEmitter.fire(message);
   }
 
+  /** Tells the webview its presentation ended (another panel started presenting). */
+  endPresentation(): void {
+    this.presenting = false;
+    this.post(hostMessage('presentation/state', { on: false }));
+  }
+
   command(action: CommandAction, args?: Record<string, unknown>): void {
     this.post(hostMessage('command', { action, args }));
   }
@@ -186,6 +196,11 @@ export class AnimatorPanel implements vscode.Disposable {
         if (choice === save) this.command('exportPng', { scale: 2 });
         break;
       }
+      case 'presentation/toggle':
+        await this.events.onPresentation(this, message.payload.on);
+        this.presenting = message.payload.on;
+        this.post(hostMessage('presentation/state', { on: message.payload.on }));
+        break;
     }
   }
 
@@ -290,6 +305,13 @@ export class AnimatorPanel implements vscode.Disposable {
     const d = this.diagram;
     if (!d || line < d.contentStartLine || line >= d.contentEndLine) return;
     this.post(hostMessage('editor/cursor', { line, character }));
+  }
+
+  /** Seeks playback to the step containing a document line inside the bound diagram. */
+  seekToLine(line: number): void {
+    const d = this.diagram;
+    if (!d || line < d.contentStartLine || line >= d.contentEndLine) return;
+    this.command('seekToLine', { line });
   }
 
   dispose(): void {

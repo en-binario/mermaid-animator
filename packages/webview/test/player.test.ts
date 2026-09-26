@@ -162,3 +162,83 @@ describe('camera hold', () => {
     expect(player.time).toBe(100);
   });
 });
+
+describe('A-B loop', () => {
+  it('repeats the range during autoplay and can be cleared', () => {
+    const { player, timeline } = setup('A->>B: 1\nB->>A: 2\nA->>B: 3\nB->>A: 4');
+    player.goTo(1);
+    player.markRange('from');
+    player.goTo(3);
+    player.markRange('to');
+    expect(player.snapshot().range).toEqual({ from: 0, to: 2 });
+    player.goTo(1);
+    player.play();
+    let wrapped = false;
+    for (let i = 0; i < 400 && !wrapped; i++) {
+      const before = player.time;
+      player.tick(16);
+      if (player.time < before) wrapped = true;
+    }
+    expect(wrapped).toBe(true);
+    expect(player.time).toBe(stepEnd(timeline, 0));
+    player.clearRange();
+    expect(player.snapshot().range).toBeUndefined();
+  });
+
+  it('orders the bounds when set backwards', () => {
+    const { player } = setup('A->>B: 1\nB->>A: 2\nA->>B: 3');
+    player.goTo(3);
+    player.markRange('from');
+    player.goTo(1);
+    player.markRange('to');
+    expect(player.snapshot().range).toEqual({ from: 0, to: 2 });
+  });
+});
+
+describe('focused playback skip set', () => {
+  it('steps over skipped steps in both directions', () => {
+    const { player, timeline } = setup('A->>B: 1\nB->>C: 2\nC->>D: 3\nA->>B: 4');
+    player.setSkip(new Set([1, 2]));
+    player.next();
+    run(player);
+    expect(player.time).toBe(stepEnd(timeline, 0));
+    player.next();
+    run(player);
+    expect(player.time).toBe(stepEnd(timeline, 3));
+    player.previous();
+    run(player);
+    expect(player.time).toBe(stepEnd(timeline, 0));
+  });
+
+  it('jumps over skipped steps during autoplay', () => {
+    const { player, timeline } = setup('A->>B: 1\nB->>C: 2\nC->>D: 3\nA->>B: 4');
+    player.setSkip(new Set([1, 2]));
+    player.goTo(1);
+    player.play();
+    const visited = new Set<number>();
+    for (let i = 0; i < 2000 && player.isPlaying; i++) {
+      player.tick(16);
+      const t = player.time;
+      timeline.starts.forEach((start, k) => {
+        if (t > start && t < stepEnd(timeline, k)) visited.add(k);
+      });
+    }
+    expect(visited.has(1)).toBe(false);
+    expect(visited.has(2)).toBe(false);
+    expect(visited.has(3)).toBe(true);
+  });
+});
+
+describe('gate', () => {
+  it('waits at rest before a gated step, even at the beginning', () => {
+    const { player } = setup('A->>B: 1\nB->>A: 2');
+    player.setGate((k) => k === 0);
+    player.play();
+    expect(player.isPlaying).toBe(false);
+    player.next();
+    expect(player.time).toBe(0);
+    player.setGate(undefined);
+    player.play();
+    expect(player.isPlaying).toBe(true);
+  });
+});

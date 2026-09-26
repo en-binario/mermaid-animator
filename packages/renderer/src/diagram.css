@@ -108,3 +108,15 @@
 
 /* Generic (Mermaid-rendered) diagrams: keep the flat Ink & Ivory look. */
 .ma-generic * { filter: none !important; }
+
+/* Loop iteration counter (M2a) */
+.ma-fragment-iteration { fill: var(--ma-brass); font-size: var(--ma-type-caption); font-weight: 600; font-variant-numeric: tabular-nums; paint-order: stroke fill; stroke: var(--ma-canvas); stroke-width: 4px; stroke-linejoin: round; }
+
+/* Focus (M2a, spec exploration): dimmed labels switch to tertiary ink; focused lifelines strengthen. */
+.ma-message[data-dimmed='true'] .ma-message-label,
+.ma-note[data-dimmed='true'] .ma-note-text { fill: var(--ma-ink-3); }
+.ma-lifeline-glow[data-focused='true'] { stroke-width: 1.5; }
+.ma-participant[data-focused='true'] .ma-participant-box { stroke: var(--ma-accent); stroke-width: var(--ma-stroke-active); }
+[data-palette$='-hc'] .ma-message[data-dimmed='true'] { opacity: 1; }
+[data-palette$='-hc'] .ma-message[data-dimmed='true'] .ma-message-line { stroke-dasharray: 1 3; }
+[data-palette$='-hc'] .ma-activation[data-dimmed='true'] { opacity: 1; stroke-dasharray: 1 3; fill: none; }

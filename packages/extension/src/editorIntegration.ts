@@ -112,13 +112,29 @@ export class DiagramDiagnostics implements vscode.Disposable {
 }
 
 /** Forwards cursor moves in a bound document to its panels (`sync.cursorToStep`). */
+let followTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * Editor → step (spec source-sync): with `click`, a mouse click on a statement line seeks its
+ * panels to that step; with `follow`, every cursor move does so after 120 ms; `off` never moves playback.
+ */
 export function forwardCursor(event: vscode.TextEditorSelectionChangeEvent, panels: PanelManager): void {
   const mode = config<'off' | 'click' | 'follow'>('sync.cursorToStep', 'click');
   if (mode === 'off') return;
   if (mode === 'click' && event.kind !== vscode.TextEditorSelectionChangeKind.Mouse) return;
   const position = event.selections[0]?.active;
   if (!position) return;
-  for (const panel of panels.all()) if (panel.uri.toString() === event.textEditor.document.uri.toString()) panel.cursor(position.line, position.character);
+  const targets = panels.all().filter((panel) => panel.uri.toString() === event.textEditor.document.uri.toString());
+  const seek = () => {
+    for (const panel of targets) {
+      panel.cursor(position.line, position.character);
+      panel.seekToLine(position.line);
+    }
+  };
+  if (followTimer) clearTimeout(followTimer);
+  followTimer = undefined;
+  if (mode === 'follow') followTimer = setTimeout(seek, 120);
+  else seek();
 }
 
 export type { AnimatorPanel };

@@ -67,3 +67,17 @@ The webview SHALL send exported files to the host as `export/data` messages carr
 #### Scenario: PNG export
 - **WHEN** the webview sends `export/data` for a PNG and the user confirms the save dialog
 - **THEN** the host writes the bytes to the chosen file and sends `export/ack` with its path
+
+### Requirement: Presentation layout messages
+The webview SHALL request presentation start and stop with `presentation/toggle`, and the host SHALL perform the editor layout changes and confirm with `presentation/state` so both sides agree when presentation ends by other means.
+
+#### Scenario: Leave by Escape
+- **WHEN** the presenter presses `Esc` in the panel
+- **THEN** the webview sends `presentation/toggle` with `on: false`, the host restores the layout and replies with `presentation/state` `false`
+
+### Requirement: Seek command with a source line
+The host SHALL send `command` with action `seekToLine` and the document line when the editor cursor should move playback (see `source-sync`), and the webview SHALL resolve the line to a step.
+
+#### Scenario: Seek to line
+- **WHEN** the host sends `seekToLine` with line 17
+- **THEN** the webview seeks to the step whose sources include line 17, or leaves playback unchanged if none does

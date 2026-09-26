@@ -1,0 +1,12 @@
+sequenceDiagram
+    participant W as Web App
+    participant P as Payments
+    %% @ca
+    %% @animator camera=
+    %% @focus 
+    %% @branch 
+    alt valid
+        W->>P: ok
+    else invalid
+        W->>P: no
+    end

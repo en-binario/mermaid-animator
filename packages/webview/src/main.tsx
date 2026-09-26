@@ -6,6 +6,7 @@ import { effect, signal } from '@preact/signals';
 import { resolvePalette } from '@mermaid-animator/renderer';
 import { PROTOCOL_VERSION, WEBVIEW_STRINGS, webviewMessage, type CommandAction, type HostMessage } from '@mermaid-animator/protocol';
 import { App, type ExportAction, type UiState } from './App';
+import type { InspectorSection } from './Inspector';
 import { DiagramController } from './controller';
 import { Host } from './host';
 import { SPEEDS } from './player';
@@ -22,11 +23,103 @@ const t = (key: string, ...args: (string | number)[]) => format({ ...WEBVIEW_STR
 const reducedMotion = () => resolveReduceMotion(hostState.value.reduceMotionPreference, osPrefersReduced.value);
 
 // -- transient UI state -------------------------------------------------------------------------------------
-const uiFlags = signal<Omit<UiState, 'set'>>({ shortcuts: false, exportMenu: false, goTo: false, speedMenu: false });
-let toastTimer: ReturnType<typeof setTimeout> | undefined;
-function setUi(patch: Partial<Omit<UiState, 'set'>>): void {
-  uiFlags.value = { ...uiFlags.value, ...patch };
+/** UI preferences persisted with the panel's webview state (survive hide/show and reload). */
+interface PersistedUi {
+  sections?: InspectorSection[];
+  inspectorWide?: boolean;
 }
+interface PanelState {
+  uri?: string;
+  diagramIndex?: number;
+  ui?: PersistedUi;
+}
+const persisted: PersistedUi = host.getState<PanelState>()?.ui ?? {};
+const WIDE = 880;
+const uiFlags = signal<Omit<UiState, 'set'>>({
+  shortcuts: false,
+  exportMenu: false,
+  goTo: false,
+  speedMenu: false,
+  wide: window.innerWidth >= WIDE,
+  inspectorWide: persisted.inspectorWide ?? true,
+  inspectorSheet: false,
+  sections: persisted.sections ?? [],
+  search: false,
+  transcript: false,
+  presenting: false,
+  titleCard: false,
+  blank: false,
+  laser: false,
+  idle: false,
+});
+let toastTimer: ReturnType<typeof setTimeout> | undefined;
+let inspectorPreference = persisted.inspectorWide !== undefined;
+function setUi(patch: Partial<Omit<UiState, 'set'>>): void {
+  const before = uiFlags.value;
+  uiFlags.value = { ...before, ...patch };
+  if (patch.sections !== undefined || patch.inspectorWide !== undefined) {
+    if (patch.inspectorWide !== undefined) inspectorPreference = true;
+    const next = uiFlags.value;
+    host.setState({ ...(host.getState<PanelState>() ?? {}), ui: { sections: next.sections, inspectorWide: next.inspectorWide } });
+  }
+}
+new ResizeObserver(() => {
+  const wide = window.innerWidth >= WIDE;
+  if (wide !== uiFlags.value.wide) setUi({ wide, inspectorSheet: false });
+}).observe(document.documentElement);
+
+/** `D`: toggles the inspector beside the canvas on wide panels, or as an overlay sheet on narrow ones. */
+function toggleInspector(): void {
+  const ui = uiFlags.value;
+  if (ui.wide) setUi({ inspectorWide: !ui.inspectorWide });
+  else setUi({ inspectorSheet: !ui.inspectorSheet });
+}
+
+// -- presentation -------------------------------------------------------------------------------------------------
+let titleTimer: ReturnType<typeof setTimeout> | undefined;
+let idleTimer: ReturnType<typeof setTimeout> | undefined;
+
+function armIdle(): void {
+  if (idleTimer) clearTimeout(idleTimer);
+  if (uiFlags.value.idle) setUi({ idle: false });
+  idleTimer = setTimeout(() => uiFlags.value.presenting && setUi({ idle: true }), 2000);
+}
+
+function startPresentation(): void {
+  const c = controller.value;
+  if (!c || uiFlags.value.presenting) return;
+  setUi({ presenting: true, titleCard: true, blank: false, laser: false, inspectorSheet: false, search: false, transcript: false, shortcuts: false, exportMenu: false, goTo: false, speedMenu: false });
+  c.setPresenting(true);
+  host.post(webviewMessage('presentation/toggle', { on: true }));
+  if (titleTimer) clearTimeout(titleTimer);
+  titleTimer = setTimeout(() => setUi({ titleCard: false }), 1600);
+  armIdle();
+}
+
+function stopPresentation(notifyHost = true): void {
+  if (!uiFlags.value.presenting) return;
+  if (titleTimer) clearTimeout(titleTimer);
+  if (idleTimer) clearTimeout(idleTimer);
+  setUi({ presenting: false, titleCard: false, blank: false, laser: false, idle: false });
+  controller.value?.setPresenting(false);
+  if (notifyHost) host.post(webviewMessage('presentation/toggle', { on: false }));
+}
+
+function togglePresentation(): void {
+  if (uiFlags.value.presenting) stopPresentation();
+  else startPresentation();
+}
+
+window.addEventListener('pointermove', () => {
+  if (uiFlags.value.presenting) armIdle();
+});
+
+// Default inspector visibility follows `display.showInspector` until the user toggles it.
+effect(() => {
+  const c = controller.value;
+  const show = c?.effective.value.showInspector;
+  if (show !== undefined && !inspectorPreference && show !== uiFlags.value.inspectorWide) uiFlags.value = { ...uiFlags.value, inspectorWide: show };
+});
 function toast(text: string): void {
   setUi({ toast: text });
   if (toastTimer) clearTimeout(toastTimer);
@@ -44,7 +137,7 @@ effect(() => {
 
 effect(() => {
   const doc = hostState.value.document;
-  if (doc) host.setState({ uri: doc.uri, diagramIndex: doc.diagramIndex ?? 0 });
+  if (doc) host.setState({ ...(host.getState<PanelState>() ?? {}), uri: doc.uri, diagramIndex: doc.diagramIndex ?? 0 });
 });
 
 window.addEventListener('error', (event) => host.log('error', `${event.message} (${event.filename}:${event.lineno})`));
@@ -133,28 +226,84 @@ function command(action: CommandAction, args?: Record<string, unknown>): void {
       return c.revealCurrent();
     case 'fit':
       return c.fit();
+    case 'seekToLine':
+      if (typeof args?.line === 'number') c.seekToLine(args.line);
+      return;
+    case 'nextChapter':
+      return c.chapter(1);
+    case 'previousChapter':
+      return c.chapter(-1);
+    case 'toggleTranscript':
+      return setUi({ transcript: !uiFlags.value.transcript });
+    case 'toggleInspector':
+      return toggleInspector();
+    case 'search':
+      return setUi({ search: true });
+    case 'startPresentation':
+      return startPresentation();
+    case 'stopPresentation':
+      return stopPresentation();
   }
 }
+
+function markRange(bound: 'from' | 'to'): void {
+  const p = controller.value?.playback;
+  if (!p) return;
+  p.markRange(bound);
+  const range = p.snapshot().range;
+  if (range?.from !== undefined && range.to !== undefined) toast(t('range.set', range.from + 1, range.to + 1));
+  else if (range?.from !== undefined) toast(t('range.from', range.from + 1));
+}
+
+window.addEventListener('keyup', (e) => {
+  if (e.key.toLowerCase() === 'z' && uiFlags.value.laser) setUi({ laser: false });
+});
 
 window.addEventListener('keydown', (e) => {
   const target = e.target as HTMLElement | null;
   if (target && (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA')) return;
-  if (e.ctrlKey || e.metaKey) return; // leave editor keybindings alone
   const c = controller.value;
   const ui = uiFlags.value;
+  // Ctrl/Cmd+F opens search; every other chord is left to editor keybindings.
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && !e.shiftKey && !e.altKey) {
+    if (c?.stepList.value.length) {
+      e.preventDefault();
+      setUi({ search: true });
+    }
+    return;
+  }
+  if (e.ctrlKey || e.metaKey) return;
   if (e.key === 'Escape') {
-    setUi({ shortcuts: false, exportMenu: false, goTo: false, speedMenu: false });
+    const overlays = ui.shortcuts || ui.exportMenu || ui.goTo || ui.speedMenu || ui.search || ui.inspectorSheet;
+    if (overlays) setUi({ shortcuts: false, exportMenu: false, goTo: false, speedMenu: false, search: false, inspectorSheet: false });
+    else if (ui.presenting) stopPresentation();
+    else c?.clearFocus();
     return;
   }
   if (!c) return;
   const p = c.playback;
+  // Any key dismisses the presentation cards, then acts as usual (spec presentation-mode).
+  if (ui.presenting && ui.titleCard) setUi({ titleCard: false });
+  if (ui.presenting && c.chapterCard.value && e.key !== 'Shift') c.dismissChapterCard();
+  if (e.shiftKey && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+    e.preventDefault();
+    c.chapter(e.key === 'ArrowRight' ? 1 : -1);
+    return;
+  }
+  if (e.shiftKey && (e.key === 'I' || e.key === 'O')) {
+    e.preventDefault();
+    p.clearRange();
+    toast(t('range.cleared'));
+    return;
+  }
   const speedStep = (dir: number) => {
     const i = SPEEDS.indexOf(p.snapshot().speed as (typeof SPEEDS)[number]);
     const next = SPEEDS[Math.max(0, Math.min(SPEEDS.length - 1, (i < 0 ? 3 : i) + dir))];
     if (next) p.setSpeed(next);
   };
+  const presenting = ui.presenting;
   const handled: Record<string, () => void> = {
-    ' ': () => p.toggle(),
+    ' ': () => (presenting ? p.next() : p.toggle()),
     k: () => p.toggle(),
     ArrowRight: () => p.next(),
     ArrowLeft: () => p.previous(),
@@ -174,6 +323,19 @@ window.addEventListener('keydown', (e) => {
     c: () => c.toggleFollow(),
     e: () => setUi({ exportMenu: !ui.exportMenu }),
     '?': () => setUi({ shortcuts: !ui.shortcuts }),
+    i: () => markRange('from'),
+    o: () => markRange('to'),
+    d: () => toggleInspector(),
+    r: () => c.stepList.value.length && setUi({ transcript: !ui.transcript }),
+    '/': () => c.stepList.value.length && setUi({ search: true }),
+    p: () => togglePresentation(),
+    ...(presenting
+      ? {
+          b: () => setUi({ blank: !ui.blank }),
+          '.': () => setUi({ blank: !ui.blank }),
+          z: () => !e.repeat && setUi({ laser: true }),
+        }
+      : {}),
   };
   const action = handled[e.key.length === 1 ? e.key.toLowerCase() : e.key] ?? handled[e.key];
   if (!action) return;
@@ -210,6 +372,10 @@ function handle(message: HostMessage): void {
     case 'export/ack':
       toast(t('export.done', message.payload.path.split(/[\\/]/).pop() ?? message.payload.path));
       break;
+    case 'presentation/state':
+      // The host left the presentation layout by other means (or refused it): follow.
+      if (!message.payload.on) stopPresentation(false);
+      break;
     case 'init':
       break;
   }
@@ -237,6 +403,9 @@ function AppRoot() {
       mountCanvas={mountCanvas}
       onSelectDiagram={(index) => host.post(webviewMessage('diagram/select', { index }))}
       onExport={(a) => void runExport(a)}
+      onTogglePresentation={togglePresentation}
+      onToggleInspector={toggleInspector}
+      reducedMotion={reducedMotion()}
       ui={ui}
     />
   );
