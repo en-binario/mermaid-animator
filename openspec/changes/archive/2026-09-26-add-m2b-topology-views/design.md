@@ -48,3 +48,10 @@ The webview sends `layout/save { key, positions }` (debounced 500 ms after a dra
 - [ELK layout latency for large graphs] → computed in the worker (NFR-PERF-08: < 300 ms for 50 nodes); a hairline progress indicator while pending; the previous layout stays visible.
 - [Morph cost with hundreds of messages] → chords beyond 300 are faded rather than individually interpolated.
 - [EPL-2.0 licence] → used unmodified via its published worker file; notice and licence text shipped in `ThirdPartyNotices.txt`.
+
+## Implementation notes
+
+- **Layout latency (NFR-PERF-08).** Measured in the webview harness (Chromium, production CSP) with `fixtures/demo/fifty-services.mmd` (50 participants, 79 messages, `layered`, LR) via the `ma:topology-layout` performance measure: warm layouts **148–221 ms** (5 runs after live edits) — within the 300 ms budget. The very first layout took **794 ms** because it includes loading the topology chunk and starting the ELK worker (1.5 MB script); to keep that off the click path the controller starts the layout in the background as soon as the pointer or focus reaches the view switcher.
+- **Edge routes.** ELK's routes are used as given only for `orthogonal` edges (polylines). Curved and straight edges are routed geometrically from the node boxes in `core` (`routeEdges`), which also offsets opposite pairs and merged return lanes and draws self-call loops — ELK's spline control points would not accommodate the lanes, and the same router serves the `force` and `manual` layouts.
+- **Split orientation** follows the panel width (≥ 1100 px → columns), not the canvas width beside the inspector, as the spec states.
+- **Manual layout.** Nodes without a stored position take their layered position; the first drag stores every node's position so the arrangement stays stable afterwards.

@@ -8,9 +8,11 @@ import {
   type BranchChoice, type CompiledDiagram, type Diagnostic, type FragmentInfo, type Rect, type SequenceLayout, type Step,
 } from '@mermaid-animator/core';
 import { webviewMessage, type DocumentRange, type WebviewSettings } from '@mermaid-animator/protocol';
-import { createCanvasMeasure, effectiveDisplay, prepareScene, sceneAt, SequenceSvgRenderer, SVG_NS, type SceneModel } from '@mermaid-animator/renderer';
+import { createCanvasMeasure, EASE, effectiveDisplay, morphAt, MORPH_FADE_MS, MORPH_MS, MorphRenderer, prepareScene, sceneAt, SequenceSvgRenderer, SVG_NS, type SceneModel } from '@mermaid-animator/renderer';
 import { announcement } from './announce';
-import { autoFits, Camera, cinematicView, fitView, focusTarget, followView, type Viewport } from './camera';
+import { autoFits, Camera, cinematicView, fitView, focusTarget, followView, type View, type Viewport } from './camera';
+import { Minimap } from './minimap';
+import { TopologyView } from './topology/view';
 import { chapterTarget, deriveChapters, focusSkipSet, stepInvolves, stepText, type Chapter } from './narrative';
 import { buildSearchIndex, type SearchEntry } from './search';
 import { Player, type PlayerSnapshot } from './player';
@@ -35,6 +37,31 @@ export interface TooltipInfo {
 }
 
 const EMPTY_TIMELINE = { starts: [], transitions: [], settles: [], dwells: [], holds: [], duration: 0 };
+
+export type ViewKind = 'sequence' | 'topology' | 'split';
+type CameraMode = 'fit' | 'follow' | 'cinematic' | 'manual';
+
+/** One drawing surface with its own camera (spec split-view: independent cameras). */
+interface CameraSlot {
+  kind: 'sequence' | 'topology';
+  camera: Camera;
+  size(): Viewport;
+  content(): Rect;
+  stepBounds(step: number): Rect | undefined;
+  /** Frame for Cinematic mode, honouring `@focus`. */
+  cinematicTarget(step: number, bounds: Rect): Rect;
+  mode: CameraMode;
+}
+
+export interface EdgeCard {
+  x: number;
+  y: number;
+  title: string;
+  items: { id: string; text: string; step?: number }[];
+}
+
+/** Split view lays the slots out in columns from this width (spec split-view). */
+const SPLIT_COLUMNS = 1100;
 
 export class DiagramController {
   readonly svg: SVGSVGElement;
@@ -65,6 +92,13 @@ export class DiagramController {
   readonly effective = signal<AnimatorSettings>(resolveSettings({ themeMode: 'auto' }));
   /** A chapter card to show while presenting (spec presentation-mode). */
   readonly chapterCard = signal<{ n: number; title: string } | undefined>(undefined);
+  /** Current view (spec view-switching). */
+  readonly view = signal<ViewKind>('sequence');
+  /** Whether this diagram offers the topology and split views (native sequences only). */
+  readonly canSwitch = signal(false);
+  /** Messages of the hovered topology edge (spec topology-view). */
+  readonly edgeCard = signal<EdgeCard | undefined>(undefined);
+  readonly topologyView: TopologyView;
 
   private readonly measure = createCanvasMeasure();
   private readonly camera: Camera;
@@ -81,7 +115,22 @@ export class DiagramController {
   private lastFrame = 0;
   private lastStep = -2;
   private lastAnnounced = -2;
-  private cameraMode: 'fit' | 'follow' | 'cinematic' | 'manual' = 'fit';
+  private cameraMode: CameraMode = 'fit';
+  private readonly container: HTMLElement;
+  private readonly views: HTMLDivElement;
+  private readonly seqSlotEl: HTMLDivElement;
+  private readonly seqSlot: CameraSlot;
+  private readonly topoSlot: CameraSlot;
+  private readonly seqMinimap: Minimap;
+  private readonly morphSvg: SVGSVGElement;
+  private readonly morphViewport: SVGGElement;
+  private readonly morphRenderer: MorphRenderer;
+  private morph: { from: 'sequence' | 'topology'; to: 'sequence' | 'topology'; start: number; fade: boolean; fromView: View; toView: View } | undefined;
+  private topologyFitted = false;
+  private highlightSeq = new Set<string>();
+  private highlightTopo = new Set<string>();
+  private edgeCardTimer: ReturnType<typeof setTimeout> | undefined;
+  private edgeCardKey: string | undefined;
   /** Branch choices from the inspector and `ask` chips, kept for the panel's lifetime. */
   private branchChoices: Record<string, BranchChoice> = {};
   private presenting = false;
@@ -95,13 +144,28 @@ export class DiagramController {
     private readonly host: Host,
     private readonly t: Translate,
   ) {
+    this.container = container;
+    // Slots: sequence and topology drawings, plus a transient layer for the morph (M2b D4/D5).
+    this.views = document.createElement('div');
+    this.views.className = 'ma-views';
+    this.views.dataset.view = 'sequence';
+    container.appendChild(this.views);
+    this.seqSlotEl = document.createElement('div');
+    this.seqSlotEl.className = 'ma-slot ma-slot--sequence';
+    this.views.appendChild(this.seqSlotEl);
     this.svg = document.createElementNS(SVG_NS, 'svg');
     this.svg.setAttribute('class', 'ma-svg');
     this.svg.setAttribute('role', 'img');
     this.viewport = document.createElementNS(SVG_NS, 'g');
     this.viewport.setAttribute('class', 'ma-viewport');
     this.svg.appendChild(this.viewport);
-    container.appendChild(this.svg);
+    this.seqSlotEl.appendChild(this.svg);
+    this.morphSvg = document.createElementNS(SVG_NS, 'svg');
+    this.morphSvg.setAttribute('class', 'ma-svg ma-morph-layer');
+    this.morphSvg.setAttribute('aria-hidden', 'true');
+    this.morphViewport = document.createElementNS(SVG_NS, 'g');
+    this.morphSvg.appendChild(this.morphViewport);
+    this.morphRenderer = new MorphRenderer(this.morphViewport);
 
     this.player = new Player(EMPTY_TIMELINE, { speed: 1, loop: false, onEnd: 'stop', reverse: 'animate', snap: true });
     // A pending `ask` branch choice waits at rest until a chip is chosen (spec step-compilation).
@@ -110,35 +174,85 @@ export class DiagramController {
       this.snapshot.value = s;
       this.requestFrame();
     });
-    this.camera = new Camera(this.svg, this.viewport, {
-      onUserMove: () => {
-        if (this.cameraMode === 'follow' || this.cameraMode === 'cinematic') this.followSuspended.value = true;
+    const onUserMove = () => {
+      if (this.cameraMode === 'follow' || this.cameraMode === 'cinematic') this.followSuspended.value = true;
+      this.requestFrame();
+    };
+    this.camera = new Camera(this.svg, this.viewport, { onUserMove, onChange: () => this.requestFrame() });
+    this.seqSlot = {
+      kind: 'sequence',
+      camera: this.camera,
+      size: () => this.viewportSize,
+      content: () => this.contentBounds(),
+      stepBounds: (step) => this.stepBounds(step),
+      cinematicTarget: (step, bounds) => focusTarget(bounds, this.sequence?.layout.participants ?? [], this.steps()[step]?.focus),
+      mode: 'fit',
+    };
+    this.seqMinimap = new Minimap(
+      this.seqSlotEl,
+      {
+        centreOn: (p) => this.camera.userSet({ ...this.camera.view, x: this.viewportSize.width / 2 - p.x * this.camera.view.k, y: this.viewportSize.height / 2 - p.y * this.camera.view.k }),
+        panBy: (dx, dy) => this.camera.userSet({ ...this.camera.view, x: this.camera.view.x - dx * this.camera.view.k, y: this.camera.view.y - dy * this.camera.view.k }),
       },
-      onChange: () => undefined,
+      t('minimap.label'),
+    );
+
+    this.topologyView = new TopologyView(this.views, {
+      measure: this.measure,
+      onUserMove,
+      requestFrame: () => this.requestFrame(),
+      onSave: (positions) => this.host.post(webviewMessage('layout/save', { key: this.sequence?.compiled.id ?? '', positions })),
+      reducedMotion: () => this.reducedMotion,
+      minimapLabel: t('minimap.label'),
     });
+    const topo = this.topologyView;
+    this.topoSlot = {
+      kind: 'topology',
+      camera: topo.camera,
+      size: () => topo.size,
+      content: () => topo.content(),
+      stepBounds: (step) => topo.stepBounds(step, this.sequence?.compiled.sequence?.compiled),
+      cinematicTarget: (step, bounds) => topo.focusBounds(this.steps()[step]?.focus) ?? bounds,
+      mode: 'fit',
+    };
+    this.views.appendChild(this.morphSvg);
 
     this.resizeObserver = new ResizeObserver(() => {
-      const rect = container.getBoundingClientRect();
-      this.viewportSize = { width: rect.width, height: rect.height };
-      if (this.cameraMode === 'fit') this.fit(false);
-      else if (this.cameraMode === 'cinematic' && !this.followSuspended.value) this.cinematicStep(this.snapshot.value.displayStep - 1, false, performance.now());
+      const rect = this.seqSlotEl.getBoundingClientRect();
+      if (rect.width && rect.height) this.viewportSize = { width: rect.width, height: rect.height };
+      this.reframe(this.seqSlot);
     });
-    this.resizeObserver.observe(container);
+    this.resizeObserver.observe(this.seqSlotEl);
+    new ResizeObserver(() => this.reframe(this.topoSlot)).observe(topo.el);
+    // Columns or rows follow the panel's width (spec split-view), not the canvas beside the inspector.
+    new ResizeObserver(() => {
+      this.views.dataset.split = document.documentElement.clientWidth >= SPLIT_COLUMNS ? 'columns' : 'rows';
+    }).observe(document.documentElement);
     const rect = container.getBoundingClientRect();
     this.viewportSize = { width: rect.width || 800, height: rect.height || 600 };
+    this.views.dataset.split = document.documentElement.clientWidth >= SPLIT_COLUMNS ? 'columns' : 'rows';
 
     document.addEventListener('visibilitychange', () => this.player.hold('hidden', document.visibilityState === 'hidden'));
-    this.svg.addEventListener('pointerenter', () => this.player.hold('hover', this.settings.pauseOnHover));
-    this.svg.addEventListener('pointerleave', () => {
+    this.attachPointer(this.svg, 'sequence');
+    this.attachPointer(topo.svg, 'topology');
+  }
+
+  /** Hover, tooltips, cross-highlighting, focus clicks and Alt+double-click reveal for one slot. */
+  private attachPointer(svg: SVGSVGElement, kind: 'sequence' | 'topology'): void {
+    svg.addEventListener('pointerenter', () => this.player.hold('hover', this.settings.pauseOnHover));
+    svg.addEventListener('pointerleave', () => {
       this.player.hold('hover', false);
       this.tooltip.value = undefined;
+      if (this.hoverTimer) clearTimeout(this.hoverTimer);
+      this.setCrossHighlight(undefined, kind);
+      this.hideEdgeCardSoon();
     });
-    this.svg.addEventListener('pointermove', (event) => this.hover(event));
-    this.svg.addEventListener('dblclick', (event) => {
+    svg.addEventListener('pointermove', (event) => this.hover(event, kind));
+    svg.addEventListener('dblclick', (event) => {
       if (event.altKey) this.revealElement(event.target);
     });
-    // Participant focus: click a header; Ctrl/Cmd+click adds; click empty canvas clears.
-    this.svg.addEventListener('click', (event) => {
+    // Participant focus: click a header or node; Ctrl/Cmd+click adds; click empty canvas clears.
+    svg.addEventListener('click', (event) => {
       if (event.altKey) return;
       const ref = SequenceSvgRenderer.elementAt(event.target);
       if (ref?.kind === 'participant') this.toggleFocus(ref.id, event.ctrlKey || event.metaKey);
@@ -148,8 +262,9 @@ export class DiagramController {
 
   // -- loading -------------------------------------------------------------------------------------------------
 
-  async load(source: string, origin: { line: number; character: number }, settings: WebviewSettings, reducedMotion: boolean): Promise<void> {
+  async load(source: string, origin: { line: number; character: number }, settings: WebviewSettings, reducedMotion: boolean, layout?: Record<string, { x: number; y: number }>): Promise<void> {
     await document.fonts?.ready;
+    this.topologyView.setStored(layout);
     this.hostSettings = settings;
     this.reducedMotion = reducedMotion;
     this.origin = origin;
@@ -163,6 +278,8 @@ export class DiagramController {
     const startAt = this.settings.startAt;
     this.player.setTimeline(this.timeline(), startAt === 'end' ? count - 1 : -1);
     this.applyCameraMode(true);
+    // Initial view from `view.default` / `@animator view=` (spec view-switching), without a morph.
+    await this.setView(this.sequence ? this.settings.view : 'sequence', false);
     if (this.settings.autoplay) this.player.play();
     this.requestFrame();
   }
@@ -241,6 +358,9 @@ export class DiagramController {
       }
       this.refreshFocus();
       this.applyMatches();
+      this.canSwitch.value = true;
+      this.seqMinimap.setDrawing(this.sequenceMinimap(layout));
+      if (this.view.value !== 'sequence' || this.topologyView.hasLayout) void this.updateTopology();
       return true;
     }
 
@@ -271,8 +391,213 @@ export class DiagramController {
     this.chapters.value = [];
     this.searchIndex.value = [];
     this.title.value = recompiled.title ?? '';
+    // Generic diagrams offer only their own view.
+    this.canSwitch.value = false;
+    this.showView('sequence');
     if (preserve) this.player.setTimeline(this.generic.timeline, Math.min(previousIndex, this.generic.stepCount - 1));
     return true;
+  }
+
+  // -- views (M2b) --------------------------------------------------------------------------------------------
+
+  private topologySettings() {
+    const s = this.settings;
+    return { layout: s.topologyLayout, direction: s.direction, edgeStyle: s.edgeStyle, returnMessages: s.returnMessages, edgeWeight: s.edgeWeight };
+  }
+
+  /** Rebuilds and lays out the topology for the current sequence. */
+  private async updateTopology(): Promise<void> {
+    const seq = this.sequence?.compiled.sequence;
+    if (!seq) return;
+    await this.topologyView.update(seq.model, seq.compiled, seq.timeline, this.topologySettings());
+    if (!this.topologyFitted && this.topologyView.hasLayout) {
+      this.topologyFitted = true;
+      this.applySlotMode(this.topoSlot, true);
+    }
+    this.applyMatches();
+    this.requestFrame();
+  }
+
+  /** Clears manual topology positions (Reset Topology Layout) and lays out again. */
+  resetLayout(): void {
+    this.topologyView.resetManual();
+    void this.updateTopology();
+  }
+
+  private showView(view: ViewKind): void {
+    this.view.value = view;
+    this.views.dataset.view = view;
+  }
+
+  private slotsFor(view: ViewKind): CameraSlot[] {
+    if (view === 'sequence' || !this.sequence) return [this.seqSlot];
+    if (view === 'topology') return this.topologyView.hasLayout ? [this.topoSlot] : [];
+    return this.topologyView.hasLayout ? [this.seqSlot, this.topoSlot] : [this.seqSlot];
+  }
+
+  private visibleSlots(): CameraSlot[] {
+    return this.slotsFor(this.view.value);
+  }
+
+  /**
+   * Switches view keeping the step and focus (spec view-switching). Sequence ↔ Topology morphs for
+   * 640 ms (a 150 ms cross-fade under reduced motion); playback pauses for the morph and resumes after.
+   */
+  async setView(next: ViewKind, animate = true): Promise<void> {
+    if (!this.sequence) next = 'sequence';
+    const previous = this.view.value;
+    if (next === previous || this.morph) return;
+    if (next !== 'sequence') {
+      if (!this.topologyView.hasLayout) void this.updateTopology();
+      await this.topologyView.ready();
+      if (!this.sequence) return;
+    }
+    const pair = (previous === 'sequence' && next === 'topology') || (previous === 'topology' && next === 'sequence');
+    if (!animate || !pair) {
+      this.showView(next);
+      for (const slot of this.slotsFor(next)) this.reframe(slot);
+      this.requestFrame();
+      return;
+    }
+    const from = previous as 'sequence' | 'topology';
+    const to = next as 'sequence' | 'topology';
+    const slotOf = (k: 'sequence' | 'topology') => (k === 'sequence' ? this.seqSlot : this.topoSlot);
+    this.player.hold('morph', true);
+    this.edgeCard.value = undefined;
+    this.tooltip.value = undefined;
+    const fade = this.reducedMotion;
+    this.morph = { from, to, start: performance.now(), fade, fromView: { ...slotOf(from).camera.view }, toView: { ...slotOf(to).camera.view } };
+    this.views.dataset.morphing = fade ? 'fade' : 'morph';
+    this.showView(to);
+    this.requestFrame();
+  }
+
+  /** Starts the topology layout in the background (e.g. when the pointer reaches the view switcher). */
+  prewarmTopology(): void {
+    if (this.sequence && !this.topologyView.hasLayout && !this.topologyView.pending.value) void this.updateTopology();
+  }
+
+  toggleView(): void {
+    void this.setView(this.view.value === 'sequence' ? 'topology' : this.view.value === 'topology' ? 'sequence' : 'topology');
+  }
+
+  toggleSplit(): void {
+    void this.setView(this.view.value === 'split' ? 'sequence' : 'split');
+  }
+
+  /** Draws one morph frame; returns true while the morph runs. */
+  private renderMorph(now: number, time: number): boolean {
+    const m = this.morph;
+    const seq = this.sequence;
+    const topo = this.topologyView;
+    if (!m) return false;
+    const duration = m.fade ? MORPH_FADE_MS : MORPH_MS;
+    const p = Math.min(1, (now - m.start) / duration);
+    if (m.fade) {
+      const toSeq = m.to === 'sequence';
+      this.seqSlotEl.style.opacity = String(toSeq ? p : 1 - p);
+      topo.el.style.opacity = String(toSeq ? 1 - p : p);
+      this.renderViews(time, now, ['sequence', 'topology']);
+    } else if (seq && topo.geometry && topo.model) {
+      const display = effectiveDisplay(this.settings.display, false);
+      const geometry = topo.currentGeometry(now) ?? topo.geometry;
+      const input = {
+        layout: seq.layout,
+        sequence: sceneAt(seq.scene, time, display, { focus: this.focus.value }),
+        topology: topo.topology!,
+        geometry,
+        topologyScene: topo.scene(time, display, { focus: this.focus.value })!,
+      };
+      const forward = m.from === 'sequence';
+      const ms = p * MORPH_MS;
+      this.morphRenderer.render(morphAt(input, forward ? ms : MORPH_MS - ms));
+      const e = EASE.standard(p);
+      const a = m.fromView;
+      const b = m.toView;
+      const lerp = (x: number, y: number) => x + (y - x) * e;
+      this.morphViewport.setAttribute('transform', `translate(${lerp(a.x, b.x)} ${lerp(a.y, b.y)}) scale(${lerp(a.k, b.k)})`);
+    }
+    if (p < 1) return true;
+    this.morph = undefined;
+    this.morphRenderer.clear();
+    delete this.views.dataset.morphing;
+    this.seqSlotEl.style.removeProperty('opacity');
+    topo.el.style.removeProperty('opacity');
+    this.player.hold('morph', false);
+    this.reframe(m.to === 'sequence' ? this.seqSlot : this.topoSlot);
+    return false;
+  }
+
+  private sequenceMinimap(layout: SequenceLayout) {
+    const lines: [number, number, number, number][] = [];
+    for (const p of layout.participants) lines.push([p.x, p.lifeline.y1, p.x, p.lifeline.full]);
+    for (const m of layout.messages) {
+      const a = m.points[0]!;
+      const b = m.points[m.points.length - 1]!;
+      lines.push([a.x, a.y, b.x, b.y]);
+    }
+    return { bounds: { x: 0, y: 0, w: layout.width, h: layout.height }, lines, rects: layout.participants.map((p) => p.header) };
+  }
+
+  // -- cross-highlighting and edge cards -----------------------------------------------------------------------
+
+  /** Highlights the counterpart of a hovered element in the other view (split view only). */
+  private setCrossHighlight(ref: { kind: string; id: string } | undefined, from: 'sequence' | 'topology'): void {
+    const topology = this.topologyView.topology;
+    const seq = new Set<string>();
+    const topo = new Set<string>();
+    if (ref && topology && this.view.value === 'split') {
+      if (ref.kind === 'participant') (from === 'sequence' ? topo : seq).add(ref.id);
+      else if (ref.kind === 'message' && from === 'sequence') {
+        const key = topology.messageEdge.get(ref.id);
+        if (key) topo.add(key);
+      } else if (ref.kind === 'edge' && from === 'topology') {
+        for (const m of topology.edges.find((e) => e.key === ref.id)?.messages ?? []) seq.add(m);
+      }
+    }
+    const same = (a: Set<string>, b: Set<string>) => a.size === b.size && [...a].every((x) => b.has(x));
+    if (same(seq, this.highlightSeq) && same(topo, this.highlightTopo)) return;
+    this.highlightSeq = seq;
+    this.highlightTopo = topo;
+    this.requestFrame();
+  }
+
+  private showEdgeCard(key: string, x: number, y: number): void {
+    const topology = this.topologyView.topology;
+    const edge = topology?.edges.find((e) => e.key === key);
+    const model = this.sequence?.compiled.sequence?.model;
+    if (!edge || !model) return;
+    const labels = new Map<string, string>();
+    const visit = (nodes: typeof model.body) => {
+      for (const n of nodes) {
+        if (n.type === 'message') labels.set(n.message.id, n.message.label.replace(/\n/g, ' '));
+        else if (n.type === 'fragment') n.fragment.branches.forEach((b) => visit(b.children));
+      }
+    };
+    visit(model.body);
+    const steps = this.steps();
+    const firstStep = (id: string) => steps.find((s) => s.messages.includes(id))?.index;
+    const name = (id: string) => model.participants.find((p) => p.id === id)?.label.replace(/\n/g, ' ') ?? id;
+    this.edgeCardKey = key;
+    this.edgeCard.value = {
+      x,
+      y,
+      title: `${name(edge.from)} → ${name(edge.to)}`,
+      items: edge.messages.map((id) => ({ id, text: labels.get(id) ?? id, step: firstStep(id) })),
+    };
+  }
+
+  /** Keeps the edge card open while the pointer is over it. */
+  keepEdgeCard(): void {
+    if (this.edgeCardTimer) clearTimeout(this.edgeCardTimer);
+  }
+
+  hideEdgeCardSoon(): void {
+    if (this.edgeCardTimer) clearTimeout(this.edgeCardTimer);
+    this.edgeCardTimer = setTimeout(() => {
+      this.edgeCard.value = undefined;
+      this.edgeCardKey = undefined;
+    }, 250);
   }
 
   private showError(error: Diagnostic): void {
@@ -316,28 +641,61 @@ export class DiagramController {
     this.frame = 0;
     const dt = this.lastFrame ? Math.min(100, now - this.lastFrame) : 16;
     this.lastFrame = now;
-    const cameraMoving = this.camera.tick(now, this.viewportSize);
+    const seqMoving = this.camera.tick(now, this.viewportSize);
+    const topoMoving = this.topologyView.camera.tick(now, this.topologyView.size);
+    const cameraMoving = seqMoving || topoMoving;
     // Release the playhead once the camera has brought the step into view.
     if (!cameraMoving && this.player.waitingForCamera) this.player.hold('camera', false);
     const advancing = this.player.isActive ? this.player.tick(dt) : false;
-    this.render(now);
-    if (advancing || cameraMoving || this.player.isActive || this.player.waitingForCamera) this.requestFrame();
+    const busy = this.render(now);
+    if (advancing || cameraMoving || busy || this.player.isActive || this.player.waitingForCamera) this.requestFrame();
     else this.lastFrame = 0;
   }
 
-  private render(now: number): void {
+  /** Renders the visible views (or the morph); returns true while something still animates. */
+  private render(now: number): boolean {
     const time = this.player.time;
-    if (this.sequence) {
-      const display = effectiveDisplay(this.settings.display, this.reducedMotion && this.settings.respectReducedMotion);
-      const scene = sceneAt(this.sequence.scene, time, display, { focus: this.focus.value });
-      this.sequence.renderer.render(scene, { comet: display.indicator === 'comet' });
+    let busy = false;
+    if (this.morph) busy = this.renderMorph(now, time);
+    else if (this.sequence) {
+      const view = this.view.value;
+      busy = this.renderViews(time, now, view === 'split' ? ['sequence', 'topology'] : [view]);
     } else this.generic?.renderAt(time, this.reducedMotion);
+    this.updateMinimaps();
     const step = this.snapshot.value.displayStep - 1;
     if (step !== this.lastStep) {
       const forward = step > this.lastStep;
       this.lastStep = step;
       this.onStepChanged(step, forward, now);
     }
+    return busy;
+  }
+
+  private renderViews(time: number, now: number, kinds: ('sequence' | 'topology')[]): boolean {
+    if (!this.sequence) return false;
+    const display = effectiveDisplay(this.settings.display, this.reducedMotion && this.settings.respectReducedMotion);
+    if (kinds.includes('sequence')) {
+      const scene = sceneAt(this.sequence.scene, time, display, { focus: this.focus.value, highlight: this.highlightSeq });
+      this.sequence.renderer.render(scene, { comet: display.indicator === 'comet' });
+    }
+    if (kinds.includes('topology') && this.topologyView.hasLayout) {
+      this.topologyView.render(time, display, { focus: this.focus.value, highlight: this.highlightTopo }, now);
+      return this.topologyView.gliding;
+    }
+    return false;
+  }
+
+  private updateMinimaps(): void {
+    const step = this.snapshot.value.displayStep - 1;
+    const mode = this.settings.showMinimap;
+    const hidden = this.presenting || !!this.morph;
+    const view = this.view.value;
+    if (this.sequence) {
+      const b = step >= 0 ? this.stepBounds(step) : undefined;
+      this.seqMinimap.update(this.camera.view, this.viewportSize, b ? { x: b.x + b.w / 2, y: b.y + b.h / 2 } : undefined, mode, hidden || view === 'topology');
+    } else this.seqMinimap.update(this.camera.view, this.viewportSize, undefined, 'never', true);
+    const topo = this.topologyView;
+    if (topo.hasLayout) topo.minimap.update(topo.camera.view, topo.size, topo.marker(step, this.sequence?.compiled.sequence?.compiled), mode, hidden || view === 'sequence' || !this.sequence);
   }
 
   private onStepChanged(step: number, forward: boolean, now: number): void {
@@ -352,8 +710,11 @@ export class DiagramController {
       this.live.value = this.sequence ? announcement(current, step, count, participants, this.t) : this.t('announce.step', step + 1, count);
     }
     if (this.presenting && forward && step >= 0 && current?.chapter && this.settings.chapterCards) this.showChapterCard(step, current.chapter);
-    if (this.cameraMode === 'follow' && !this.followSuspended.value && step >= 0 && forward) this.followStep(step, now);
-    else if (this.cameraMode === 'cinematic' && !this.followSuspended.value) this.cinematicStep(step, forward, now);
+    if (this.followSuspended.value) return;
+    for (const slot of this.visibleSlots()) {
+      if (slot.mode === 'follow' && step >= 0 && forward) this.followStep(slot, step, now);
+      else if (slot.mode === 'cinematic') this.cinematicStep(slot, step, forward, now);
+    }
   }
 
   private showChapterCard(step: number, title: string): void {
@@ -387,65 +748,92 @@ export class DiagramController {
 
   private applyCameraMode(initial: boolean): void {
     const mode = this.settings.camera;
-    const content = this.contentBounds();
-    this.cameraMode = mode === 'auto' ? (autoFits(content, this.viewportSize) ? 'fit' : 'follow') : mode;
+    this.cameraMode = mode === 'auto' ? (autoFits(this.contentBounds(), this.viewportSize) ? 'fit' : 'follow') : mode;
     this.following.value = this.cameraMode === 'follow' || this.cameraMode === 'cinematic';
-    if (this.cameraMode === 'cinematic') {
-      const step = this.snapshot.value.displayStep - 1;
-      if (step >= 0) this.cinematicStep(step, false, performance.now());
-      else if (initial) this.fit(false);
+    this.applySlotMode(this.seqSlot, initial);
+    if (this.topologyView.hasLayout) this.applySlotMode(this.topoSlot, initial);
+  }
+
+  /** Resolves `auto` for a slot (the topology is usually compact) and applies the mode. */
+  private applySlotMode(slot: CameraSlot, initial: boolean): void {
+    const mode = this.presenting ? 'cinematic' : this.settings.camera;
+    slot.mode = mode === 'auto' ? (autoFits(slot.content(), slot.size()) ? 'fit' : 'follow') : mode;
+    if (slot.kind === 'sequence') this.cameraMode = slot.mode;
+    const step = this.snapshot.value.displayStep - 1;
+    if (slot.mode === 'cinematic') {
+      if (step >= 0) this.cinematicStep(slot, step, false, performance.now());
+      else if (initial) this.fitSlot(slot, false);
       return;
     }
-    if (this.cameraMode === 'fit' || (initial && this.cameraMode === 'manual')) this.fit(false);
+    if (slot.mode === 'fit' || (initial && slot.mode === 'manual')) this.fitSlot(slot, false);
     else if (initial) {
       // Follow: start at the top, as wide as fits (never enlarged).
-      const k = Math.min(1, (this.viewportSize.width - 48) / content.w);
-      this.camera.moveTo({ k, x: this.viewportSize.width / 2 - (content.x + content.w / 2) * k, y: 24 - content.y * k }, { animate: false, viewport: this.viewportSize, now: performance.now() });
+      const content = slot.content();
+      const size = slot.size();
+      const k = Math.min(1, (size.width - 48) / content.w);
+      slot.camera.moveTo({ k, x: size.width / 2 - (content.x + content.w / 2) * k, y: 24 - content.y * k }, { animate: false, viewport: size, now: performance.now() });
     }
   }
 
-  fit(animate = true): void {
-    const view = fitView(this.contentBounds(), this.viewportSize);
-    this.camera.moveTo(view, { animate: animate && !this.reducedMotion, viewport: this.viewportSize, now: performance.now() });
+  /** Re-applies a slot's framing after its size changed. */
+  private reframe(slot: CameraSlot): void {
+    if (slot.kind === 'topology' && !this.topologyView.hasLayout) return;
+    const step = this.snapshot.value.displayStep - 1;
+    if (slot.mode === 'fit') this.fitSlot(slot, false);
+    else if (this.followSuspended.value) return;
+    else if (slot.mode === 'cinematic') this.cinematicStep(slot, step, false, performance.now());
+    else if (slot.mode === 'follow' && step >= 0) this.followStep(slot, step, performance.now(), false);
+  }
+
+  private fitSlot(slot: CameraSlot, animate: boolean): void {
+    const size = slot.size();
+    slot.camera.moveTo(fitView(slot.content(), size), { animate: animate && !this.reducedMotion, viewport: size, now: performance.now() });
     this.requestFrame();
+  }
+
+  fit(animate = true): void {
+    for (const slot of this.visibleSlots()) this.fitSlot(slot, animate);
   }
 
   frameStep(): void {
     const step = this.snapshot.value.displayStep - 1;
-    const bounds = step >= 0 ? this.stepBounds(step) : this.contentBounds();
-    if (!bounds) return;
-    const padded = { x: bounds.x - 48, y: bounds.y - 48, w: bounds.w + 96, h: bounds.h + 96 };
-    this.camera.moveTo(fitView(padded, this.viewportSize, 0, 2.5), { animate: !this.reducedMotion, viewport: this.viewportSize, now: performance.now(), speed: this.snapshot.value.speed });
+    for (const slot of this.visibleSlots()) {
+      const bounds = step >= 0 ? slot.stepBounds(step) : slot.content();
+      if (!bounds) continue;
+      const size = slot.size();
+      const padded = { x: bounds.x - 48, y: bounds.y - 48, w: bounds.w + 96, h: bounds.h + 96 };
+      slot.camera.moveTo(fitView(padded, size, 0, 2.5), { animate: !this.reducedMotion, viewport: size, now: performance.now(), speed: this.snapshot.value.speed });
+    }
     this.requestFrame();
   }
 
-  private followStep(step: number, now: number): void {
-    const bounds = this.stepBounds(step);
+  private followStep(slot: CameraSlot, step: number, now: number, hold = true): void {
+    const bounds = slot.stepBounds(step);
     if (!bounds) return;
-    const next = followView(this.camera.view, bounds, this.viewportSize);
+    const size = slot.size();
+    const next = followView(slot.camera.view, bounds, size);
     if (!next) return;
     const animate = !this.reducedMotion;
-    this.camera.moveTo(next, { animate, viewport: this.viewportSize, now, speed: this.snapshot.value.speed });
+    slot.camera.moveTo(next, { animate, viewport: size, now, speed: this.snapshot.value.speed });
     // Hold the playhead at the step's start until the camera arrives (spec camera: in view before drawing).
-    if (animate) this.player.hold('camera', true);
+    if (animate && hold) this.player.hold('camera', true);
     this.requestFrame();
   }
 
   /** Cinematic mode: frames the step (or its `@focus` participants) tightly, before it draws when moving forward. */
-  private cinematicStep(step: number, forward: boolean, now: number): void {
+  private cinematicStep(slot: CameraSlot, step: number, forward: boolean, now: number): void {
     if (step < 0) {
-      this.fit(!this.reducedMotion);
+      this.fitSlot(slot, !this.reducedMotion);
       return;
     }
-    const bounds = this.stepBounds(step);
+    const bounds = slot.stepBounds(step);
     if (!bounds) return;
-    const participants = this.sequence?.layout.participants ?? [];
-    const target = focusTarget(bounds, participants, this.steps()[step]?.focus);
-    const next = cinematicView(target, this.viewportSize, this.camera.view);
-    const view = this.camera.view;
+    const size = slot.size();
+    const next = cinematicView(slot.cinematicTarget(step, bounds), size, slot.camera.view);
+    const view = slot.camera.view;
     if (Math.abs(next.x - view.x) < 0.5 && Math.abs(next.y - view.y) < 0.5 && Math.abs(next.k - view.k) < 0.001) return;
     const animate = !this.reducedMotion;
-    this.camera.moveTo(next, { animate, viewport: this.viewportSize, now, speed: this.snapshot.value.speed });
+    slot.camera.moveTo(next, { animate, viewport: size, now, speed: this.snapshot.value.speed });
     if (animate && forward) this.player.hold('camera', true);
     this.requestFrame();
   }
@@ -458,19 +846,22 @@ export class DiagramController {
     if (on) {
       this.cameraMode = 'cinematic';
       this.following.value = true;
-      this.cinematicStep(this.snapshot.value.displayStep - 1, false, performance.now());
+      for (const slot of [this.seqSlot, this.topoSlot]) slot.mode = 'cinematic';
+      for (const slot of this.visibleSlots()) this.cinematicStep(slot, this.snapshot.value.displayStep - 1, false, performance.now());
     } else {
       this.dismissChapterCard();
       this.applyCameraMode(false);
-      if (this.cameraMode === 'fit') this.fit();
+      for (const slot of this.visibleSlots()) if (slot.mode === 'fit') this.fitSlot(slot, true);
     }
     this.requestFrame();
   }
 
   toggleFollow(): void {
+    const step = this.snapshot.value.displayStep - 1;
+    const slots = [this.seqSlot, this.topoSlot];
     if (this.cameraMode === 'cinematic') {
       this.followSuspended.value = !this.followSuspended.value;
-      if (!this.followSuspended.value) this.cinematicStep(this.snapshot.value.displayStep - 1, false, performance.now());
+      if (!this.followSuspended.value) for (const slot of this.visibleSlots()) this.cinematicStep(slot, step, false, performance.now());
       return;
     }
     if (this.cameraMode !== 'follow') {
@@ -481,14 +872,15 @@ export class DiagramController {
     else {
       this.cameraMode = 'manual';
       this.following.value = false;
+      for (const slot of slots) slot.mode = 'manual';
       return;
     }
-    const step = this.snapshot.value.displayStep - 1;
-    if (step >= 0) this.followStep(step, performance.now());
+    for (const slot of slots) slot.mode = 'follow';
+    if (step >= 0) for (const slot of this.visibleSlots()) this.followStep(slot, step, performance.now());
   }
 
   zoom(factor: number): void {
-    this.camera.zoomBy(factor, this.viewportSize);
+    for (const slot of this.visibleSlots()) slot.camera.zoomBy(factor, slot.size());
     this.requestFrame();
   }
 
@@ -537,18 +929,30 @@ export class DiagramController {
 
   private hoverTimer: ReturnType<typeof setTimeout> | undefined;
 
-  private hover(event: PointerEvent): void {
+  private hover(event: PointerEvent, kind: 'sequence' | 'topology'): void {
+    if (this.morph) return;
     const ref = SequenceSvgRenderer.elementAt(event.target);
     if (this.hoverTimer) clearTimeout(this.hoverTimer);
+    this.setCrossHighlight(ref, kind);
+    // Tooltips and cards are positioned in the canvas, whichever slot the pointer is in.
+    const bounds = this.container.getBoundingClientRect();
+    const x = event.clientX - bounds.left;
+    const y = event.clientY - bounds.top;
+    if (ref?.kind === 'edge') {
+      this.tooltip.value = undefined;
+      this.keepEdgeCard();
+      // Keep an open card where it is while the pointer moves along the same edge.
+      if (this.edgeCard.value && this.edgeCardKey === ref.id) return;
+      this.hoverTimer = setTimeout(() => this.showEdgeCard(ref.id, x, y), 250);
+      return;
+    }
+    if (this.edgeCard.value) this.hideEdgeCardSoon();
     if (!ref) {
       this.tooltip.value = undefined;
       return;
     }
     const info = this.elementInfo(ref);
     if (!info) return;
-    const bounds = this.svg.getBoundingClientRect();
-    const x = event.clientX - bounds.left;
-    const y = event.clientY - bounds.top;
     this.hoverTimer = setTimeout(() => {
       this.tooltip.value = { x, y, text: info.text, line: info.range ? info.range.startLine + 1 : undefined };
     }, 400);
@@ -633,7 +1037,7 @@ export class DiagramController {
   }
 
   private applyMatches(): void {
-    for (const el of this.viewport.querySelectorAll('[data-kind][data-id]')) {
+    for (const el of [...this.viewport.querySelectorAll('[data-kind][data-id]'), ...this.topologyView.viewport.querySelectorAll('[data-kind][data-id]')]) {
       if (this.matches.has(el.getAttribute('data-id') ?? '')) el.setAttribute('data-match', 'true');
       else el.removeAttribute('data-match');
     }
@@ -698,6 +1102,8 @@ export class DiagramController {
 
   destroy(): void {
     if (this.cardTimer) clearTimeout(this.cardTimer);
+    if (this.edgeCardTimer) clearTimeout(this.edgeCardTimer);
+    this.topologyView.destroy();
     this.resizeObserver.disconnect();
     if (this.frame) cancelAnimationFrame(this.frame);
     this.generic?.destroy();

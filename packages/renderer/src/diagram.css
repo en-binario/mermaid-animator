@@ -120,3 +120,57 @@
 [data-palette$='-hc'] .ma-message[data-dimmed='true'] { opacity: 1; }
 [data-palette$='-hc'] .ma-message[data-dimmed='true'] .ma-message-line { stroke-dasharray: 1 3; }
 [data-palette$='-hc'] .ma-activation[data-dimmed='true'] { opacity: 1; stroke-dasharray: 1 3; fill: none; }
+
+/* Topology view (M2b, spec topology-view). */
+.ma-topo-plate { fill: transparent; stroke: none; }
+.ma-topo-glyph { fill: none; stroke: var(--ma-ink-1); stroke-width: var(--ma-stroke-structural); stroke-linecap: round; stroke-linejoin: round; }
+.ma-topo-rim { fill: none; stroke: var(--ma-rule); stroke-width: var(--ma-stroke-structural); }
+.ma-topo-glow { fill: none; stroke: var(--ma-accent); stroke-width: 1.5; pointer-events: none; }
+.ma-topo-ring { fill: none; stroke: var(--ma-accent); stroke-opacity: 0.55; stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
+.ma-topo-node[data-focused='true'] .ma-participant-box { stroke: var(--ma-accent); stroke-width: var(--ma-stroke-active); }
+.ma-topo-node[data-highlighted='true'] .ma-topo-glow { opacity: 1; }
+.ma-topo-node[data-destroyed='true'] .ma-participant-label { text-decoration: line-through; }
+.ma-topo-line { fill: none; stroke: var(--ma-ink-2); stroke-width: var(--ma-stroke-structural); stroke-linecap: round; stroke-linejoin: round; }
+.ma-topology[data-weight='count'] .ma-topo-line { stroke-width: var(--ma-edge-width, var(--ma-stroke-structural)); }
+.ma-topo-hl { fill: none; stroke: var(--ma-accent); stroke-width: var(--ma-stroke-active); stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.ma-topology[data-weight='count'] .ma-topo-hl { stroke-width: max(var(--ma-stroke-active), var(--ma-edge-width, 0px)); }
+.ma-topo-edge--return .ma-topo-line,
+.ma-topo-edge--return .ma-topo-hl { stroke-dasharray: 5 4; }
+.ma-topo-edge .ma-arrowhead--filled { fill: var(--ma-ink-2); stroke: var(--ma-ink-2); }
+.ma-topo-edge[data-state='current'] .ma-arrowhead--filled { fill: var(--ma-accent); stroke: var(--ma-accent); }
+.ma-topo-edge[data-state='future'] .ma-topo-line,
+.ma-topo-edge[data-state='unplayed'] .ma-topo-line { stroke: var(--ma-ink-3); stroke-width: 1; }
+.ma-topo-edge[data-state='future'] .ma-arrowhead--filled,
+.ma-topo-edge[data-state='unplayed'] .ma-arrowhead--filled { fill: var(--ma-ink-3); stroke: var(--ma-ink-3); }
+.ma-topo-edge[data-emphasis='true'] .ma-topo-line,
+.ma-topo-edge[data-emphasis='true'] .ma-topo-hl { stroke: var(--ma-brass); }
+.ma-topo-edge[data-highlighted='true'] .ma-topo-hl { opacity: 1; }
+.ma-topo-badge rect { fill: var(--ma-surface); stroke: var(--ma-rule); stroke-width: 1; }
+.ma-topo-badge text { fill: var(--ma-ink-2); font-size: var(--ma-type-caption); font-weight: 600; font-variant-numeric: tabular-nums; }
+.ma-topo-badge[data-state='current'] rect { fill: var(--ma-accent); stroke: var(--ma-accent); }
+.ma-topo-badge[data-state='current'] text { fill: var(--ma-surface); }
+.ma-topo-label { fill: var(--ma-ink-1); font-size: var(--ma-type-label); font-weight: 560; paint-order: stroke fill; stroke: var(--ma-canvas); stroke-width: 4px; stroke-linejoin: round; pointer-events: none; }
+.ma-topo-cluster[data-active='true'] .ma-box-fill { stroke: var(--ma-brass); stroke-width: 1.5; }
+.ma-topo-edge[data-dimmed='true'] .ma-topo-line { stroke: var(--ma-ink-3); }
+[data-palette$='-hc'] .ma-topo-edge[data-dimmed='true'] { opacity: 1; }
+[data-palette$='-hc'] .ma-topo-edge[data-dimmed='true'] .ma-topo-line { stroke-dasharray: 1 3; }
+[data-palette$='-hc'] .ma-topo-edge[data-state='future'] .ma-topo-line,
+[data-palette$='-hc'] .ma-topo-edge[data-state='unplayed'] .ma-topo-line { stroke-dasharray: 1 3; }
+[data-palette$='-hc'] .ma-topo-ring { stroke-opacity: 1; stroke-width: 1.5; }
+[data-palette$='-hc'] .ma-topo-badge rect { stroke: var(--ma-ink-1); }
+
+/* Sequence ↔ Topology morph (M2b, spec view-switching). */
+.ma-morph-chord,
+.ma-morph-edge { fill: none; stroke: var(--ma-ink-2); stroke-width: var(--ma-stroke-structural); stroke-linecap: round; }
+.ma-morph-chord--dotted { stroke-dasharray: 5 4; }
+.ma-morph-chord[data-current='true'],
+.ma-morph-edge[data-current='true'] { stroke: var(--ma-accent); stroke-width: var(--ma-stroke-active); }
+.ma-morph-fade { fill: none; stroke: var(--ma-hairline); stroke-width: 1; }
+.ma-morph-fade--activation { fill: var(--ma-accent-muted); stroke: var(--ma-accent); stroke-opacity: 0.6; }
+.ma-morph-fade--note { fill: var(--ma-note-fill); stroke: var(--ma-note-rule); }
+.ma-morph-fade--box { fill: var(--ma-surface-sunken); fill-opacity: 0.7; }
+
+/* Cross-highlighting between views (M2b, spec split-view). */
+.ma-participant[data-highlighted='true'] .ma-participant-box { stroke: var(--ma-accent); stroke-width: var(--ma-stroke-active); }
+.ma-message[data-highlighted='true'] .ma-message-hl { opacity: 1; }
+.ma-message[data-highlighted='true'] .ma-message-label { fill: var(--ma-ink-1); }

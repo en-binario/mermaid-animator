@@ -19,6 +19,14 @@ Nothing in your diagrams needs to change. Edits appear live, and the panel keeps
 - Loops repeat with an `n / N` counter in their tab; `par` lanes play together, each message with its own pulse; `alt` / `critical` / `opt` play the branch you choose — in the inspector, with `%% @branch`, or on the canvas when `playback.altBranches` is `ask`.
 - The current step is highlighted in the source editor, and clicking a statement in the editor moves playback to its step (`sync.cursorToStep`); **Alt + double-click** any element to jump to its line.
 
+## Sequence, topology, split
+
+- **Topology** (`T`). The same steps as a live service map: participants become nodes (shaped by type), `box` groups become clusters, messages merge into edges with `×n` badges, return messages run as dashed lanes beside their request, and each step sends a pulse along its edge. Hover an edge to list its messages and jump to any of them; click a node to focus it.
+- **Morph.** Switching between Sequence and Topology animates by identity — headers travel into nodes, arrows follow and merge into edges — without losing your step or focus (a short cross-fade under reduced motion).
+- **Split** (`S`). Both views side by side (stacked on narrow panels) on one timeline, each with its own camera; hovering an element highlights its counterpart in the other view.
+- **Layouts.** `layered` (default, left-to-right or top-to-bottom), a deterministic `force` layout, or `manual` — drag nodes and the positions are remembered for that diagram (*Reset Topology Layout* forgets them).
+- **Minimap.** An overview in the corner whenever the drawing is larger than the view: drag the frame to pan, click to jump there.
+
 ## Narrate, explore, present
 
 - **Captions and chapters.** `%% @caption "…"` narrates a step in the caption strip (`**bold**`, `*italic*`, `` `code` ``); `%% @chapter "…"` divides the flow into chapters shown as scrubber ticks — jump between them with `Shift+→ / ←`.
@@ -41,6 +49,7 @@ Nothing in your diagrams needs to change. Edits appear live, and the panel keeps
 | `G` | Go to step (number or text) | `D` | Inspector |
 | `[` / `]` | Slower / faster | `/` | Search |
 | `L` | Loop | `R` | Transcript view |
+| `T` | Sequence / topology view | `S` | Split view |
 | `I` / `O` | A–B loop start / end (`Shift` clears) | `P` | Presentation mode |
 | Click a header | Focus (`Ctrl`/`Cmd` adds) | `B` / `.` | Blank screen (presenting) |
 | `E` | Export | `Z` (hold) | Laser pointer (presenting) |
@@ -97,6 +106,11 @@ The editor helps as you write: typing `%% @` suggests directives and their value
 | `mermaidAnimator.motion.respectReducedMotion` | `true` | Minimal motion when reduced motion is requested. |
 | `mermaidAnimator.motion.travelIndicator` | `pulse` | `pulse`, `comet` or `none`. |
 | `mermaidAnimator.camera.mode` | `auto` | `auto`, `fit`, `follow`, `cinematic` or `manual`. |
+| `mermaidAnimator.view.default` | `sequence` | `sequence`, `topology` or `split` (`@animator view=` overrides it). |
+| `mermaidAnimator.topology.layout` / `.direction` | `layered` / `LR` | `layered`, `force` or `manual`; `LR` or `TB`. |
+| `mermaidAnimator.topology.edgeStyle` / `.edgeWeight` | `curved` / `count` | `curved`, `orthogonal` or `straight`; width by message count or `uniform`. |
+| `mermaidAnimator.topology.returnMessages` | `merge` | Return lanes beside their request, `separate` edges, or `hide`. |
+| `mermaidAnimator.display.showMinimap` | `auto` | `auto`, `always` or `never`. |
 | `mermaidAnimator.presentation.chapterCards` / `.zenMode` | `true` / `false` | Chapter cards while presenting; also enter Zen Mode. |
 | `mermaidAnimator.annotations.highlight` | `true` | Highlight `%% @…` directive names in the editor. |
 | `mermaidAnimator.files.languages` | `markdown, mdx, mermaid` | Languages scanned for diagrams. |

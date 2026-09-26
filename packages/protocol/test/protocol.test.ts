@@ -21,6 +21,8 @@ describe('host messages', () => {
     hostMessage('command', { action: 'seekToLine', args: { line: 17 } }),
     hostMessage('command', { action: 'nextChapter' }),
     hostMessage('presentation/state', { on: false }),
+    hostMessage('command', { action: 'setView', args: { view: 'split' } }),
+    hostMessage('document/load', { uri: 'u', fileName: 'a.md', source: 's', version: 1, origin, layout: { A: { x: 10, y: 20 } } }),
   ];
 
   it.each(valid)('accepts $type', (message) => {
@@ -68,6 +70,7 @@ describe('webview messages', () => {
     webviewMessage('export/data', { format: 'png', suggestedName: 'a.png', data: new Uint8Array([1, 2]), index: 0, total: 1 }),
     webviewMessage('clipboard/fallback', { reason: 'denied' }),
     webviewMessage('presentation/toggle', { on: true }),
+    webviewMessage('layout/save', { key: 'checkout', positions: { A: { x: 1, y: 2 } } }),
   ])('accepts $type', (message) => {
     expect(validateWebviewMessage(message).ok).toBe(true);
   });
@@ -78,6 +81,7 @@ describe('webview messages', () => {
     ['state that is not an object', { v: 1, type: 'state/changed', payload: [] }],
     ['host-only type', { v: 1, type: 'init', payload: {} }],
     ['export without bytes', { v: 1, type: 'export/data', payload: { format: 'png', suggestedName: 'a', data: 'AAA', index: 0, total: 1 } }],
+    ['layout save with a bad position', { v: 1, type: 'layout/save', payload: { key: 'k', positions: { A: { x: 'a', y: 1 } } } }],
     ['presentation toggle without a flag', { v: 1, type: 'presentation/toggle', payload: {} }],
     ['bad source ranges', { v: 1, type: 'state/changed', payload: { sourceRanges: [{ startLine: 'x' }] } }],
   ])('rejects %s', (_label, value) => {

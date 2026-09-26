@@ -100,6 +100,8 @@ export function focusTarget(stepBounds: Rect, participants: readonly { id: strin
 export interface CameraCallbacks {
   onUserMove(): void;
   onChange(view: View): void;
+  /** Returns true for pointer gestures the camera must ignore (e.g. dragging a node). */
+  blockGesture?(event: Event): boolean;
 }
 
 export class Camera {
@@ -119,6 +121,7 @@ export class Camera {
       .scaleExtent([ZOOM_MIN, ZOOM_MAX])
       .filter((event: Event) => {
         if (event.type === 'wheel' || event.type === 'dblclick') return false;
+        if (this.callbacks.blockGesture?.(event)) return false;
         return !(event as MouseEvent).button;
       })
       .on('zoom', (event: D3ZoomEvent<SVGSVGElement, unknown>) => this.applied(event.transform, event.sourceEvent));
@@ -197,6 +200,12 @@ export class Camera {
       this.tween = undefined;
     }
     return this.tween !== undefined;
+  }
+
+  /** Drawing coordinates of a point in the SVG's client space. */
+  toDrawing(clientX: number, clientY: number, svg: SVGSVGElement): { x: number; y: number } {
+    const r = svg.getBoundingClientRect();
+    return { x: (clientX - r.left - this.view.x) / this.view.k, y: (clientY - r.top - this.view.y) / this.view.k };
   }
 
   zoomBy(factor: number, viewport: Viewport): void {

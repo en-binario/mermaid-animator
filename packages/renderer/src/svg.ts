@@ -106,7 +106,7 @@ interface MessageNodes {
 }
 
 export interface RenderedElementRef {
-  kind: 'message' | 'note' | 'participant' | 'fragment';
+  kind: 'message' | 'note' | 'participant' | 'fragment' | 'edge' | 'cluster';
   id: string;
 }
 
@@ -276,6 +276,7 @@ export class SequenceSvgRenderer {
       this.set(nodes.group, 'data-emphasis', s.emphasis ? 'true' : 'false');
       this.set(nodes.group, 'data-muted', s.state === 'past' && s.opacity < 1 ? 'true' : 'false');
       this.set(nodes.group, 'data-dimmed', s.dimmed ? 'true' : 'false');
+      this.set(nodes.group, 'data-highlighted', s.highlighted ? 'true' : 'false');
       this.set(nodes.group, 'opacity', s.opacity);
       this.set(nodes.group, 'display', s.opacity <= 0 ? 'none' : 'inline');
       if (s.opacity <= 0) continue;
@@ -324,6 +325,7 @@ export class SequenceSvgRenderer {
       for (const g of [p.group, p.lifeline, p.glow]) this.set(g, 'opacity', g === p.glow ? s.glow * s.opacity : s.opacity);
       this.set(p.group, 'transform', `translate(0 ${round(s.headerDy)})`);
       this.set(p.group, 'data-focused', s.focused ? 'true' : 'false');
+      this.set(p.group, 'data-highlighted', s.highlighted ? 'true' : 'false');
       this.set(p.glow, 'data-focused', s.focused ? 'true' : 'false');
       this.set(p.group, 'display', s.opacity <= 0 ? 'none' : 'inline');
       const y2 = s.destroyed > 0 ? p.y2 : p.full;

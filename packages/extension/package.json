@@ -203,6 +203,34 @@
         "command": "mermaidAnimator.insertAnnotation",
         "title": "%command.insertAnnotation%",
         "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.setView.sequence",
+        "title": "%command.setView.sequence%",
+        "category": "Mermaid Animator",
+        "icon": "$(list-ordered)"
+      },
+      {
+        "command": "mermaidAnimator.setView.topology",
+        "title": "%command.setView.topology%",
+        "category": "Mermaid Animator",
+        "icon": "$(type-hierarchy)"
+      },
+      {
+        "command": "mermaidAnimator.setView.split",
+        "title": "%command.setView.split%",
+        "category": "Mermaid Animator",
+        "icon": "$(split-horizontal)"
+      },
+      {
+        "command": "mermaidAnimator.toggleView",
+        "title": "%command.toggleView%",
+        "category": "Mermaid Animator"
+      },
+      {
+        "command": "mermaidAnimator.resetLayout",
+        "title": "%command.resetLayout%",
+        "category": "Mermaid Animator"
       }
     ],
     "menus": {
@@ -318,6 +346,26 @@
         {
           "command": "mermaidAnimator.insertAnnotation",
           "when": "mermaidAnimator.cursorInDiagram"
+        },
+        {
+          "command": "mermaidAnimator.setView.sequence",
+          "when": "mermaidAnimator.panelActive"
+        },
+        {
+          "command": "mermaidAnimator.setView.topology",
+          "when": "mermaidAnimator.panelActive"
+        },
+        {
+          "command": "mermaidAnimator.setView.split",
+          "when": "mermaidAnimator.panelActive"
+        },
+        {
+          "command": "mermaidAnimator.toggleView",
+          "when": "mermaidAnimator.panelActive"
+        },
+        {
+          "command": "mermaidAnimator.resetLayout",
+          "when": "mermaidAnimator.panelActive"
         }
       ],
       "editor/title": [
@@ -665,6 +713,107 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "%config.annotations.highlight%"
+        },
+        "mermaidAnimator.view.default": {
+          "type": "string",
+          "default": "sequence",
+          "enum": [
+            "sequence",
+            "topology",
+            "split"
+          ],
+          "markdownDescription": "%config.view.default%",
+          "enumDescriptions": [
+            "%config.view.default.sequence%",
+            "%config.view.default.topology%",
+            "%config.view.default.split%"
+          ]
+        },
+        "mermaidAnimator.topology.layout": {
+          "type": "string",
+          "default": "layered",
+          "enum": [
+            "layered",
+            "force",
+            "manual"
+          ],
+          "markdownDescription": "%config.topology.layout%",
+          "enumDescriptions": [
+            "%config.topology.layout.layered%",
+            "%config.topology.layout.force%",
+            "%config.topology.layout.manual%"
+          ]
+        },
+        "mermaidAnimator.topology.direction": {
+          "type": "string",
+          "default": "LR",
+          "enum": [
+            "LR",
+            "TB"
+          ],
+          "markdownDescription": "%config.topology.direction%",
+          "enumDescriptions": [
+            "%config.topology.direction.LR%",
+            "%config.topology.direction.TB%"
+          ]
+        },
+        "mermaidAnimator.topology.edgeStyle": {
+          "type": "string",
+          "default": "curved",
+          "enum": [
+            "curved",
+            "orthogonal",
+            "straight"
+          ],
+          "markdownDescription": "%config.topology.edgeStyle%",
+          "enumDescriptions": [
+            "%config.topology.edgeStyle.curved%",
+            "%config.topology.edgeStyle.orthogonal%",
+            "%config.topology.edgeStyle.straight%"
+          ]
+        },
+        "mermaidAnimator.topology.returnMessages": {
+          "type": "string",
+          "default": "merge",
+          "enum": [
+            "merge",
+            "separate",
+            "hide"
+          ],
+          "markdownDescription": "%config.topology.returnMessages%",
+          "enumDescriptions": [
+            "%config.topology.returnMessages.merge%",
+            "%config.topology.returnMessages.separate%",
+            "%config.topology.returnMessages.hide%"
+          ]
+        },
+        "mermaidAnimator.topology.edgeWeight": {
+          "type": "string",
+          "default": "count",
+          "enum": [
+            "count",
+            "uniform"
+          ],
+          "markdownDescription": "%config.topology.edgeWeight%",
+          "enumDescriptions": [
+            "%config.topology.edgeWeight.count%",
+            "%config.topology.edgeWeight.uniform%"
+          ]
+        },
+        "mermaidAnimator.display.showMinimap": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "always",
+            "never"
+          ],
+          "markdownDescription": "%config.display.showMinimap%",
+          "enumDescriptions": [
+            "%config.display.showMinimap.auto%",
+            "%config.display.showMinimap.always%",
+            "%config.display.showMinimap.never%"
+          ]
         }
       }
     },

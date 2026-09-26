@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { stepEnd } from '@mermaid-animator/core';
 import { WEBVIEW_STRINGS, type DiagramSummary } from '@mermaid-animator/protocol';
-import type { DiagramController } from './controller';
+import type { DiagramController, ViewKind } from './controller';
 import { SPEEDS } from './player';
 import type { HostState } from './state';
 import { format } from './state';
@@ -185,6 +185,63 @@ function Scrubber({ controller, t }: { controller: DiagramController; t: T }) {
   );
 }
 
+/** Sequence | Topology | Split (spec view-switching); generic diagrams offer only their own view. */
+function ViewSwitcher({ controller, t }: { controller: DiagramController; t: T }) {
+  if (!controller.canSwitch.value) return null;
+  const current = controller.view.value;
+  const options: { view: ViewKind; label: string; icon: string }[] = [
+    { view: 'sequence', label: t('view.sequence'), icon: 'list-ordered' },
+    { view: 'topology', label: t('view.topology'), icon: 'type-hierarchy' },
+    { view: 'split', label: t('view.split'), icon: 'split-horizontal' },
+  ];
+  return (
+    <div class="ma-segmented" role="radiogroup" aria-label={t('view.label')} onPointerEnter={() => controller.prewarmTopology()} onFocusIn={() => controller.prewarmTopology()}>
+      {options.map((o) => (
+        <button
+          key={o.view}
+          type="button"
+          role="radio"
+          aria-checked={current === o.view}
+          class={`ma-segmented__item${current === o.view ? ' ma-segmented__item--checked' : ''}`}
+          title={o.label}
+          onClick={() => void controller.setView(o.view)}
+        >
+          <span class={`codicon codicon-${o.icon}`} aria-hidden="true" />
+          <span class="ma-segmented__label">{t(`view.${o.view}Short`)}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Messages aggregated by a hovered topology edge, each seeking to its step (spec topology-view). */
+function EdgeCardView({ controller, t }: { controller: DiagramController; t: T }) {
+  const card = controller.edgeCard.value;
+  if (!card) return null;
+  return (
+    <div
+      class="ma-edge-card"
+      role="dialog"
+      aria-label={card.title}
+      style={{ left: `${card.x + 12}px`, top: `${card.y + 12}px` }}
+      onPointerEnter={() => controller.keepEdgeCard()}
+      onPointerLeave={() => controller.hideEdgeCardSoon()}
+    >
+      <div class="ma-edge-card__title">{card.title}</div>
+      <ol class="ma-edge-card__list">
+        {card.items.map((item) => (
+          <li key={item.id}>
+            <button type="button" class="ma-edge-card__item" disabled={item.step === undefined} onClick={() => item.step !== undefined && controller.playback.goTo(item.step + 1)}>
+              <span class="ma-edge-card__text">{item.text}</span>
+              <span class="ma-edge-card__step">{item.step === undefined ? t('search.unplayed') : t('search.step', item.step + 1)}</span>
+            </button>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 function GoToStep({ controller, t, close }: { controller: DiagramController; t: T; close: () => void }) {
   const [value, setValue] = useState('');
   const input = useRef<HTMLInputElement>(null);
@@ -227,6 +284,8 @@ export const SHORTCUT_ROWS: [string, string][] = [
   ['G', 'shortcuts.goTo'],
   ['[ / ]', 'shortcuts.speed'],
   ['L', 'shortcuts.loop'],
+  ['T', 'shortcuts.toggleView'],
+  ['S', 'shortcuts.split'],
   ['I / O', 'shortcuts.range'],
   ['+ / −', 'shortcuts.zoom'],
   ['0', 'shortcuts.fit'],
@@ -324,6 +383,7 @@ export function App({ state, controller, mountCanvas, onSelectDiagram, onExport,
         <span class="ma-breadcrumb">{doc ? <strong>{doc.fileName}</strong> : t('app.loading')}</span>
         {doc?.diagrams && <DiagramSwitcher diagrams={doc.diagrams} current={doc.diagramIndex ?? 0} t={t} onSelect={onSelectDiagram} />}
         <span class="ma-toolbar__spacer" />
+        {controller && <ViewSwitcher controller={controller} t={t} />}
         <IconButton icon="screen-full" label={t('toolbar.fit')} onClick={() => controller?.fit()} disabled={!controller} />
         <IconButton icon="target" label={t('toolbar.frame')} onClick={() => controller?.frameStep()} disabled={!controller} />
         <IconButton icon="eye" label={t('toolbar.follow')} pressed={!!controller?.following.value && !controller.followSuspended.value} onClick={() => controller?.toggleFollow()} disabled={!controller} />
@@ -368,6 +428,8 @@ export function App({ state, controller, mountCanvas, onSelectDiagram, onExport,
             </button>
           )}
           {controller && <ChoiceChips controller={controller} t={t} />}
+          {controller && <EdgeCardView controller={controller} t={t} />}
+          {controller?.topologyView.pending.value && controller.view.value !== 'sequence' && <div class="ma-progress ma-progress--layout" role="progressbar" aria-label={t('view.layingOut')} />}
           {tooltip && !ui.presenting && (
             <div class="ma-tooltip ma-canvas-tooltip" style={{ left: `${tooltip.x + 12}px`, top: `${tooltip.y + 16}px` }} role="tooltip">
               <div class="ma-tooltip__text">{tooltip.text}</div>

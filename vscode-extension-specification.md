@@ -379,9 +379,9 @@ The same participants rendered as **nodes** and messages aggregated into **direc
 | **Return messages** | `topology.returnMessages`: `merge` (default — drawn as a dashed return lane paired with the request edge), `separate` (own edge), or `hide`. |
 | **Self-calls** | Rendered as a loop arc on the node. |
 | **Playback** | A pulse travels along the edge for each step; the receiving node shows a thin activity ring while active; concurrent `par` steps pulse simultaneously. |
-| **Heat overlay** | Optional (`H`): cumulative traffic tints edges from hairline to accent; the "hot path" (most frequent chain) is emphasised in brass. |
-| **Layouts** | `layered` (default; ELK layered, direction `LR`/`TB`, ordered by first call), `force` (seeded d3-force, deterministic), `radial` (initiator at centre, rings by call depth), `grid`, `manual` (drag nodes; positions persisted in the sidecar). |
-| **Edge routing** | `topology.edgeStyle`: `curved` (default), `orthogonal`, `straight`. |
+| **Heat overlay** (P2) | Optional (`H`): cumulative traffic tints edges from hairline to accent; the "hot path" (most frequent chain) is emphasised in brass. |
+| **Layouts** | `layered` (default; ELK layered in a web worker, direction `LR`/`TB`, ordered by first call), `force` (seeded d3-force, deterministic), `radial` (initiator at centre, rings by call depth; P2), `grid` (P2), `manual` (drag nodes; nodes without a stored position take their layered place; positions are kept per diagram in workspace state and move into the sidecar in M3; *Reset Topology Layout* clears them). |
+| **Edge routing** | `topology.edgeStyle`: `curved` (default), `orthogonal` (ELK's orthogonal routes in the layered layout), `straight`. Opposite request pairs are drawn apart and merged return lanes run beside their request edge. |
 | **Interaction** | Hover an edge → list of all messages it aggregates, each a link that seeks to that step. Click a node → focus (§8.7). |
 
 #### 8.3.3 Split view
@@ -407,7 +407,7 @@ An accessible, text-first rendition: an ordered list of steps (`07. Gateway → 
 
 ### 8.4 View transitions
 
-Switching between Sequence and Topology **MUST** morph continuously rather than cut, making the correspondence between the two representations evident. The transition uses the FLIP technique (First, Last, Invert, Play) over elements with shared identity.
+Switching between Sequence and Topology **MUST** morph continuously rather than cut, making the correspondence between the two representations evident. In the FLIP spirit (First, Last, Invert, Play), every element with a shared identity is drawn from its first to its last geometry by a pure interpolation of the two drawings (`morphAt`), rendered in a transient layer while the camera eases between the two views' framings.
 
 **Identity mapping.** Participant header ↔ node; message arrow ↔ aggregated edge (many-to-one); activation ↔ node activity ring; `box` ↔ cluster; current-step highlight ↔ current-step pulse.
 
@@ -514,7 +514,7 @@ Any user pan/zoom during Follow or Cinematic temporarily switches to Manual and 
 #### 8.6.3 Minimap
 
 - 160 × 110 px maximum, bottom-right of the canvas, 12 px inset; surface colour with hairline border and elevation 1.
-- Shows a simplified rendition (lifelines and message lines only, no text), the viewport rectangle (accent, 1 px), and the current step (brass dot).
+- Shows a simplified rendition without text — lifelines and message lines in the sequence view, nodes and edges in the topology view (each slot of the split view has its own) — the viewport rectangle (accent, 1 px), and the current step (brass dot). Hidden during presentations.
 - Drag the viewport rectangle to pan; click to centre. Auto-hides when the diagram is fully visible (`auto` mode).
 
 #### 8.6.4 Level of detail
@@ -1790,7 +1790,7 @@ All command IDs are prefixed `mermaidAnimator.`; titles are prefixed with the ca
 | `revealSource` | Reveal Current Step in Source | `mermaidAnimator.panelActive` |
 | `compareWithRevision` | Compare with Revision… | `mermaidAnimator.editorHasDiagram && config.git.enabled` |
 | `insertAnnotation` | Insert Annotation… | `mermaidAnimator.cursorInDiagram` |
-| `saveLayout` · `resetLayout` | Save / Reset Topology Layout | `mermaidAnimator.panelActive` |
+| `saveLayout` (M3) · `resetLayout` | Save / Reset Topology Layout | `mermaidAnimator.panelActive` |
 | `saveDefaults` | Save Current Settings as Diagram Defaults | `mermaidAnimator.panelActive` |
 | `showShortcuts` | Show Keyboard Shortcuts | `mermaidAnimator.panelActive` |
 | `diagramsView.refresh` | Refresh Diagrams | view title |
@@ -1851,8 +1851,8 @@ All keys are under `mermaidAnimator.`. The *short name* column is the key usable
 
 | Key | Short | Type | Default | Description |
 |---|---|---|---|---|
-| `view.default` | `view` | `sequence` \| `topology` \| `split` \| `trace` \| `transcript` | `sequence` | Initial view. |
-| `topology.layout` | `layout` | `layered` \| `force` \| `radial` \| `grid` \| `manual` | `layered` | Topology layout. |
+| `view.default` | `view` | `sequence` \| `topology` \| `split` \| `trace` (P2) | `sequence` | Initial view. The transcript is toggled with `R`. |
+| `topology.layout` | `layout` | `layered` \| `force` \| `radial` (P2) \| `grid` (P2) \| `manual` | `layered` | Topology layout. |
 | `topology.direction` | `direction` | `LR` \| `TB` | `LR` | Layered direction. |
 | `topology.edgeStyle` | — | `curved` \| `orthogonal` \| `straight` | `curved` | Edge routing. |
 | `topology.returnMessages` | `returns` | `merge` \| `separate` \| `hide` | `merge` | Return message handling. |

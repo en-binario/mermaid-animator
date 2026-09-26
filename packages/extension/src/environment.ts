@@ -49,6 +49,13 @@ export const WEBVIEW_SETTING_KEYS = [
   'display.showCaptions',
   'display.showInspector',
   'presentation.chapterCards',
+  'view.default',
+  'topology.layout',
+  'topology.direction',
+  'topology.edgeStyle',
+  'topology.returnMessages',
+  'topology.edgeWeight',
+  'display.showMinimap',
 ] as const;
 
 export function currentSettings(): WebviewSettings {

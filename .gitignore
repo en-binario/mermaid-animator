@@ -8,3 +8,4 @@ coverage/
 .DS_Store
 .playwright-mcp/
 out-test/
+packages/extension/ThirdPartyNotices.txt

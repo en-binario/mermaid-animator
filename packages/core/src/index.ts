@@ -12,3 +12,4 @@ export * from './steps';
 export * from './timeline';
 export * from './compile';
 export * from './layout';
+export * from './topology';

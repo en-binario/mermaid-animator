@@ -4,7 +4,7 @@
 //   dist/webview/           — the animator webview (ESM with code splitting) plus fonts and codicons
 import * as esbuild from 'esbuild';
 import { builtinModules } from 'node:module';
-import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -37,6 +37,7 @@ const common = {
   logLevel: 'info',
   target: 'es2022',
   legalComments: 'linked',
+  metafile: true,
 };
 
 const configs = [
@@ -99,9 +100,66 @@ async function copyAssets() {
   }
   await writeFile(path.join(out, 'fonts.css'), css);
 
+  // ELK layout worker (M2b): shipped unmodified, started through the blob shim (spec §13.2).
+  const elk = path.dirname(require.resolve('elkjs/package.json', { paths: [path.join(root, 'packages/webview')] }));
+  await mkdir(path.join(out, 'workers'), { recursive: true });
+  await copyFile(path.join(elk, 'lib', 'elk-worker.min.js'), path.join(out, 'workers', 'elk-worker.min.js'));
+  await copyFile(path.join(elk, 'LICENSE.md'), path.join(out, 'workers', 'elk.LICENSE.md'));
+
   const codicons = path.join(path.dirname(require.resolve('@vscode/codicons/package.json')), 'dist');
   await copyFile(path.join(codicons, 'codicon.css'), path.join(out, 'codicons', 'codicon.css'));
   await copyFile(path.join(codicons, 'codicon.ttf'), path.join(out, 'codicons', 'codicon.ttf'));
+}
+
+/**
+ * ThirdPartyNotices.txt (M2b 6.3): every npm package that ends up in the VSIX — found through the
+ * esbuild metafiles plus the assets copied verbatim (fonts, codicons, the ELK worker) — with its
+ * licence text.
+ */
+async function writeNotices(results) {
+  const roots = new Set();
+  const rootOf = (file) => {
+    const normal = file.replace(/\\/g, '/');
+    const m = /^(.*?node_modules\/(?:@[^/]+\/)?[^/]+)\//.exec(normal);
+    return m ? path.resolve(root, m[1]) : undefined;
+  };
+  for (const result of results) for (const input of Object.keys(result.metafile?.inputs ?? {})) {
+    const r = rootOf(input);
+    if (r) roots.add(r);
+  }
+  const webview = path.join(root, 'packages/webview');
+  for (const pkg of ['@fontsource-variable/inter', '@fontsource-variable/source-serif-4', '@vscode/codicons', 'elkjs']) {
+    roots.add(path.dirname(require.resolve(`${pkg}/package.json`, { paths: [webview] })));
+  }
+  const entries = [];
+  for (const dir of roots) {
+    let meta;
+    try {
+      meta = JSON.parse(await readFile(path.join(dir, 'package.json'), 'utf8'));
+    } catch {
+      continue;
+    }
+    if (!meta.name || meta.name.startsWith('@mermaid-animator/')) continue;
+    const files = (await readdir(dir)).filter((f) => /^(licen[cs]e|copying|notice)(\.|$)/i.test(f));
+    const texts = await Promise.all(files.map((f) => readFile(path.join(dir, f), 'utf8')));
+    const license = typeof meta.license === 'string' ? meta.license : meta.license?.type ?? 'see text';
+    entries.push({ id: `${meta.name}@${meta.version}`, license, text: texts.join('\n\n').trim() || `Licensed under ${license}.` });
+  }
+  const unique = [...new Map(entries.map((e) => [e.id, e])).values()].sort((a, b) => a.id.localeCompare(b.id));
+  const rule = '='.repeat(78);
+  const body = [
+    'Mermaid Animator — third-party notices',
+    '',
+    'This extension bundles the software listed below. Each component is provided under its own licence,',
+    'reproduced in full. elkjs is used unmodified under the Eclipse Public License 2.0; its source is',
+    'available at https://github.com/kieler/elkjs.',
+    '',
+    ...unique.map((e) => `${e.id} (${e.license})`),
+    '',
+    ...unique.flatMap((e) => [rule, `${e.id} — ${e.license}`, rule, '', e.text, '']),
+  ].join('\n');
+  await writeFile(path.join(ext, 'ThirdPartyNotices.txt'), body);
+  return unique.length;
 }
 
 async function main() {
@@ -112,8 +170,10 @@ async function main() {
     await Promise.all(contexts.map((c) => c.watch()));
     console.log('[build] watching for changes…');
   } else {
-    await Promise.all(configs.map((c) => esbuild.build(c)));
+    const results = await Promise.all(configs.map((c) => esbuild.build(c)));
     await copyAssets();
+    const count = await writeNotices(results);
+    console.log(`[build] ThirdPartyNotices.txt: ${count} packages`);
     const web = await readFile(path.join(dist, 'extension.web.js'), 'utf8');
     if (/require\(["'](node:)?(fs|path|os|child_process|crypto)["']\)/.test(web)) {
       throw new Error('extension.web.js references a Node.js built-in module.');

@@ -41,6 +41,7 @@ export interface MessageState {
   emphasis: boolean;
   /** Outside the current focus (spec exploration). */
   dimmed?: boolean;
+  highlighted?: boolean;
 }
 
 export interface NoteState {
@@ -59,6 +60,7 @@ export interface ParticipantState {
   destroyed: number;
   /** Part of the current focus: lifeline emphasised. */
   focused?: boolean;
+  highlighted?: boolean;
 }
 
 export interface ActivationState {
@@ -81,6 +83,8 @@ export interface FragmentState {
 export interface SceneInputs {
   /** Focused participants (spec exploration); empty or undefined means no focus. */
   focus?: ReadonlySet<string>;
+  /** Participant and message ids highlighted from the other view (spec split-view). */
+  highlight?: ReadonlySet<string>;
 }
 
 export interface Scene {
@@ -137,7 +141,7 @@ export function prepareScene(layout: SequenceLayout, compiled: CompiledSequence,
 }
 
 /** The step that decides an element's state at k: `k` itself if it animates then, else the latest before k, else its first. */
-function stepFor(steps: number[] | undefined, k: number): number | undefined {
+export function stepFor(steps: number[] | undefined, k: number): number | undefined {
   if (!steps?.length) return undefined;
   if (steps.includes(k)) return k;
   let latest: number | undefined;
@@ -145,14 +149,14 @@ function stepFor(steps: number[] | undefined, k: number): number | undefined {
   return latest ?? steps[0];
 }
 
-function stateOf(step: number | undefined, k: number, unplayed: boolean): ElementState {
+export function stateOf(step: number | undefined, k: number, unplayed: boolean): ElementState {
   if (unplayed || step === undefined) return unplayed ? 'unplayed' : 'static';
   if (step < 0) return 'static';
   if (step > k) return 'future';
   return step === k ? 'current' : 'past';
 }
 
-function restingOpacity(state: ElementState, step: number, k: number, o: DisplayOptions): number {
+export function restingOpacity(state: ElementState, step: number, k: number, o: DisplayOptions): number {
   switch (state) {
     case 'future':
       return o.futureSteps === 'hidden' ? 0 : o.futureSteps === 'ghosted' ? OPACITY.ghost : 1;
@@ -185,6 +189,7 @@ export function sceneAt(model: SceneModel, t: number, options: DisplayOptions = 
   const focus = inputs.focus && inputs.focus.size ? inputs.focus : undefined;
   // One focused participant: anything touching it; several: interactions among them only.
   const inFocus = (ids: string[]) => !focus || (focus.size === 1 ? ids.some((id) => focus.has(id)) : ids.every((id) => focus.has(id)));
+  const lit = (id: string) => inputs.highlight?.has(id) || undefined;
 
   // -- messages ---------------------------------------------------------------------------------------------
   const messages = new Map<string, MessageState>();
@@ -198,12 +203,12 @@ export function sceneAt(model: SceneModel, t: number, options: DisplayOptions = 
     const base = restingOpacity(state, step ?? -1, k, options);
     if (state !== 'current') {
       const fading = steps?.includes(k - 1) && k >= 0 ? 1 - windowed(e, 0, DURATION.base, EASE.exit) : 0;
-      messages.set(m.id, { state, opacity: dim(base), draw: 1, head: 1, headScale: 1, label: 1, labelRise: 0, highlight: fading, emphasis, dimmed });
+      messages.set(m.id, { state, opacity: dim(base), draw: 1, head: 1, headScale: 1, label: 1, labelRise: 0, highlight: fading, emphasis, dimmed, highlighted: lit(m.id) });
       continue;
     }
     if (minimal) {
       const f = windowed(e, 0, DURATION.fast, EASE.linear);
-      messages.set(m.id, { state, opacity: dim(f), draw: 1, head: 1, headScale: 1, label: f, labelRise: 0, highlight: 1, emphasis, dimmed });
+      messages.set(m.id, { state, opacity: dim(f), draw: 1, head: 1, headScale: 1, label: f, labelRise: 0, highlight: 1, emphasis, dimmed, highlighted: lit(m.id) });
       continue;
     }
     const draw = windowed(e, 0, T, EASE.travel);
@@ -223,6 +228,7 @@ export function sceneAt(model: SceneModel, t: number, options: DisplayOptions = 
       highlight: 1,
       pulse: options.indicator !== 'none' && pulseOpacity > 0 && draw > 0 ? { at: draw, opacity: pulseOpacity } : undefined,
       emphasis,
+      highlighted: lit(m.id),
     });
   }
 
@@ -271,7 +277,8 @@ export function sceneAt(model: SceneModel, t: number, options: DisplayOptions = 
       else if (dStep === k) destroyed = minimal ? (e > 0 ? 1 : 0) : windowed(e, T, T + DURATION.fast);
     }
     const focused = !!focus?.has(p.id) || undefined;
-    participants.set(p.id, { opacity, headerDy, glow: focused ? 1 : Math.max(0, glow), destroyed, focused });
+    const highlighted = lit(p.id);
+    participants.set(p.id, { opacity, headerDy, glow: focused || highlighted ? 1 : Math.max(0, glow), destroyed, focused, highlighted });
   }
 
   // -- activations --------------------------------------------------------------------------------------------

@@ -25,6 +25,13 @@ export interface AnimatorSettings {
   showCaptions: boolean;
   showInspector: boolean;
   chapterCards: boolean;
+  view: 'sequence' | 'topology' | 'split';
+  topologyLayout: 'layered' | 'force' | 'manual';
+  direction: 'LR' | 'TB';
+  edgeStyle: 'curved' | 'orthogonal' | 'straight';
+  returnMessages: 'merge' | 'separate' | 'hide';
+  edgeWeight: 'count' | 'uniform';
+  showMinimap: 'auto' | 'always' | 'never';
 }
 
 export const DEFAULT_SETTINGS: AnimatorSettings = {
@@ -48,6 +55,13 @@ export const DEFAULT_SETTINGS: AnimatorSettings = {
   showCaptions: true,
   showInspector: true,
   chapterCards: true,
+  view: 'sequence',
+  topologyLayout: 'layered',
+  direction: 'LR',
+  edgeStyle: 'curved',
+  returnMessages: 'merge',
+  edgeWeight: 'count',
+  showMinimap: 'auto',
 };
 
 const pick = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T => (typeof value === 'string' && (allowed as readonly string[]).includes(value) ? (value as T) : fallback);
@@ -92,5 +106,12 @@ export function resolveSettings(host: WebviewSettings, annotations: Record<strin
     showCaptions: bool(host['display.showCaptions'], d.showCaptions),
     showInspector: bool(host['display.showInspector'], d.showInspector),
     chapterCards: bool(host['presentation.chapterCards'], d.chapterCards),
+    view: pick(get('view', 'view.default'), ['sequence', 'topology', 'split'], d.view),
+    topologyLayout: pick(get('layout', 'topology.layout'), ['layered', 'force', 'manual'], d.topologyLayout),
+    direction: pick(get('direction', 'topology.direction'), ['LR', 'TB'], d.direction),
+    edgeStyle: pick(host['topology.edgeStyle'], ['curved', 'orthogonal', 'straight'], d.edgeStyle),
+    returnMessages: pick(get('returns', 'topology.returnMessages'), ['merge', 'separate', 'hide'], d.returnMessages),
+    edgeWeight: pick(host['topology.edgeWeight'], ['count', 'uniform'], d.edgeWeight),
+    showMinimap: pick(host['display.showMinimap'], ['auto', 'always', 'never'], d.showMinimap),
   };
 }

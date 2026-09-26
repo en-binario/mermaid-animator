@@ -1,0 +1,66 @@
+sequenceDiagram
+    %% @title "Order platform — long flow"
+    participant C as Client
+    participant G as Gateway
+    participant A as Auth
+    participant O as Orders
+    participant I as Inventory
+    participant P as Payments
+    participant L@{ "type": "database" } as Ledger
+    participant N@{ "type": "queue" } as Notifier
+    C->>G: Open app 1
+    G->>A: Verify token 1
+    A-->>G: Valid 1
+    G->>O: List orders 1
+    O->>L: Query history 1
+    L-->>O: Rows 1
+    O-->>G: Orders 1
+    G-->>C: Order list 1
+    C->>G: Open app 2
+    G->>A: Verify token 2
+    A-->>G: Valid 2
+    G->>O: List orders 2
+    O->>L: Query history 2
+    L-->>O: Rows 2
+    O-->>G: Orders 2
+    G-->>C: Order list 2
+    C->>G: Open app 3
+    G->>A: Verify token 3
+    A-->>G: Valid 3
+    G->>O: List orders 3
+    O->>L: Query history 3
+    L-->>O: Rows 3
+    O-->>G: Orders 3
+    G-->>C: Order list 3
+    C->>G: Open app 4
+    G->>A: Verify token 4
+    A-->>G: Valid 4
+    G->>O: List orders 4
+    O->>L: Query history 4
+    L-->>O: Rows 4
+    O-->>G: Orders 4
+    G-->>C: Order list 4
+    C->>G: Open app 5
+    G->>A: Verify token 5
+    A-->>G: Valid 5
+    G->>O: List orders 5
+    O->>L: Query history 5
+    L-->>O: Rows 5
+    O-->>G: Orders 5
+    G-->>C: Order list 5
+    C->>G: Open app 6
+    G->>A: Verify token 6
+    A-->>G: Valid 6
+    G->>O: List orders 6
+    O->>L: Query history 6
+    L-->>O: Rows 6
+    O-->>G: Orders 6
+    G-->>C: Order list 6
+    O->>I: Reserve stock
+    I-->>O: Reserved
+    O->>P: Charge
+    P->>L: Write entry
+    L-->>P: Ack
+    P-->>O: Charged
+    O->>N: Publish order.created
+    N-->>C: Push notification

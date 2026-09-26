@@ -5,6 +5,7 @@ import { render } from 'preact';
 import { effect, signal } from '@preact/signals';
 import { resolvePalette } from '@mermaid-animator/renderer';
 import { PROTOCOL_VERSION, WEBVIEW_STRINGS, webviewMessage, type CommandAction, type HostMessage } from '@mermaid-animator/protocol';
+import { setAssetBase } from './assetBase';
 import { App, type ExportAction, type UiState } from './App';
 import type { InspectorSection } from './Inspector';
 import { DiagramController } from './controller';
@@ -12,6 +13,7 @@ import { Host } from './host';
 import { SPEEDS } from './player';
 import { format, initialHostState, reduce, resolveReduceMotion, type HostState } from './state';
 
+setAssetBase(new URL('./', import.meta.url).href);
 const host = new Host();
 const hostState = signal<HostState>(initialHostState);
 const controller = signal<DiagramController | undefined>(undefined);
@@ -243,6 +245,13 @@ function command(action: CommandAction, args?: Record<string, unknown>): void {
       return startPresentation();
     case 'stopPresentation':
       return stopPresentation();
+    case 'setView':
+      if (args?.view === 'sequence' || args?.view === 'topology' || args?.view === 'split') void c.setView(args.view);
+      return;
+    case 'toggleView':
+      return c.toggleView();
+    case 'resetLayout':
+      return c.resetLayout();
   }
 }
 
@@ -329,6 +338,8 @@ window.addEventListener('keydown', (e) => {
     r: () => c.stepList.value.length && setUi({ transcript: !ui.transcript }),
     '/': () => c.stepList.value.length && setUi({ search: true }),
     p: () => togglePresentation(),
+    t: () => c.toggleView(),
+    s: () => c.toggleSplit(),
     ...(presenting
       ? {
           b: () => setUi({ blank: !ui.blank }),
@@ -354,7 +365,7 @@ function handle(message: HostMessage): void {
   switch (message.type) {
     case 'document/load':
       if (!c) pendingLoad = message;
-      else void c.load(message.payload.source, message.payload.origin, hostState.value.settings, reducedMotion());
+      else void c.load(message.payload.source, message.payload.origin, hostState.value.settings, reducedMotion(), message.payload.layout);
       break;
     case 'document/update':
       if (message.payload.unbound) c?.markUnbound();
@@ -388,9 +399,9 @@ function mountCanvas(el: HTMLElement): void {
   const c = new DiagramController(el, host, t);
   controller.value = c;
   if (pendingLoad?.type === 'document/load') {
-    const { source, origin } = pendingLoad.payload;
+    const { source, origin, layout } = pendingLoad.payload;
     pendingLoad = undefined;
-    void c.load(source, origin, hostState.value.settings, reducedMotion());
+    void c.load(source, origin, hostState.value.settings, reducedMotion(), layout);
   }
 }
 

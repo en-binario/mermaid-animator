@@ -5,6 +5,7 @@ import { basename, diagramLabel, diagramNear, diagramsIn } from './diagrams';
 import { DiagramCodeLensProvider, DiagramDiagnostics, forwardCursor, StepDecorations, updateContextKeys } from './editorIntegration';
 import { config } from './environment';
 import { PresentationLayout } from './presentation';
+import { LayoutStore } from './layouts';
 import { AnnotationCodeActionProvider, AnnotationCompletionProvider, AnnotationHighlighter, AnnotationHoverProvider, insertAnnotation } from './annotationEditing';
 
 /** Test hook: exposed from `activate` so integration tests can inspect panels. */
@@ -40,6 +41,14 @@ const PLAYBACK_COMMANDS: [string, CommandAction][] = [
   ['mermaidAnimator.search', 'search'],
   ['mermaidAnimator.startPresentation', 'startPresentation'],
   ['mermaidAnimator.stopPresentation', 'stopPresentation'],
+  ['mermaidAnimator.toggleView', 'toggleView'],
+];
+
+/** View commands (spec view-switching), routed as `setView` with a `view` argument. */
+const VIEW_COMMANDS: [string, 'sequence' | 'topology' | 'split'][] = [
+  ['mermaidAnimator.setView.sequence', 'sequence'],
+  ['mermaidAnimator.setView.topology', 'topology'],
+  ['mermaidAnimator.setView.split', 'split'],
 ];
 
 export function activate(context: vscode.ExtensionContext): MermaidAnimatorApi {
@@ -49,6 +58,7 @@ export function activate(context: vscode.ExtensionContext): MermaidAnimatorApi {
   // eslint-disable-next-line prefer-const
   let diagnostics: DiagramDiagnostics;
   const presentation = new PresentationLayout();
+  const layouts = new LayoutStore(context.workspaceState);
   const setPresenting = () => void vscode.commands.executeCommand('setContext', 'mermaidAnimator.presenting', presentation.presenting);
   const panels = new PanelManager(context.extensionUri, output, {
     onStep: (panel, ranges) => decorations.set(panel.uri, ranges),
@@ -70,6 +80,7 @@ export function activate(context: vscode.ExtensionContext): MermaidAnimatorApi {
       } else await presentation.exit(panel);
       setPresenting();
     },
+    layouts,
   });
   diagnostics = new DiagramDiagnostics(panels);
 
@@ -174,6 +185,8 @@ export function activate(context: vscode.ExtensionContext): MermaidAnimatorApi {
     vscode.commands.registerCommand('mermaidAnimator.export', () => exportQuickPick(panels.active() ?? (panels.count === 1 ? panels.all()[0] : undefined))),
     vscode.commands.registerCommand('mermaidAnimator.exportDiagram', async (uri: vscode.Uri, index: number) => exportQuickPick(openDiagram(uri, index, true))),
     ...PLAYBACK_COMMANDS.map(([id, action]) => vscode.commands.registerCommand(id, route(action))),
+    ...VIEW_COMMANDS.map(([id, view]) => vscode.commands.registerCommand(id, () => route('setView')({ view }))),
+    vscode.commands.registerCommand('mermaidAnimator.resetLayout', () => (panels.active() ?? (panels.count === 1 ? panels.all()[0] : undefined))?.resetLayout()),
     vscode.languages.registerCodeLensProvider(markdownSelector, codeLens),
     highlighter,
     vscode.languages.registerCompletionItemProvider(mermaidSelector, new AnnotationCompletionProvider(), '@', '=', ' ', ','),

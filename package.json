@@ -1,7 +1,7 @@
 {
   "name": "mermaid-animator-monorepo",
   "private": true,
-  "description": "Mermaid Animator \u00e2\u20ac\u201d play Mermaid diagrams as elegant, navigable animations in VS Code.",
+  "description": "Mermaid Animator — play Mermaid diagrams as elegant, navigable animations in VS Code.",
   "license": "MIT",
   "type": "module",
   "workspaces": [
@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/d3-force": "3.0.10",
     "@types/d3-interpolate": "3.0.4",
     "@types/d3-selection": "3.0.12",
     "@types/d3-zoom": "3.0.8",

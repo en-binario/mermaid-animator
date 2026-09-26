@@ -71,7 +71,7 @@ export class Player {
   /** True while time must keep advancing (autoplay or a stepping animation). */
   /** Reasons that freeze the playhead mid-step, not just autoplay (camera moves, presentation cards). */
   private frozen(): boolean {
-    return this.pausedBy.has('camera') || this.pausedBy.has('card');
+    return this.pausedBy.has('camera') || this.pausedBy.has('card') || this.pausedBy.has('morph');
   }
 
   get isActive(): boolean {

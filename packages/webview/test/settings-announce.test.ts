@@ -27,6 +27,13 @@ describe('resolveSettings', () => {
     expect(resolveSettings({ themeMode: 'auto' }).parallel).toBe('concurrent');
   });
 
+  it('resolves the M2b view and topology settings with annotation overrides', () => {
+    const d = compileDiagram('%% @animator view=topology layout=force direction=TB returns=hide\nsequenceDiagram\nA->>B: x');
+    const s = resolveSettings({ themeMode: 'auto', 'view.default': 'split', 'topology.edgeStyle': 'orthogonal', 'topology.edgeWeight': 'uniform', 'display.showMinimap': 'never' }, d.settings);
+    expect(s).toMatchObject({ view: 'topology', topologyLayout: 'force', direction: 'TB', returnMessages: 'hide', edgeStyle: 'orthogonal', edgeWeight: 'uniform', showMinimap: 'never' });
+    expect(resolveSettings({ themeMode: 'auto' })).toMatchObject({ view: 'sequence', topologyLayout: 'layered', direction: 'LR', edgeStyle: 'curved', returnMessages: 'merge', edgeWeight: 'count', showMinimap: 'auto' });
+  });
+
   it('clamps speed to 0.25–4', () => {
     expect(resolveSettings({ themeMode: 'auto', 'playback.speed': 10 }).speed).toBe(4);
   });

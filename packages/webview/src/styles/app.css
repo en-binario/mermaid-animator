@@ -1207,3 +1207,247 @@ body {
   background: transparent;
   outline: 1px solid var(--ma-accent);
 }
+
+/* ---------------------------------------------------------------------------------------------
+ * M2b — views, morph, split, minimap (spec view-switching, split-view, minimap). Tokens only.
+ * ------------------------------------------------------------------------------------------- */
+
+.ma-views {
+  position: absolute;
+  inset: 0;
+}
+
+.ma-slot {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.ma-slot .ma-svg,
+.ma-views .ma-morph-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+/* Single views: the other slot stays laid out (so it keeps a size) but invisible. */
+.ma-views[data-view='sequence'] .ma-slot--topology,
+.ma-views[data-view='topology'] .ma-slot--sequence {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.ma-views .ma-morph-layer {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.ma-views[data-morphing='morph'] .ma-slot {
+  visibility: hidden;
+}
+
+.ma-views[data-morphing='morph'] .ma-morph-layer {
+  visibility: visible;
+}
+
+.ma-views[data-morphing='fade'] .ma-slot {
+  visibility: visible;
+  pointer-events: none;
+}
+
+/* Split: side by side from 1100 px, stacked below (spec split-view). */
+.ma-views[data-view='split'] {
+  display: grid;
+  gap: 1px;
+  background: var(--ma-hairline);
+}
+
+.ma-views[data-view='split'][data-split='columns'] {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.ma-views[data-view='split'][data-split='rows'] {
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.ma-views[data-view='split'] .ma-slot {
+  position: relative;
+  inset: auto;
+  background: var(--ma-canvas);
+}
+
+.ma-svg--dragging {
+  cursor: grabbing;
+}
+
+.ma-slot--topology .ma-participant {
+  cursor: pointer;
+}
+
+.ma-progress--layout {
+  z-index: 12;
+}
+
+/* Minimap */
+.ma-minimap {
+  position: absolute;
+  right: var(--ma-space-3);
+  bottom: var(--ma-space-3);
+  z-index: 11;
+  padding: 4px;
+  background: var(--ma-surface);
+  border: var(--ma-border-width) solid var(--ma-rule);
+  border-radius: var(--ma-radius-sm);
+  box-shadow: var(--ma-elevation-1);
+  line-height: 0;
+}
+
+.ma-minimap[hidden] {
+  display: none;
+}
+
+.ma-minimap svg {
+  display: block;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.ma-minimap-content line {
+  stroke: var(--ma-ink-3);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.ma-minimap-content rect {
+  fill: var(--ma-surface-sunken);
+  stroke: var(--ma-rule);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.ma-minimap-viewport {
+  fill: var(--ma-accent);
+  fill-opacity: 0.08;
+  stroke: var(--ma-accent);
+  stroke-width: 1.25;
+  cursor: grab;
+}
+
+.ma-minimap-current {
+  fill: var(--ma-brass);
+  pointer-events: none;
+}
+
+/* Keep the "Resume following" chip clear of the minimap. */
+.ma-canvas:has(.ma-minimap:not([hidden])) .ma-resume {
+  bottom: calc(var(--ma-space-4) + 130px);
+}
+
+/* View switcher */
+.ma-segmented {
+  display: inline-flex;
+  margin-right: var(--ma-space-2);
+  border: var(--ma-border-width) solid var(--ma-rule);
+  border-radius: var(--ma-radius-sm);
+  overflow: hidden;
+}
+
+.ma-segmented__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 var(--ma-space-2);
+  border: 0;
+  background: transparent;
+  color: var(--ma-ink-2);
+  font: inherit;
+  font-size: var(--ma-type-caption);
+  cursor: pointer;
+}
+
+.ma-segmented__item + .ma-segmented__item {
+  border-left: var(--ma-border-width) solid var(--ma-rule);
+}
+
+.ma-segmented__item:hover {
+  background: var(--ma-surface-sunken);
+}
+
+.ma-segmented__item--checked,
+.ma-segmented__item--checked:hover {
+  background: var(--ma-accent-muted);
+  color: var(--ma-ink-1);
+  font-weight: 560;
+}
+
+.ma-segmented__item:focus-visible {
+  outline: 1px solid var(--ma-focus);
+  outline-offset: -2px;
+}
+
+@media (max-width: 760px) {
+  .ma-segmented__label {
+    display: none;
+  }
+}
+
+/* Edge card */
+.ma-edge-card {
+  position: absolute;
+  z-index: 30;
+  min-width: 200px;
+  max-width: 340px;
+  padding: var(--ma-space-2);
+  background: var(--ma-surface);
+  border: var(--ma-border-width) solid var(--ma-rule);
+  border-radius: var(--ma-radius-sm);
+  box-shadow: var(--ma-elevation-1);
+  font-size: var(--ma-type-caption);
+}
+
+.ma-edge-card__title {
+  padding: 0 var(--ma-space-1) var(--ma-space-1);
+  color: var(--ma-ink-2);
+  font-weight: 600;
+}
+
+.ma-edge-card__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ma-edge-card__item {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--ma-space-3);
+  width: 100%;
+  padding: 4px var(--ma-space-1);
+  border: 0;
+  border-radius: var(--ma-radius-xs);
+  background: transparent;
+  color: var(--ma-ink-1);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ma-edge-card__item:hover:not(:disabled),
+.ma-edge-card__item:focus-visible {
+  background: var(--ma-surface-sunken);
+  outline: none;
+}
+
+.ma-edge-card__item:disabled {
+  color: var(--ma-ink-3);
+  cursor: default;
+}
+
+.ma-edge-card__step {
+  color: var(--ma-ink-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

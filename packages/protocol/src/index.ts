@@ -49,6 +49,8 @@ export interface DocumentLoadPayload {
   diagramIndex?: number;
   /** Every diagram in the source document, for the toolbar switcher (M1). */
   diagrams?: DiagramSummary[];
+  /** Manual topology positions saved for this diagram (M2b), node id → centre. */
+  layout?: Record<string, { x: number; y: number }>;
 }
 
 export interface DocumentUpdatePayload {
@@ -68,11 +70,13 @@ export interface SettingsChangedPayload {
 export type CommandAction =
   | 'togglePlay' | 'play' | 'pause' | 'next' | 'previous' | 'first' | 'last' | 'goToStep'
   | 'export' | 'exportSvg' | 'exportPng' | 'copyImage' | 'revealSource' | 'fit'
-  | 'seekToLine' | 'nextChapter' | 'previousChapter' | 'toggleTranscript' | 'toggleInspector' | 'search' | 'startPresentation' | 'stopPresentation';
+  | 'seekToLine' | 'nextChapter' | 'previousChapter' | 'toggleTranscript' | 'toggleInspector' | 'search' | 'startPresentation' | 'stopPresentation'
+  | 'setView' | 'toggleView' | 'resetLayout';
 
 export const COMMAND_ACTIONS: readonly CommandAction[] = [
   'togglePlay', 'play', 'pause', 'next', 'previous', 'first', 'last', 'goToStep', 'export', 'exportSvg', 'exportPng', 'copyImage', 'revealSource', 'fit',
   'seekToLine', 'nextChapter', 'previousChapter', 'toggleTranscript', 'toggleInspector', 'search', 'startPresentation', 'stopPresentation',
+  'setView', 'toggleView', 'resetLayout',
 ];
 
 export type ExportFormat = 'svg' | 'png';
@@ -119,7 +123,9 @@ export type WebviewMessage =
   | { v: 1; type: 'export/data'; payload: ExportDataPayload }
   | { v: 1; type: 'clipboard/fallback'; payload: { reason: string } }
   /** Asks the host to enter or leave the presentation layout (spec presentation-mode). */
-  | { v: 1; type: 'presentation/toggle'; payload: { on: boolean } };
+  | { v: 1; type: 'presentation/toggle'; payload: { on: boolean } }
+  /** Manual topology positions changed (M2b); `key` identifies the diagram within its document. */
+  | { v: 1; type: 'layout/save'; payload: { key: string; positions: Record<string, { x: number; y: number }> } };
 
 export type HostMessageType = HostMessage['type'];
 export type WebviewMessageType = WebviewMessage['type'];
@@ -169,10 +175,19 @@ const arrayOf = (g: Guard): Guard => (v) => {
 };
 const bytes: Guard = (v) => (v instanceof Uint8Array ? undefined : 'expected Uint8Array');
 const diagramSummary = shape({ index: num, type: str, title: optional(str), summary: str });
+const point = shape({ x: num, y: num });
+const positions: Guard = (v) => {
+  if (!isObject(v)) return 'expected object';
+  for (const [k, p] of Object.entries(v)) {
+    const error = point(p);
+    if (error) return `${k}: ${error}`;
+  }
+  return undefined;
+};
 
 const hostPayloads: Record<HostMessageType, Guard> = {
   init: shape({ settings, themeKind, reduceMotion: nullable(bool), locale: str, strings: stringRecord }),
-  'document/load': shape({ uri: str, fileName: str, source: str, version: num, origin: position, diagramIndex: optional(num), diagrams: optional(arrayOf(diagramSummary)) }),
+  'document/load': shape({ uri: str, fileName: str, source: str, version: num, origin: position, diagramIndex: optional(num), diagrams: optional(arrayOf(diagramSummary)), layout: optional(positions) }),
   'document/update': shape({ source: str, version: num, origin: position, unbound: optional(bool) }),
   'settings/changed': shape({ settings, themeKind, reduceMotion: nullable(bool) }),
   command: shape({ action: oneOf(...COMMAND_ACTIONS), args: optional(record) }),
@@ -190,6 +205,7 @@ const webviewPayloads: Record<WebviewMessageType, Guard> = {
   'export/data': shape({ format: oneOf('svg', 'png'), suggestedName: str, data: bytes, index: num, total: num }),
   'clipboard/fallback': shape({ reason: str }),
   'presentation/toggle': shape({ on: bool }),
+  'layout/save': shape({ key: str, positions }),
 };
 
 function validate<T>(value: unknown, payloads: Record<string, Guard>): ValidationResult<T> {

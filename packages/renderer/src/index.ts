@@ -4,3 +4,6 @@ export * from './scene';
 export * from './geometry';
 export * from './svg';
 export * from './measure';
+export * from './topologyScene';
+export * from './topologySvg';
+export * from './morph';

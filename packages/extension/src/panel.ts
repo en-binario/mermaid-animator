@@ -15,6 +15,7 @@ import { buildHtml, createNonce } from './html';
 import { affectsWebview, config, currentReduceMotion, currentSettings, currentThemeKind } from './environment';
 import { basename, diagramLabel, diagramsIn } from './diagrams';
 import { webviewStrings } from './strings';
+import type { LayoutStore } from './layouts';
 
 export const PANEL_VIEW_TYPE = 'mermaidAnimator.panel';
 
@@ -33,6 +34,8 @@ export interface PanelEvents {
   onActive(panel: AnimatorPanel, active: boolean): void;
   /** The webview asked to enter or leave the presentation layout. */
   onPresentation(panel: AnimatorPanel, on: boolean): Promise<void>;
+  /** Manual topology layouts (M2b). */
+  layouts: LayoutStore;
 }
 
 const toRange = (r: DocumentRange) => new vscode.Range(r.startLine, r.startCol, r.endLine, r.endCol);
@@ -201,7 +204,23 @@ export class AnimatorPanel implements vscode.Disposable {
         this.presenting = message.payload.on;
         this.post(hostMessage('presentation/state', { on: message.payload.on }));
         break;
+      case 'layout/save':
+        if (this.diagram) await this.events.layouts.set(this.uri, this.diagram, message.payload.positions);
+        break;
     }
+  }
+
+  /** Test hook: handles a message as if the webview had sent it. */
+  receiveForTest(raw: unknown): Promise<void> {
+    const result = validateWebviewMessage(raw);
+    if (!result.ok) return Promise.reject(new Error(result.error));
+    return this.handle(result.message);
+  }
+
+  /** Clears this diagram's manual topology layout (Reset Topology Layout). */
+  async resetLayout(): Promise<void> {
+    if (this.diagram) await this.events.layouts.clear(this.uri, this.diagram);
+    this.command('resetLayout');
   }
 
   /** Sends the bound diagram (re-finding it by id, similarity or index). */
@@ -224,6 +243,7 @@ export class AnimatorPanel implements vscode.Disposable {
           origin: { line: diagram.contentStartLine, character: 0 },
           diagramIndex: diagram.index,
           diagrams: diagrams.map((d) => ({ index: d.index, type: d.type, title: d.title, summary: diagramLabel(d) })),
+          layout: this.events.layouts.get(this.uri, diagram),
         }),
       );
     } catch (error) {
