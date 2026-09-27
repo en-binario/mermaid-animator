@@ -295,6 +295,42 @@ body {
   font-weight: 560;
 }
 
+/* Zoom group: − 100% + (spec zoom-controls) */
+.ma-zoom {
+  display: inline-flex;
+  align-items: center;
+  margin-right: var(--ma-space-1);
+}
+
+.ma-zoom__level {
+  min-width: 48px;
+  height: 32px;
+  padding: 0 var(--ma-space-1);
+  border: var(--ma-border-width) solid transparent;
+  border-radius: var(--ma-radius-sm);
+  background: transparent;
+  color: var(--ma-ink-2);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.ma-zoom__level:hover,
+.ma-zoom__level[aria-expanded='true'] {
+  background: var(--ma-surface-sunken);
+  color: var(--ma-ink-1);
+}
+
+.ma-zoom__level:focus-visible {
+  outline: 1px solid var(--ma-focus);
+  outline-offset: 2px;
+}
+
+.ma-menu--zoom {
+  min-width: 96px;
+  font-variant-numeric: tabular-nums;
+}
+
 .ma-menu--speed {
   min-width: 96px;
   font-variant-numeric: tabular-nums;
@@ -392,13 +428,6 @@ body {
   font-size: var(--ma-type-caption);
   cursor: pointer;
   box-shadow: var(--ma-elevation-1);
-}
-
-.ma-resume {
-  position: absolute;
-  right: var(--ma-space-4);
-  bottom: var(--ma-space-4);
-  z-index: 10;
 }
 
 .ma-tooltip {
@@ -1338,11 +1367,6 @@ body {
 .ma-minimap-current {
   fill: var(--ma-brass);
   pointer-events: none;
-}
-
-/* Keep the "Resume following" chip clear of the minimap. */
-.ma-canvas:has(.ma-minimap:not([hidden])) .ma-resume {
-  bottom: calc(var(--ma-space-4) + 130px);
 }
 
 /* View switcher */

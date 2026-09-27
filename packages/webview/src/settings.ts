@@ -58,7 +58,7 @@ export const DEFAULT_SETTINGS: AnimatorSettings = {
   startAt: 'beginning',
   notes: 'step',
   snap: true,
-  display: { futureSteps: 'hidden', pastSteps: 'full', trailLength: 3, motion: 'formal', indicator: 'pulse' },
+  display: { futureSteps: 'hidden', pastSteps: 'full', trailLength: 3, motion: 'formal', indicator: 'pulse', overview: true },
   respectReducedMotion: true,
   camera: 'auto',
   loopIterations: 1,
@@ -76,7 +76,7 @@ export const DEFAULT_SETTINGS: AnimatorSettings = {
   edgeWeight: 'count',
   showMinimap: 'auto',
   participantNames: 'auto',
-  arrowEndNames: 'off',
+  arrowEndNames: 'auto',
   exportDefaults: { format: 'animated-svg', scale: 2, background: 'theme', captions: true, svgAdaptiveTheme: false },
 };
 
@@ -112,6 +112,7 @@ export function resolveSettings(host: WebviewSettings, annotations: Record<strin
       trailLength: num(get('trail', 'display.trailLength'), d.display.trailLength, 1, 20),
       motion: pick(get('motion', 'motion.profile'), ['formal', 'expressive', 'minimal', 'none'], d.display.motion),
       indicator: pick(get('indicator', 'motion.travelIndicator'), ['pulse', 'comet', 'none'], d.display.indicator),
+      overview: bool(get('overview', 'playback.initialOverview'), d.display.overview ?? true),
     },
     respectReducedMotion: bool(host['motion.respectReducedMotion'], d.respectReducedMotion),
     camera: pick(get('camera', 'camera.mode'), ['auto', 'fit', 'follow', 'cinematic', 'manual'], d.camera),

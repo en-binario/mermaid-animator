@@ -86,6 +86,8 @@ export interface CompileOptions {
   /** Sidecar captions and chapters by step index, used where no annotation provides one (M3). */
   stepCaptions?: Record<number, string>;
   stepChapters?: Record<number, string>;
+  /** Initial overview (spec initial-overview): the timeline rests on the complete diagram, then clears. */
+  overview?: boolean;
 }
 
 /** A fragment as seen by the inspector's branch chooser. */

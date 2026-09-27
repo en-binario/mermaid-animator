@@ -6,7 +6,7 @@
 import { signal } from '@preact/signals';
 import {
   buildTopology, interpolateGeometry, topologyGeometry, topologyNodeSize, unionBox,
-  type CompiledSequence, type EdgeStyle, type Measure, type Point, type Rect, type ReturnMessages, type SequenceModel, type Timeline, type Topology, type TopologyGeometry,
+  type CompiledSequence, type EdgeStyle, type LabelMark, type Measure, type TextRun, type Point, type Rect, type ReturnMessages, type SequenceModel, type Timeline, type Topology, type TopologyGeometry,
 } from '@mermaid-animator/core';
 import { EASE, prepareTopologyScene, SVG_NS, topologySceneAt, TopologySvgRenderer, type DisplayOptions, type TopologyScene, type TopologySceneInputs, type TopologySceneModel } from '@mermaid-animator/renderer';
 import { Camera, type Viewport } from '../camera';
@@ -48,7 +48,7 @@ export class TopologyView {
   /** The settled geometry of the latest layout. */
   geometry: TopologyGeometry | undefined;
   /** Node label lines and message labels of the mounted topology (exports reuse them). */
-  labels: { nodes: Map<string, string[]>; messages: Map<string, string> } = { nodes: new Map(), messages: new Map() };
+  labels: { nodes: Map<string, string[]>; messages: Map<string, string>; nodeRuns?: Map<string, TextRun[][]>; messageMarks?: Map<string, LabelMark[]> } = { nodes: new Map(), messages: new Map() };
   private glide: { from: TopologyGeometry; start: number } | undefined;
   private settings: TopologySettings = { layout: 'layered', direction: 'LR', edgeStyle: 'curved', returnMessages: 'merge', edgeWeight: 'count' };
   private stored = new Map<string, Point>();
@@ -150,11 +150,16 @@ export class TopologyView {
     if (generation !== this.generation) return;
     const labels = {
       nodes: new Map([...sizes].map(([id, s]) => [id, (s as Size & { lines?: string[] }).lines ?? [id]])),
+      nodeRuns: new Map([...sizes].flatMap(([id, s]) => ((s as Size & { runs?: TextRun[][] }).runs ? [[id, (s as Size & { runs: TextRun[][] }).runs] as const] : []))),
       messages: new Map<string, string>(),
+      messageMarks: new Map<string, LabelMark[]>(),
     };
     const visit = (nodes: SequenceModel['body']) => {
       for (const n of nodes) {
-        if (n.type === 'message') labels.messages.set(n.message.id, n.message.label);
+        if (n.type === 'message') {
+          labels.messages.set(n.message.id, n.message.label);
+          if (n.message.labelMarks) labels.messageMarks.set(n.message.id, n.message.labelMarks);
+        }
         else if (n.type === 'fragment') n.fragment.branches.forEach((b) => visit(b.children));
       }
     };

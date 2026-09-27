@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { adaptiveDwellMs, buildTimeline, compileDiagram, fnv1a64, positionAt, resolvePosition, snapTime, stepEnd, travelMs } from '../src';
+import { adaptiveDwellMs, buildTimeline, CLEAR_MS, compileDiagram, fnv1a64, positionAt, resolvePosition, snapTime, stepEnd, transitionOf, travelMs } from '../src';
 
 const compile = (body: string, options = {}) => {
   const result = compileDiagram(`sequenceDiagram\n${body}`, options);
@@ -187,7 +187,7 @@ describe('timeline', () => {
   });
 
   it('reports positions', () => {
-    expect(positionAt(timeline, 0)).toEqual({ index: -1, phase: 'initial', progress: 0, elapsed: 0 });
+    expect(positionAt(timeline, 0)).toEqual({ index: -1, phase: 'initial', progress: 0, elapsed: 0, cleared: 0 });
     expect(positionAt(timeline, 157.5)).toMatchObject({ index: 0, phase: 'transition', progress: 0.5 });
     expect(positionAt(timeline, stepEnd(timeline, 0))).toMatchObject({ index: 0, phase: 'dwell', progress: 1 });
     expect(positionAt(timeline, timeline.duration + 100)).toMatchObject({ index: 1, phase: 'dwell' });
@@ -202,6 +202,45 @@ describe('timeline', () => {
 
   it('builds an empty timeline for no steps', () => {
     expect(buildTimeline([])).toEqual({ starts: [], transitions: [], settles: [], dwells: [], holds: [], duration: 0 });
+    expect(buildTimeline([], { overview: true, leadInMs: 900 })).toEqual({ starts: [], transitions: [], settles: [], dwells: [], holds: [], duration: 0 });
+  });
+});
+
+describe('timeline with the initial overview', () => {
+  const source = 'participant A\nparticipant B\nA->>B: one\nB->>A: two';
+  const plain = compile(source, { dwellMs: 900 }).timeline;
+  const { compiled: { steps }, timeline } = compileDiagram(`sequenceDiagram\n${source}`, { overview: true, dwellMs: 900 }).sequence!;
+
+  it('leaves the timeline unchanged without the overview', () => {
+    expect(compileDiagram(`sequenceDiagram\n${source}`, { overview: false, dwellMs: 900 }).sequence!.timeline).toEqual(plain);
+    expect(plain.clear).toBeUndefined();
+  });
+
+  it('rests on the overview for the lead-in, then clears inside step 0', () => {
+    expect(timeline.clear).toBe(CLEAR_MS);
+    expect(timeline.starts[0]).toBe(900);
+    expect(timeline.transitions[0]).toBe(plain.transitions[0]! + CLEAR_MS);
+    expect(transitionOf(timeline, 0)).toBe(plain.transitions[0]);
+    expect(transitionOf(timeline, 1)).toBe(plain.transitions[1]);
+    expect(timeline.duration).toBe(plain.duration + 900 + CLEAR_MS);
+    expect(steps).toHaveLength(2);
+  });
+
+  it('reports the overview until step 0 starts, then the clear before the step draws', () => {
+    expect(positionAt(timeline, 0)).toMatchObject({ index: -1, phase: 'initial', cleared: 0 });
+    expect(positionAt(timeline, 900)).toMatchObject({ index: -1, phase: 'initial', cleared: 0 });
+    expect(positionAt(timeline, 900 + CLEAR_MS / 2)).toMatchObject({ index: 0, phase: 'transition', progress: 0, cleared: 0.5, elapsed: -CLEAR_MS / 2 });
+    expect(positionAt(timeline, 900 + CLEAR_MS)).toMatchObject({ index: 0, cleared: 1, elapsed: 0 });
+    expect(positionAt(timeline, 900 + CLEAR_MS + plain.transitions[0]! / 2)).toMatchObject({ index: 0, phase: 'transition', progress: 0.5 });
+    expect(positionAt(timeline, stepEnd(timeline, 0))).toMatchObject({ index: 0, phase: 'dwell', cleared: 1 });
+    expect(positionAt(timeline, timeline.starts[1]! + 1)).toMatchObject({ index: 1, cleared: 1 });
+  });
+
+  it('keeps step boundaries for snapping and resting', () => {
+    expect(stepEnd(timeline, -1)).toBe(0);
+    expect(stepEnd(timeline, 0)).toBe(900 + CLEAR_MS + plain.transitions[0]! + 240);
+    expect(snapTime(timeline, 100)).toBe(0);
+    expect(snapTime(timeline, stepEnd(timeline, 0) - 20)).toBe(stepEnd(timeline, 0));
   });
 });
 

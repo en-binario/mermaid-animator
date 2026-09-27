@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { compileDiagram, layoutSequence, type SequenceLayout } from '@mermaid-animator/core';
-import { arrowTags, edgeMarkers, fitText, panToReveal, RAIL, railEntries, type ScreenView } from '../src/orientation/model';
+import { arrowTags, edgeMarkers, fitText, panToReveal, RAIL, railEntries, tagOpacity, type ScreenView } from '../src/orientation/model';
 
 /** 7 px per character at 12 px; scales with the font size in the CSS font string. */
 const measure = (text: string, font: string) => text.length * 7 * (Number(/(\d+(?:\.\d+)?)px/.exec(font)?.[1] ?? 12) / 12);
@@ -173,5 +173,14 @@ describe('arrow-end tags with autonumber', () => {
     const k = 3;
     const [from] = arrowTags(numbered, [m.id], { k, x: 0, y: 0 }, { width: 2000, height: 2000 }, 'always', measure);
     expect(from!.x - m.points[0]!.x * k).toBeGreaterThanOrEqual(9 * k);
+  });
+});
+
+describe('arrow-end tag fade with the initial overview', () => {
+  it('starts fading in after the overview clear', () => {
+    const timeline = { starts: [900, 2000], transitions: [240 + 300, 300], clear: 240 };
+    expect(tagOpacity(timeline, 0, 900 + 200)).toBe(0);
+    expect(tagOpacity(timeline, 0, 900 + 240 + 150)).toBeCloseTo(0.5);
+    expect(tagOpacity(timeline, 1, 2150)).toBeCloseTo(0.5);
   });
 });

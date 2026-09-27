@@ -6,6 +6,9 @@ import { animatorSettings, parseAnnotations, valueText, type Annotation, type An
 import { compileSequence, type CompiledSequence, type CompileOptions } from './steps';
 import { buildTimeline, type Timeline } from './timeline';
 
+/** How long playback rests on the overview when playing through it, without `dwellMs` (spec initial-overview). */
+export const DEFAULT_OVERVIEW_DWELL_MS = 900;
+
 export interface CompiledDiagram {
   type: DiagramType;
   title?: string;
@@ -48,6 +51,6 @@ export function compileDiagram(source: string, options: CompileOptions = {}): Co
   const notes = settings.notes ? (valueText(settings.notes) as CompileOptions['notes']) : options.notes;
   const compiled = compileSequence(parsed.model, annotations, { ...options, notes });
   base.diagnostics.push(...compiled.diagnostics);
-  base.sequence = { model: parsed.model, compiled, timeline: buildTimeline(compiled.steps) };
+  base.sequence = { model: parsed.model, compiled, timeline: buildTimeline(compiled.steps, { overview: options.overview, leadInMs: options.dwellMs ?? DEFAULT_OVERVIEW_DWELL_MS }) };
   return base;
 }

@@ -244,6 +244,10 @@ export class AnimatorPanel implements vscode.Disposable {
       case 'sidecar/unresolved':
         if (this.diagram) await this.events.sidecars.report(this.uri, this.diagram, message.payload.entries);
         break;
+      case 'settings/open':
+        // The host decides what opens: the payload is ignored (spec host-webview-protocol).
+        await vscode.commands.executeCommand('mermaidAnimator.openSettings');
+        break;
     }
   }
 

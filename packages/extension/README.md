@@ -17,8 +17,13 @@ Nothing in your diagrams needs to change. Edits appear live, and the panel keeps
 
 ## What you see
 
+- **Overview first.** Step 0 shows the complete diagram, framed to fit, so you see the whole picture before the reveal. The first step clears it, and the diagram then builds up step by step; stepping back to 0 brings the overview back. Turn it off with `mermaidAnimator.playback.initialOverview` or, for one diagram, `%% @animator overview=false`.
 - Messages draw from sender to receiver with a travelling pulse; activations rise and fall; notes, created participants and destroyed lifelines appear on their step; `loop` / `alt` / `opt` / `par` / `critical` / `break` / `rect` frames light up while their steps play.
 - Loops repeat with an `n / N` counter in their tab; `par` lanes play together, each message with its own pulse; `alt` / `critical` / `opt` play the branch you choose — in the inspector, with `%% @branch`, or on the canvas when `playback.altBranches` is `ask`.
+- **Camera.** With *Camera follows playback* on (the eye button or `C`), the camera keeps each step in view. Pan, scroll or zoom whenever you like: following stays on, and if the animation is playing it pauses. Press play (or step) and the camera returns to the current step at the zoom you chose. Only the eye button or `C` turns following off.
+- **Settings.** The gear button at the end of the panel toolbar (or **Mermaid Animator: Open Settings**, also in the Mermaid Diagrams view's title bar) opens the Settings editor filtered to Mermaid Animator.
+- **Zoom.** The toolbar's zoom group shows the current zoom: `−` and `+` zoom out and in (like the `-` and `+` keys), and clicking the percentage offers 25 %–400 % and *Fit*. `Ctrl`/`Cmd` + wheel or a pinch zooms about the pointer.
+- **Bold and italic labels.** `<b>…</b>` / `<strong>…</strong>` and `<i>…</i>` / `<em>…</em>` in labels render as bold and italic, as in Mermaid's own preview — in sequence and topology views, flowcharts and every other diagram, and in every export. Wrapping and box sizes account for the formatting. Search, the transcript, captions and screen readers use the text without tags; other HTML stays as written.
 - The current step is highlighted in the source editor, and clicking a statement in the editor moves playback to its step (`sync.cursorToStep`); **Alt + double-click** any element to jump to its line.
 
 ## Sequence, topology, split
@@ -28,7 +33,7 @@ Nothing in your diagrams needs to change. Edits appear live, and the panel keeps
 - **Split** (`S`). Both views side by side (stacked on narrow panels) on one timeline, each with its own camera; hovering an element highlights its counterpart in the other view.
 - **Layouts.** `layered` (default, left-to-right or top-to-bottom), a deterministic `force` layout, or `manual` — drag nodes and the positions are remembered for that diagram (*Reset Topology Layout* forgets them).
 - **Minimap.** An overview in the corner whenever the drawing is larger than the view: drag the frame to pan, click to jump there.
-- **Who is who when zoomed in.** Once the participant headers scroll out of view, a slim band at the top of the sequence view names every visible lifeline (click a name to focus it), and participants of the current step that are off to the left or right get a marker on that edge — click it to pan there. Optionally, `mermaidAnimator.display.arrowEndNames` labels the ends of the arrow that is playing with the sender and receiver names.
+- **Who is who when zoomed in.** Once the participant headers scroll out of view, a slim band at the top of the sequence view names every visible lifeline (click a name to focus it), and participants of the current step that are off to the left or right get a marker on that edge — click it to pan there. The ends of the arrow that is playing are labelled with the sender and receiver names when their headers are out of view (`mermaidAnimator.display.arrowEndNames`: `auto` by default, or `always` / `off`).
 
 ## Narrate, explore, present
 
@@ -45,7 +50,7 @@ Nothing in your diagrams needs to change. Edits appear live, and the panel keeps
 
 | Key | Action | Key | Action |
 |---|---|---|---|
-| `Space` / `K` | Play / pause | `+` / `-` | Zoom |
+| `Space` / `K` | Play / pause | `+` / `-` | Zoom in / out (also in the toolbar) |
 | `→` / `←` | Next / previous step | `0` | Fit diagram |
 | `Shift+→` / `Shift+←` | Next / previous chapter | `F` | Frame current step |
 | `Home` / `End` | First / last step | `C` | Camera follow on/off |
@@ -133,6 +138,7 @@ Steps are referenced by `#<number>`, `@step-id`, or the step's content or struct
 | `mermaidAnimator.playback.reverse` | `animate` | Step back animated or `cut`. |
 | `mermaidAnimator.playback.pauseOnHover` | `true` | Pause while the pointer is over the diagram. |
 | `mermaidAnimator.playback.startAt` | `beginning` | Or `end` to open on the complete diagram. |
+| `mermaidAnimator.playback.initialOverview` | `true` | Show the complete diagram at step 0; the first step clears it and the reveal starts (`@animator overview=false` per diagram). |
 | `mermaidAnimator.playback.notes` | `step` | Notes as steps, `attach`ed to the previous step, or `hidden`. |
 | `mermaidAnimator.playback.loopIterations` / `.compressRepeats` | `1` / `true` | Loop repetitions without `@iterations`; repeats after the first at double speed. |
 | `mermaidAnimator.playback.altBranches` | `first` | `first`, `all` or `ask` for `alt` / `critical`. |
@@ -151,7 +157,7 @@ Steps are referenced by `#<number>`, `@step-id`, or the step's content or struct
 | `mermaidAnimator.topology.returnMessages` | `merge` | Return lanes beside their request, `separate` edges, or `hide`. |
 | `mermaidAnimator.display.showMinimap` | `auto` | `auto`, `always` or `never`. |
 | `mermaidAnimator.display.participantNames` | `auto` | Name band and off-screen markers when headers are out of view, or `off`. |
-| `mermaidAnimator.display.arrowEndNames` | `off` | Sender and receiver names on the current arrow: `off`, `auto` (only when their header is out of view) or `always`. |
+| `mermaidAnimator.display.arrowEndNames` | `auto` | Sender and receiver names on the current arrow: `off`, `auto` (only when their header is out of view) or `always`. |
 | `mermaidAnimator.presentation.chapterCards` / `.zenMode` | `true` / `false` | Chapter cards while presenting; also enter Zen Mode. |
 | `mermaidAnimator.annotations.highlight` | `true` | Highlight `%% @…` directive names in the editor. |
 | `mermaidAnimator.files.languages` | `markdown, mdx, mermaid` | Languages scanned for diagrams. |

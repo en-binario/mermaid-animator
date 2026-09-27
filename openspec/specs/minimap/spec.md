@@ -13,8 +13,8 @@ The canvas SHALL show a minimap of at most 160 × 110 px at its bottom-right cor
 - **THEN** no minimap is shown
 
 ### Requirement: Minimap navigation
-Dragging the viewport rectangle SHALL pan the camera and clicking elsewhere on the minimap SHALL centre the camera there; either action SHALL count as a user camera move (suspending Follow and Cinematic).
+Dragging the viewport rectangle SHALL pan the camera and clicking elsewhere on the minimap SHALL centre the camera there; either action SHALL count as a user camera move (following stays on and running playback pauses; see camera *Following survives user camera moves*).
 
 #### Scenario: Click to centre
 - **WHEN** the user clicks the lower half of the minimap of a long diagram
-- **THEN** the camera centres on that part of the diagram and the *Resume following* chip appears
+- **THEN** the camera centres on that part of the diagram, and following stays on if the camera was following

@@ -4,9 +4,21 @@
  */
 import type { ArrowKind, Fragment, ParticipantKind, SequenceModel, SequenceNode } from './sequence/model';
 import type { CompiledSequence } from './steps';
+import { runsOf, type LabelMark, type TextRun } from './markup';
 
 export type FontRole = 'label' | 'participant' | 'note' | 'micro' | 'badge';
-export type Measure = (text: string, role: FontRole) => number;
+/** Inline style of a text run (spec label-formatting). */
+export interface TextStyle {
+  bold?: boolean;
+  italic?: boolean;
+}
+export type Measure = (text: string, role: FontRole, style?: TextStyle) => number;
+
+/** Wrapped label: plain lines, plus styled runs per line when the label has formatting. */
+export interface WrappedText {
+  lines: string[];
+  runs?: TextRun[][];
+}
 
 export interface Rect {
   x: number;
@@ -24,6 +36,8 @@ export interface LaidParticipant {
   id: string;
   kind: ParticipantKind;
   lines: string[];
+  /** Styled runs per line when the label has bold / italic text. */
+  runs?: TextRun[][];
   x: number;
   header: Rect;
   footer?: Rect;
@@ -45,7 +59,7 @@ export interface LaidMessage {
   /** Polyline the arrow is drawn along (from sender to receiver). */
   points: Point[];
   length: number;
-  label: { lines: string[]; x: number; y: number; anchor: 'middle' | 'start'; width: number };
+  label: { lines: string[]; runs?: TextRun[][]; x: number; y: number; anchor: 'middle' | 'start'; width: number };
   badge?: { x: number; y: number; n: number };
   central?: 'source' | 'target' | 'both';
   bounds: Rect;
@@ -56,6 +70,7 @@ export interface LaidNote {
   /** Participants the note is attached to. */
   participants: string[];
   lines: string[];
+  runs?: TextRun[][];
   rect: Rect;
 }
 
@@ -74,17 +89,19 @@ export interface LaidFragment {
   id: string;
   kind: Fragment['kind'];
   label: string;
+  labelRuns?: TextRun[];
   rect: Rect;
   tabWidth: number;
   /** Width of the small-caps keyword (LOOP, ALT…) inside the tab. */
   keywordWidth: number;
-  separators: { y: number; label: string }[];
+  separators: { y: number; label: string; runs?: TextRun[] }[];
   color?: string;
 }
 
 export interface LaidBox {
   id: string;
   label?: string;
+  labelRuns?: TextRun[];
   color: string;
   rect: Rect;
 }
@@ -159,6 +176,74 @@ export function wrapText(text: string, measure: Measure, role: FontRole, maxWidt
   return out;
 }
 
+/** Style of a run, for measuring. */
+export const runStyle = (r: TextRun): TextStyle | undefined => (r.bold || r.italic ? { bold: r.bold, italic: r.italic } : undefined);
+
+/** Width of a line of styled runs. */
+export function measureRuns(runs: readonly TextRun[], measure: Measure, role: FontRole): number {
+  return runs.reduce((w, r) => w + measure(r.text, role, runStyle(r)), 0);
+}
+
+/** Widest line of a wrapped label. */
+export function wrappedWidth(wrapped: WrappedText, measure: Measure, role: FontRole): number {
+  return Math.max(0, ...wrapped.lines.map((l, i) => (wrapped.runs?.[i] ? measureRuns(wrapped.runs[i]!, measure, role) : measure(l, role))));
+}
+
+/** Runs for a whole single-line label, when it has formatting. */
+export function labelRuns(text: string, marks: readonly LabelMark[] | undefined): TextRun[] | undefined {
+  return marks?.length ? runsOf(text, marks) : undefined;
+}
+
+/**
+ * `wrapText` for a label with bold / italic ranges: the same word boundaries, each line measured
+ * as the sum of its styled runs. Without marks it is exactly `wrapText`.
+ */
+export function wrapMarkedText(text: string, marks: readonly LabelMark[] | undefined, measure: Measure, role: FontRole, maxWidth: number, maxLines: number): WrappedText {
+  if (!marks?.length) return { lines: wrapText(text, measure, role, maxWidth, maxLines) };
+  // A line is a list of word spans [start, end) over `text`, joined by one space each.
+  const lineRuns = (words: [number, number][]): TextRun[] => {
+    const runs: TextRun[] = [];
+    const add = (piece: TextRun[]) => {
+      for (const r of piece) {
+        const prev = runs[runs.length - 1];
+        if (prev && !!prev.bold === !!r.bold && !!prev.italic === !!r.italic) prev.text += r.text;
+        else runs.push({ ...r });
+      }
+    };
+    words.forEach(([s, e], i) => {
+      // The joining space takes the style of the whitespace it replaces.
+      if (i > 0) add(runsOf(text, marks, words[i - 1]![1], words[i - 1]![1] + 1).map((r) => ({ ...r, text: ' ' })));
+      add(runsOf(text, marks, s, e));
+    });
+    return runs;
+  };
+  const lines: [number, number][][] = [];
+  let offset = 0;
+  for (const paragraph of text.split('\n')) {
+    let line: [number, number][] = [];
+    for (const m of paragraph.matchAll(/\S+/g)) {
+      const word: [number, number] = [offset + (m.index as number), offset + (m.index as number) + m[0].length];
+      if (line.length && measureRuns(lineRuns([...line, word]), measure, role) > maxWidth) {
+        lines.push(line);
+        line = [word];
+      } else line.push(word);
+    }
+    lines.push(line);
+    offset += paragraph.length + 1;
+  }
+  const kept = lines.slice(0, maxLines);
+  const runs = kept.map(lineRuns);
+  const plain = kept.map((l) => l.map(([s, e]) => text.slice(s, e)).join(' '));
+  if (lines.length > maxLines) {
+    const last = maxLines - 1;
+    plain[last] = `${plain[last]}…`;
+    const tail = runs[last]![runs[last]!.length - 1];
+    if (tail) tail.text += '…';
+    else runs[last]!.push({ text: '…' });
+  }
+  return { lines: plain, runs };
+}
+
 const pathLength = (points: Point[]) => points.slice(1).reduce((sum, p, i) => sum + Math.hypot(p.x - points[i]!.x, p.y - points[i]!.y), 0);
 
 export function unionRects(rects: Rect[]): Rect | undefined {
@@ -197,8 +282,9 @@ export function layoutSequence(model: SequenceModel, compiled: CompiledSequence,
 
 
   // -- 1. participant widths ------------------------------------------------------------------------
-  const headerLines = model.participants.map((p) => wrapText(p.label, measure, 'participant', 200, 3));
-  const headerWidths = headerLines.map((lines) => Math.max(L.minHeaderWidth, ...lines.map((l) => measure(l, 'participant') * factor + 2 * L.headerPaddingX)));
+  const headerWrapped = model.participants.map((p) => wrapMarkedText(p.label, p.labelMarks, measure, 'participant', 200, 3));
+  const headerLines = headerWrapped.map((w) => w.lines);
+  const headerWidths = headerWrapped.map((w) => Math.max(L.minHeaderWidth, wrappedWidth(w, measure, 'participant') * factor + 2 * L.headerPaddingX));
   const headerHeights = model.participants.map((p, i) => (kinds[p.id] === 'actor' ? L.actorHeight : L.headerHeight) + ((headerLines[i]?.length ?? 1) - 1) * L.lineHeight);
   const headerHeight = Math.max(L.headerHeight, ...headerHeights);
 
@@ -213,24 +299,24 @@ export function layoutSequence(model: SequenceModel, compiled: CompiledSequence,
     for (let i = lo; i < hi; i++) current += gaps[i] ?? 0;
     if (current < width) gaps[hi - 1] = (gaps[hi - 1] ?? 0) + (width - current);
   };
-  const messageLabels = new Map<string, string[]>();
-  const noteLines = new Map<string, string[]>();
+  const messageLabels = new Map<string, WrappedText>();
+  const noteLines = new Map<string, WrappedText>();
   const visitWidths = (nodes: SequenceNode[]) => {
     for (const n of nodes) {
       if (n.type === 'message') {
         const m = n.message;
-        const lines = wrapText(m.label, measure, 'label', L.maxLabelWidth, L.maxLabelLines);
-        messageLabels.set(m.id, lines);
-        const w = Math.max(0, ...lines.map((l) => measure(l, 'label'))) * factor;
+        const wrapped = wrapMarkedText(m.label, m.labelMarks, measure, 'label', L.maxLabelWidth, L.maxLabelLines);
+        messageLabels.set(m.id, wrapped);
+        const w = wrappedWidth(wrapped, measure, 'label') * factor;
         const a = col.get(m.from) ?? 0;
         const b = col.get(m.to) ?? 0;
         if (a === b) rightExtra[a] = Math.max(rightExtra[a] ?? 0, L.selfWidth + 12 + w + 16);
         else require(a, b, w + 2 * L.labelPadding + (m.sequenceNumber !== undefined ? 24 : 0));
       } else if (n.type === 'note') {
         if (compiled.hiddenNotes) continue;
-        const lines = wrapText(n.note.text, measure, 'note', 220, 6);
-        noteLines.set(n.note.id, lines);
-        const w = Math.max(80, ...lines.map((l) => measure(l, 'note') * factor)) + 2 * L.notePaddingX;
+        const wrapped = wrapMarkedText(n.note.text, n.note.textMarks, measure, 'note', 220, 6);
+        noteLines.set(n.note.id, wrapped);
+        const w = Math.max(80, wrappedWidth(wrapped, measure, 'note') * factor) + 2 * L.notePaddingX;
         const a = col.get(n.note.participants[0]) ?? 0;
         if (n.note.placement === 'over' && n.note.participants[1] !== undefined) require(a, col.get(n.note.participants[1]) ?? a, w - 40);
         else if (n.note.placement === 'rightOf') rightExtra[a] = Math.max(rightExtra[a] ?? 0, w + 12);
@@ -276,7 +362,7 @@ export function layoutSequence(model: SequenceModel, compiled: CompiledSequence,
     for (const n of nodes) {
       switch (n.type) {
         case 'message': {
-          const lines = messageLabels.get(n.message.id) ?? [''];
+          const lines = messageLabels.get(n.message.id)?.lines ?? [''];
           const extraLines = (lines.length - 1) * L.lineHeight;
           const creating = pendingCreates.splice(0);
           // A created participant's header is centred on its creating message's line.
@@ -289,9 +375,10 @@ export function layoutSequence(model: SequenceModel, compiled: CompiledSequence,
         }
         case 'note': {
           if (compiled.hiddenNotes) break;
-          const lines = noteLines.get(n.note.id) ?? [''];
+          const wrapped = noteLines.get(n.note.id) ?? { lines: [''] };
+          const lines = wrapped.lines;
           const h = lines.length * L.lineHeight + 2 * L.notePaddingY;
-          const w = Math.max(80, ...lines.map((l) => measure(l, 'note') * factor)) + 2 * L.notePaddingX;
+          const w = Math.max(80, wrappedWidth(wrapped, measure, 'note') * factor) + 2 * L.notePaddingX;
           const a = xs[col.get(n.note.participants[0]) ?? 0] ?? 0;
           let rx: number;
           let rw = w;
@@ -304,7 +391,7 @@ export function layoutSequence(model: SequenceModel, compiled: CompiledSequence,
             rw = Math.max(w, hi - lo + 40);
             rx = (lo + hi) / 2 - rw / 2;
           } else rx = a - w / 2;
-          notes.push({ id: n.note.id, participants: [...n.note.participants], lines, rect: { x: rx, y: y + 4, w: rw, h } });
+          notes.push({ id: n.note.id, participants: [...n.note.participants], lines, ...(wrapped.runs ? { runs: wrapped.runs } : {}), rect: { x: rx, y: y + 4, w: rw, h } });
           statementY.set(n.note.id, y + 4 + h / 2);
           y += h + L.noteRow + 8;
           break;
@@ -325,7 +412,8 @@ export function layoutSequence(model: SequenceModel, compiled: CompiledSequence,
           const separators: LaidFragment['separators'] = [];
           f.branches.forEach((branch, b) => {
             if (b > 0) {
-              separators.push({ y: y + 4, label: branch.label });
+              const runs = labelRuns(branch.label, branch.labelMarks);
+              separators.push({ y: y + 4, label: branch.label, ...(runs ? { runs } : {}) });
               y += L.fragmentSeparator;
             }
             place(branch.children, level + 1);
@@ -344,7 +432,8 @@ export function layoutSequence(model: SequenceModel, compiled: CompiledSequence,
           const keyword = f.kind === 'par' && f.over ? 'PAR' : f.kind.toUpperCase();
           const keywordWidth = measure(keyword, 'micro');
           const tabWidth = keywordWidth + 22;
-          fragments.push({ id: f.id, kind: f.kind, label, rect: { x: x1, y: startY, w: x2 - x1, h: y - startY }, tabWidth, keywordWidth, separators, color: f.color });
+          const runs = f.kind === 'rect' ? undefined : labelRuns(f.label, f.labelMarks);
+          fragments.push({ id: f.id, kind: f.kind, label, ...(runs ? { labelRuns: runs } : {}), rect: { x: x1, y: startY, w: x2 - x1, h: y - startY }, tabWidth, keywordWidth, separators, color: f.color });
           y += 8;
           break;
         }
@@ -370,6 +459,7 @@ export function layoutSequence(model: SequenceModel, compiled: CompiledSequence,
       id: p.id,
       kind: kinds[p.id] ?? p.kind,
       lines: headerLines[i] as string[],
+      ...(headerWrapped[i]?.runs ? { runs: headerWrapped[i]!.runs } : {}),
       x: px,
       header: { x: px - w / 2, y: hy, w, h },
       footer: mirror ? { x: px - w / 2, y: lifelineEnd + 8, w, h } : undefined,
@@ -440,8 +530,10 @@ export function layoutSequence(model: SequenceModel, compiled: CompiledSequence,
       const from = byId.get(m.from);
       const to = byId.get(m.to);
       if (!from || !to) continue;
-      const lines = messageLabels.get(m.id) ?? [''];
-      const labelWidth = Math.max(0, ...lines.map((l) => measure(l, 'label')));
+      const wrapped = messageLabels.get(m.id) ?? { lines: [''] };
+      const lines = wrapped.lines;
+      const runs = wrapped.runs;
+      const labelWidth = wrappedWidth(wrapped, measure, 'label');
       let points: Point[];
       let label: LaidMessage['label'];
       if (from.id === to.id) {
@@ -449,7 +541,7 @@ export function layoutSequence(model: SequenceModel, compiled: CompiledSequence,
         const x0 = from.x + (d ? L.activationWidth / 2 + (d - 1) * L.activationStack : 0);
         const xr = x0 + L.selfWidth;
         points = [{ x: x0, y: my }, { x: xr, y: my }, { x: xr, y: my + L.selfHeight }, { x: x0 + 2, y: my + L.selfHeight }];
-        label = { lines, x: xr + 10, y: my - 6 - (lines.length - 1) * L.lineHeight, anchor: 'start', width: labelWidth };
+        label = { lines, ...(runs ? { runs } : {}), x: xr + 10, y: my - 6 - (lines.length - 1) * L.lineHeight, anchor: 'start', width: labelWidth };
       } else {
         const rightwards = to.x > from.x;
         const dFrom = depthAt(from.id, my);
@@ -460,7 +552,7 @@ export function layoutSequence(model: SequenceModel, compiled: CompiledSequence,
         // A creating message ends at the edge of the new participant's header.
         if (to.created && Math.abs(to.header.y + to.header.h / 2 - my) < 1) x2 = rightwards ? to.header.x : to.header.x + to.header.w;
         points = [{ x: x1, y: my }, { x: x2, y: my }];
-        label = { lines, x: (from.x + to.x) / 2, y: my - 8 - (lines.length - 1) * L.lineHeight, anchor: 'middle', width: labelWidth };
+        label = { lines, ...(runs ? { runs } : {}), x: (from.x + to.x) / 2, y: my - 8 - (lines.length - 1) * L.lineHeight, anchor: 'middle', width: labelWidth };
       }
       const badge = m.sequenceNumber !== undefined ? { x: points[0]!.x, y: my, n: m.sequenceNumber } : undefined;
       const xsAll = points.map((p) => p.x).concat(label.anchor === 'middle' ? [label.x - labelWidth / 2, label.x + labelWidth / 2] : [label.x, label.x + labelWidth]);
@@ -483,7 +575,7 @@ export function layoutSequence(model: SequenceModel, compiled: CompiledSequence,
       const x1 = Math.min(...members.map((p) => p.header.x)) - 12;
       const x2 = Math.max(...members.map((p) => p.header.x + p.header.w)) + 12;
       const bottom = Math.max(...members.map((p) => (p.footer ? p.footer.y + p.footer.h : p.lifeline.y2))) + 10;
-      return { id: b.id, label: b.label, color: b.color, rect: { x: x1, y: top - (b.label ? 26 : 12), w: x2 - x1, h: bottom - (top - (b.label ? 26 : 12)) } };
+      return { id: b.id, label: b.label, ...(b.label && b.labelMarks ? { labelRuns: labelRuns(b.label, b.labelMarks) } : {}), color: b.color, rect: { x: x1, y: top - (b.label ? 26 : 12), w: x2 - x1, h: bottom - (top - (b.label ? 26 : 12)) } };
     });
 
   // -- 8. step bounds -------------------------------------------------------------------------------------------
@@ -528,7 +620,8 @@ export function layoutSequence(model: SequenceModel, compiled: CompiledSequence,
 }
 
 /** Rough text measurement for tests and non-DOM contexts (Inter at 13px ≈ 7 px per character). */
-export const approximateMeasure: Measure = (text, role) => {
+export const approximateMeasure: Measure = (text, role, style) => {
   const perChar = role === 'participant' ? 7.6 : role === 'micro' ? 6.6 : role === 'badge' ? 6.2 : 7.1;
-  return text.length * perChar;
+  // Bold text runs about 6 % wider.
+  return text.length * perChar * (style?.bold ? 1.06 : 1);
 };

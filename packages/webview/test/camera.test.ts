@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { autoFits, cinematicView, fitView, focusTarget, followView, limitZoomChange } from '../src/camera';
+import { autoFits, cinematicView, fitView, focusTarget, followStartView, followView, limitZoomChange, overviewExitView, ZOOM_MAX, ZOOM_MIN, ZOOM_PRESETS, zoomAbout } from '../src/camera';
 
 const viewport = { width: 1000, height: 600 };
 
@@ -79,5 +79,68 @@ describe('focusTarget', () => {
   it('falls back to the step bounds without known participants', () => {
     expect(focusTarget(step, participants, undefined)).toBe(step);
     expect(focusTarget(step, participants, ['Z'])).toBe(step);
+  });
+});
+
+describe('overviewExitView', () => {
+  const viewport = { width: 800, height: 600 };
+  const content = { x: 0, y: 0, w: 1200, h: 4000 };
+
+  it('zooms back in from the fitted overview to the follow starting zoom', () => {
+    const overview = fitView(content, viewport);
+    const view = overviewExitView(content, { x: 100, y: 80, w: 300, h: 40 }, viewport);
+    expect(view.k).toBeCloseTo(followStartView(content, viewport).k);
+    expect(view.k).toBeGreaterThan(overview.k);
+    expect(view.k).toBeLessThanOrEqual(1);
+  });
+
+  it('brings a step further down into the safe area', () => {
+    const step = { x: 100, y: 2500, w: 300, h: 40 };
+    const view = overviewExitView(content, step, viewport);
+    const top = step.y * view.k + view.y;
+    expect(top).toBeGreaterThanOrEqual(viewport.height * 0.1);
+    expect(top + step.h * view.k).toBeLessThanOrEqual(viewport.height * 0.9);
+  });
+
+  it('never enlarges a narrow diagram past 100 %', () => {
+    expect(followStartView({ x: 0, y: 0, w: 200, h: 3000 }, viewport).k).toBe(1);
+  });
+});
+
+describe('following from a user view', () => {
+  const viewport = { width: 800, height: 600 };
+
+  it('keeps the user zoom and pans the minimum to bring the step back', () => {
+    const user = { k: 2, x: -1500, y: -900 };
+    const step = { x: 100, y: 100, w: 120, h: 30 };
+    const next = followView(user, step, viewport)!;
+    expect(next.k).toBe(2);
+    const sx = step.x * next.k + next.x;
+    const sy = step.y * next.k + next.y;
+    expect(sx).toBeGreaterThanOrEqual(viewport.width * 0.1);
+    expect(sy).toBeGreaterThanOrEqual(viewport.height * 0.1);
+    expect(sx + step.w * next.k).toBeLessThanOrEqual(viewport.width * 0.9);
+  });
+});
+
+describe('zoomAbout', () => {
+  it('keeps the chosen screen point fixed', () => {
+    const view = { k: 1, x: -200, y: -100 };
+    const centre = { x: 400, y: 300 };
+    const next = zoomAbout(view, 0.5, centre);
+    expect(next.k).toBe(0.5);
+    // The drawing point under the centre stays under the centre.
+    const before = { x: (centre.x - view.x) / view.k, y: (centre.y - view.y) / view.k };
+    expect(before.x * next.k + next.x).toBeCloseTo(centre.x);
+    expect(before.y * next.k + next.y).toBeCloseTo(centre.y);
+  });
+
+  it('clamps to the zoom range', () => {
+    expect(zoomAbout({ k: 1, x: 0, y: 0 }, 20, { x: 0, y: 0 }).k).toBe(ZOOM_MAX);
+    expect(zoomAbout({ k: 1, x: 0, y: 0 }, 0.01, { x: 0, y: 0 }).k).toBe(ZOOM_MIN);
+  });
+
+  it('offers the presets from 25 % to 400 %', () => {
+    expect(ZOOM_PRESETS.map((k) => Math.round(k * 100))).toEqual([25, 50, 75, 100, 150, 200, 400]);
   });
 });

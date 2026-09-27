@@ -269,6 +269,12 @@
         "category": "Mermaid Animator"
       },
       {
+        "command": "mermaidAnimator.openSettings",
+        "title": "%command.openSettings%",
+        "category": "Mermaid Animator",
+        "icon": "$(settings-gear)"
+      },
+      {
         "command": "mermaidAnimator.diagramsView.refresh",
         "title": "%command.diagramsView.refresh%",
         "category": "Mermaid Animator",
@@ -527,6 +533,11 @@
           "command": "mermaidAnimator.diagramsView.refresh",
           "when": "view == mermaidAnimator.diagrams",
           "group": "navigation@2"
+        },
+        {
+          "command": "mermaidAnimator.openSettings",
+          "when": "view == mermaidAnimator.diagrams",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
@@ -697,6 +708,11 @@
             "%config.playback.startAt.beginning%",
             "%config.playback.startAt.end%"
           ]
+        },
+        "mermaidAnimator.playback.initialOverview": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%config.playback.initialOverview%"
         },
         "mermaidAnimator.playback.notes": {
           "type": "string",
@@ -992,7 +1008,7 @@
         },
         "mermaidAnimator.display.arrowEndNames": {
           "type": "string",
-          "default": "off",
+          "default": "auto",
           "enum": [
             "off",
             "auto",

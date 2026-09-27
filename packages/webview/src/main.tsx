@@ -42,6 +42,7 @@ const uiFlags = signal<Omit<UiState, 'set'>>({
   exportMenu: false,
   goTo: false,
   speedMenu: false,
+  zoomMenu: false,
   wide: window.innerWidth >= WIDE,
   inspectorWide: persisted.inspectorWide ?? true,
   inspectorSheet: false,
@@ -90,7 +91,7 @@ function armIdle(): void {
 function startPresentation(): void {
   const c = controller.value;
   if (!c || uiFlags.value.presenting) return;
-  setUi({ presenting: true, titleCard: true, blank: false, laser: false, inspectorSheet: false, search: false, transcript: false, shortcuts: false, exportMenu: false, goTo: false, speedMenu: false });
+  setUi({ presenting: true, titleCard: true, blank: false, laser: false, inspectorSheet: false, search: false, transcript: false, shortcuts: false, exportMenu: false, goTo: false, speedMenu: false, zoomMenu: false });
   c.setPresenting(true);
   host.post(webviewMessage('presentation/toggle', { on: true }));
   if (titleTimer) clearTimeout(titleTimer);
@@ -389,8 +390,8 @@ window.addEventListener('keydown', (e) => {
   }
   if (e.ctrlKey || e.metaKey) return;
   if (e.key === 'Escape') {
-    const overlays = ui.shortcuts || ui.exportMenu || ui.goTo || ui.speedMenu || ui.search || ui.inspectorSheet;
-    if (overlays) setUi({ shortcuts: false, exportMenu: false, goTo: false, speedMenu: false, search: false, inspectorSheet: false });
+    const overlays = ui.shortcuts || ui.exportMenu || ui.goTo || ui.speedMenu || ui.zoomMenu || ui.search || ui.inspectorSheet;
+    if (overlays) setUi({ shortcuts: false, exportMenu: false, goTo: false, speedMenu: false, zoomMenu: false, search: false, inspectorSheet: false });
     else if (ui.presenting) stopPresentation();
     else c?.clearFocus();
     return;
@@ -539,6 +540,7 @@ function AppRoot() {
       }}
       onTogglePresentation={togglePresentation}
       onToggleInspector={toggleInspector}
+      onOpenSettings={() => host.post(webviewMessage('settings/open', {}))}
       reducedMotion={reducedMotion()}
       ui={ui}
     />

@@ -102,21 +102,34 @@ function genericAnimatedSvg(generic: GenericDiagram, material: ExportMaterial, r
   const pct = (t: number) => Math.round((Math.min(Math.max(t - range.start, 0), range.end - range.start) / request.speed / total) * 100000) / 1000;
   const iteration = request.loop <= 0 ? 'infinite' : String(request.loop);
   const css: string[] = [];
+  // Initial overview (spec initial-overview): every group shows until step 0 starts, fades out
+  // during the clear, then the reveal runs as usual (step 0's reveal starts after the clear).
+  const clear = timeline.clear ?? 0;
+  const first = timeline.starts[0] ?? 0;
+  const overview = clear > 0 && range.start < first + clear;
+  const pctRaw = (t: number) => (Math.min(Math.max(t - range.start, 0), range.end - range.start) / request.speed / total) * 100;
+  const before = (t: number) => Math.round(Math.max(0, pctRaw(t) - 0.001) * 1000) / 1000;
   groups.forEach((g, i) => {
-    const start = timeline.starts[i] ?? 0;
-    const shown = start <= range.start ? 1 : 0;
+    const start = (timeline.starts[i] ?? 0) + (i === 0 ? clear : 0);
+    const shown = overview || start <= range.start ? 1 : 0;
     const end = stepEnd(timeline, i);
     const final = end <= range.end ? 1 : 0;
     if (start >= range.start && start < range.end) {
       const a = pct(start);
       const b = pct(start + (g.kind === 'edge' ? 105 : DURATION.base));
-      css.push(`.ma-g${i}{opacity:${final};animation:ka${i} ${Math.round(total)}ms linear ${iteration} both}@keyframes ka${i}{0%{opacity:0}${a}%{opacity:0}${b}%{opacity:1}100%{opacity:1}}`);
+      const fade = overview ? `0%{opacity:1}${pct(first)}%{opacity:1}${pct(first + clear)}%{opacity:0}` : '0%{opacity:0}';
+      css.push(`.ma-g${i}{opacity:${final};animation:ka${i} ${Math.round(total)}ms linear ${iteration} both}@keyframes ka${i}{${fade}${a}%{opacity:0}${b}%{opacity:1}100%{opacity:1}}`);
       g.paths.forEach((p, j) => {
         if (p.dashed || !p.length) return;
         const c = pct(start + 420);
         const L = Math.round(p.length * 10) / 10;
-        css.push(`.ma-p${i}-${j}{stroke-dasharray:${L};stroke-dashoffset:0;animation:kp${i}-${j} ${Math.round(total)}ms linear ${iteration} both}@keyframes kp${i}-${j}{0%{stroke-dashoffset:${L}}${a}%{stroke-dashoffset:${L}}${c}%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}`);
+        // Drawn during the overview, then reset (while invisible) just before the group's reveal.
+        const undrawn = overview ? `0%{stroke-dashoffset:0}${before(start)}%{stroke-dashoffset:0}` : `0%{stroke-dashoffset:${L}}`;
+        css.push(`.ma-p${i}-${j}{stroke-dasharray:${L};stroke-dashoffset:0;animation:kp${i}-${j} ${Math.round(total)}ms linear ${iteration} both}@keyframes kp${i}-${j}{${undrawn}${a}%{stroke-dashoffset:${L}}${c}%{stroke-dashoffset:0}100%{stroke-dashoffset:0}}`);
       });
+    } else if (overview && start >= range.end) {
+      // Not revealed within the range: shown in the overview, then cleared.
+      css.push(`.ma-g${i}{opacity:0;animation:ka${i} ${Math.round(total)}ms linear ${iteration} both}@keyframes ka${i}{0%{opacity:1}${pct(first)}%{opacity:1}${pct(first + clear)}%{opacity:0}100%{opacity:0}}`);
     } else css.push(`.ma-g${i}{opacity:${shown}}`);
   });
   css.push('@media (prefers-reduced-motion: reduce){*{animation:none!important}}');

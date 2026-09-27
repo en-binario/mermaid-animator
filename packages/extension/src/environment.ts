@@ -38,6 +38,7 @@ export const WEBVIEW_SETTING_KEYS = [
   'display.futureSteps',
   'display.pastSteps',
   'display.trailLength',
+  'playback.initialOverview',
   'motion.profile',
   'motion.respectReducedMotion',
   'motion.travelIndicator',

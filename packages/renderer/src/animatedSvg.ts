@@ -8,7 +8,8 @@
  * stops reproduces the motion system's easing. Each element's base style is its final state, so
  * `prefers-reduced-motion: reduce` (animations off) shows the last frame.
  */
-import { edgeWidth, type Point, type SequenceLayout, type Topology, type TopologyGeometry } from '@mermaid-animator/core';
+import { edgeWidth, type FontRole, type Point, type SequenceLayout, type TextRun, type TextStyle, type Topology, type TopologyGeometry } from '@mermaid-animator/core';
+import { BOLD_WEIGHT } from './measure';
 import { partialPath, pointAlong } from './geometry';
 import { arrowHead } from './svg';
 import { sceneAt, type DisplayOptions, type Scene, type SceneModel } from './scene';
@@ -72,7 +73,7 @@ export interface AnimatedSvgOptions {
   display: DisplayOptions;
   /** Font-face CSS (embedded data URIs) and a text measure for `textLength`. */
   fontCss: string;
-  measure: (text: string, font: 'label' | 'participant' | 'micro' | 'note' | 'badge') => number;
+  measure: (text: string, font: FontRole, style?: TextStyle) => number;
 }
 
 // -- keyframe tracks ---------------------------------------------------------------------------------------------
@@ -179,15 +180,30 @@ class Compiler {
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
-function textEl(lines: string[], x: number, y: number, cls: string, anchor: string, width: (line: string) => number, extraStyle = ''): string {
+type Width = (line: string, style?: TextStyle) => number;
+
+/** Text lines with advances pinned by `textLength`; formatted lines pin each styled run (spec label-formatting). */
+function textEl(lines: string[], x: number, y: number, cls: string, anchor: string, width: Width, extraStyle = '', styled?: { runs?: TextRun[][]; role: FontRole }): string {
+  const pin = (w: number) => (w > 0 ? ` textLength="${r2(w)}" lengthAdjust="spacing"` : '');
   const spans = lines
     .map((line, i) => {
-      const w = width(line);
-      return `<tspan x="${r2(x)}" dy="${i === 0 ? 0 : 18}"${w > 0 ? ` textLength="${r2(w)}" lengthAdjust="spacing"` : ''}>${esc(line)}</tspan>`;
+      const runs = styled?.runs?.[i];
+      if (!runs || !styled) return `<tspan x="${r2(x)}" dy="${i === 0 ? 0 : 18}"${pin(width(line))}>${esc(line)}</tspan>`;
+      const inner = runs
+        .map((r) => {
+          const style = r.bold || r.italic ? { bold: r.bold, italic: r.italic } : undefined;
+          const attrs = `${r.bold ? ` font-weight="${BOLD_WEIGHT[styled.role]}"` : ''}${r.italic ? ' font-style="italic"' : ''}`;
+          return `<tspan${attrs}${pin(width(r.text, style))}>${esc(r.text)}</tspan>`;
+        })
+        .join('');
+      return `<tspan x="${r2(x)}" dy="${i === 0 ? 0 : 18}">${inner}</tspan>`;
     })
     .join('');
   return `<text class="${cls}" x="${r2(x)}" y="${r2(y)}" text-anchor="${anchor}"${extraStyle}>${spans}</text>`;
 }
+
+const bracketed = (label: string, runs: TextRun[] | undefined): { lines: string[]; runs?: TextRun[][] } =>
+  runs ? { lines: [`[${label}]`], runs: [[{ text: '[' }, ...runs, { text: ']' }]] } : { lines: [`[${label}]`] };
 
 // -- shared static CSS ------------------------------------------------------------------------------------------
 
@@ -240,7 +256,7 @@ export function compileSequenceSvg(layout: SequenceLayout, model: SceneModel, op
   const k = new Compiler(options);
   const scenes: Scene[] = k.samples.map((t) => sceneAt(model, t, options.display));
   const at = (f: (s: Scene) => Value) => (i: number) => f(scenes[i]!);
-  const width = (font: Parameters<AnimatedSvgOptions['measure']>[1]) => (line: string) => options.measure(line, font);
+  const width = (font: Parameters<AnimatedSvgOptions['measure']>[1]): Width => (line, style) => options.measure(line, font, style);
   const opacity = (f: (s: Scene) => number): Prop => ({ name: 'opacity', at: at(f), format: num(3), eps: 0.004 });
   const translateY = (f: (s: Scene) => number): Prop => ({ name: 'transform', at: at((s) => Math.round(f(s) * 10) / 10), format: (v) => `translate(0px,${v}px)`, eps: 0.25 });
   const color = (f: (s: Scene) => string): Prop => ({ name: 'fill', at: at(f), format: String, eps: 0 });
@@ -252,7 +268,7 @@ export function compileSequenceSvg(layout: SequenceLayout, model: SceneModel, op
   for (const box of layout.boxes) {
     const r = box.rect;
     parts.push(`<rect x="${r2(r.x)}" y="${r2(r.y)}" width="${r2(r.w)}" height="${r2(r.h)}" rx="10" fill="var(--sk)" fill-opacity=".7" stroke="var(--hl)"/>`);
-    if (box.label) parts.push(textEl([box.label.toUpperCase()], r.x + r.w / 2, r.y + 16, 'tm', 'middle', width('micro')));
+    if (box.label) parts.push(textEl([box.label.toUpperCase()], r.x + r.w / 2, r.y + 16, 'tm', 'middle', width('micro'), '', { runs: box.labelRuns && [box.labelRuns.map((x) => ({ ...x, text: x.text.toUpperCase() }))], role: 'micro' }));
   }
 
   // Fragments: frame and glow, then tabs and labels (after lifelines, like the live renderer).
@@ -271,8 +287,8 @@ export function compileSequenceSvg(layout: SequenceLayout, model: SceneModel, op
     const labels = [
       `<path class="ft ${tabFill}" d="M${r2(r.x)} ${r2(r.y + 20)}H${r2(r.x + f.tabWidth - 6)}L${r2(r.x + f.tabWidth)} ${r2(r.y + 14)}V${r2(r.y)}H${r2(r.x)}Z"/>`,
       textEl([f.kind.toUpperCase()], r.x + 10, r.y + 14, 'tm', 'start', width('micro')),
-      f.label ? textEl([`[${f.label}]`], r.x + f.tabWidth + 8, r.y + 14, 't', 'start', () => 0, ' font-style="italic"') : '',
-      ...f.separators.filter((s) => s.label).map((sep) => textEl([`[${sep.label}]`], r.x + 10, sep.y + 16, 't', 'start', () => 0, ' font-style="italic"')),
+      f.label ? (() => { const b = bracketed(f.label, f.labelRuns); return textEl(b.lines, r.x + f.tabWidth + 8, r.y + 14, 't', 'start', () => 0, ' font-style="italic"', { runs: b.runs, role: 'label' }); })() : '',
+      ...f.separators.filter((s) => s.label).map((sep) => { const b = bracketed(sep.label, sep.runs); return textEl(b.lines, r.x + 10, sep.y + 16, 't', 'start', () => 0, ' font-style="italic"', { runs: b.runs, role: 'label' }); }),
     ];
     // Loop counters: one text per value, each visible while that iteration plays.
     const counts = new Set(scenes.map((s) => s.fragments.get(f.id)?.iteration).filter(Boolean).map((it) => `${it!.n} / ${it!.of}`));
@@ -313,10 +329,10 @@ export function compileSequenceSvg(layout: SequenceLayout, model: SceneModel, op
         const cx = rect.x + rect.w / 2;
         const top = rect.y + 4;
         const figure = `M${r2(cx + 5.5)} ${r2(top + 6)}A5.5 5.5 0 1 1 ${r2(cx - 5.5)} ${r2(top + 6)}A5.5 5.5 0 1 1 ${r2(cx + 5.5)} ${r2(top + 6)}M${r2(cx)} ${r2(top + 11.5)}V${r2(top + 26)}M${r2(cx - 9)} ${r2(top + 16)}H${r2(cx + 9)}M${r2(cx)} ${r2(top + 26)}L${r2(cx - 7)} ${r2(top + 35)}M${r2(cx)} ${r2(top + 26)}L${r2(cx + 7)} ${r2(top + 35)}`;
-        return `${casing ? `<path class="cs" stroke-width="3.75" d="${figure}"/>` : ''}<path fill="none" stroke="var(--i1)" stroke-width="1.25" stroke-linecap="round" d="M${r2(cx + 5.5)} ${r2(top + 6)}A5.5 5.5 0 1 1 ${r2(cx - 5.5)} ${r2(top + 6)}A5.5 5.5 0 1 1 ${r2(cx + 5.5)} ${r2(top + 6)}M${r2(cx)} ${r2(top + 11.5)}V${r2(top + 26)}M${r2(cx - 9)} ${r2(top + 16)}H${r2(cx + 9)}M${r2(cx)} ${r2(top + 26)}L${r2(cx - 7)} ${r2(top + 35)}M${r2(cx)} ${r2(top + 26)}L${r2(cx + 7)} ${r2(top + 35)}"/>${textEl(p.lines, cx, rect.y + rect.h - 6 - (p.lines.length - 1) * 18, 'tp', 'middle', width('participant'))}`;
+        return `${casing ? `<path class="cs" stroke-width="3.75" d="${figure}"/>` : ''}<path fill="none" stroke="var(--i1)" stroke-width="1.25" stroke-linecap="round" d="M${r2(cx + 5.5)} ${r2(top + 6)}A5.5 5.5 0 1 1 ${r2(cx - 5.5)} ${r2(top + 6)}A5.5 5.5 0 1 1 ${r2(cx + 5.5)} ${r2(top + 6)}M${r2(cx)} ${r2(top + 11.5)}V${r2(top + 26)}M${r2(cx - 9)} ${r2(top + 16)}H${r2(cx + 9)}M${r2(cx)} ${r2(top + 26)}L${r2(cx - 7)} ${r2(top + 35)}M${r2(cx)} ${r2(top + 26)}L${r2(cx + 7)} ${r2(top + 35)}"/>${textEl(p.lines, cx, rect.y + rect.h - 6 - (p.lines.length - 1) * 18, 'tp', 'middle', width('participant'), '', { runs: p.runs, role: 'participant' })}`;
       }
       const cy = rect.y + rect.h / 2 + 4.5 - ((p.lines.length - 1) * 18) / 2;
-      return `<rect class="bx" x="${r2(rect.x)}" y="${r2(rect.y)}" width="${r2(rect.w)}" height="${r2(rect.h)}" rx="6"/>${textEl(p.lines, rect.x + rect.w / 2, cy, 'tp', 'middle', width('participant'))}`;
+      return `<rect class="bx" x="${r2(rect.x)}" y="${r2(rect.y)}" width="${r2(rect.w)}" height="${r2(rect.h)}" rx="6"/>${textEl(p.lines, rect.x + rect.w / 2, cy, 'tp', 'middle', width('participant'), '', { runs: p.runs, role: 'participant' })}`;
     };
     parts.push(`<g class="${cls}">${header(p.header)}</g>`);
     if (p.footer) {
@@ -350,7 +366,7 @@ export function compileSequenceSvg(layout: SequenceLayout, model: SceneModel, op
     ]);
     const dotted = m.dotted ? ' dt' : '';
     parts.push(
-      `<g class="${group}">${casing ? `<path class="cs" stroke-width="3.5" d="${full}" mask="url(#${maskId})"/>` : ''}<path class="ln${dotted} ${lineColor}" d="${full}" mask="url(#${maskId})"/><path class="hl${dotted} ${hl}" d="${full}" mask="url(#${maskId})"/>${heads}${textEl(m.label.lines, m.label.x, m.label.y, `t ${label}`, m.label.anchor === 'start' ? 'start' : 'middle', width('label'))}${
+      `<g class="${group}">${casing ? `<path class="cs" stroke-width="3.5" d="${full}" mask="url(#${maskId})"/>` : ''}<path class="ln${dotted} ${lineColor}" d="${full}" mask="url(#${maskId})"/><path class="hl${dotted} ${hl}" d="${full}" mask="url(#${maskId})"/>${heads}${textEl(m.label.lines, m.label.x, m.label.y, `t ${label}`, m.label.anchor === 'start' ? 'start' : 'middle', width('label'), '', { runs: m.label.runs, role: 'label' })}${
         m.badge ? `<circle cx="${r2(m.badge.x)}" cy="${r2(m.badge.y)}" r="9" fill="var(--sf)" stroke="var(--rl)"/><text x="${r2(m.badge.x)}" y="${r2(m.badge.y + 4)}" text-anchor="middle" style="fill:var(--i2);font-size:10.5px;font-weight:560">${m.badge.n}</text>` : ''
       }</g>`,
     );
@@ -371,7 +387,7 @@ export function compileSequenceSvg(layout: SequenceLayout, model: SceneModel, op
   for (const n of layout.notes) {
     const cls = k.add(k.cls(), [opacity((s) => s.notes.get(n.id)?.opacity ?? 0), translateY((s) => s.notes.get(n.id)?.rise ?? 0)]);
     const { x, y, w, h } = n.rect;
-    parts.push(`<g class="${cls}"><path class="nt" d="M${r2(x)} ${r2(y)}H${r2(x + w - 8)}L${r2(x + w)} ${r2(y + 8)}V${r2(y + h)}H${r2(x)}Z"/><path fill="none" stroke="var(--nr)" d="M${r2(x + w - 8)} ${r2(y)}V${r2(y + 8)}H${r2(x + w)}"/>${textEl(n.lines, x + w / 2, y + 21, 'tn', 'middle', width('note'))}</g>`);
+    parts.push(`<g class="${cls}"><path class="nt" d="M${r2(x)} ${r2(y)}H${r2(x + w - 8)}L${r2(x + w)} ${r2(y + 8)}V${r2(y + h)}H${r2(x)}Z"/><path fill="none" stroke="var(--nr)" d="M${r2(x + w - 8)} ${r2(y)}V${r2(y + 8)}H${r2(x + w)}"/>${textEl(n.lines, x + w / 2, y + 21, 'tn', 'middle', width('note'), '', { runs: n.runs, role: 'note' })}</g>`);
   }
 
   const body = `<defs>${defs.join('')}</defs>\n${parts.join('\n')}\n${pulses.join('\n')}`;
@@ -380,12 +396,12 @@ export function compileSequenceSvg(layout: SequenceLayout, model: SceneModel, op
 
 // -- topology -----------------------------------------------------------------------------------------------------
 
-export function compileTopologySvg(topology: Topology, geometry: TopologyGeometry, labels: { nodes: Map<string, string[]>; messages: Map<string, string> }, model: TopologySceneModel, options: AnimatedSvgOptions, title: string, weight: 'count' | 'uniform' = 'count'): string {
+export function compileTopologySvg(topology: Topology, geometry: TopologyGeometry, labels: { nodes: Map<string, string[]>; messages: Map<string, string>; nodeRuns?: ReadonlyMap<string, TextRun[][]> }, model: TopologySceneModel, options: AnimatedSvgOptions, title: string, weight: 'count' | 'uniform' = 'count'): string {
   const k = new Compiler(options);
   const scenes: TopologyScene[] = k.samples.map((t) => topologySceneAt(model, t, options.display));
   const at = (f: (s: TopologyScene) => Value) => (i: number) => f(scenes[i]!);
   const opacity = (f: (s: TopologyScene) => number): Prop => ({ name: 'opacity', at: at(f), format: num(3), eps: 0.004 });
-  const width = (font: Parameters<AnimatedSvgOptions['measure']>[1]) => (line: string) => options.measure(line, font);
+  const width = (font: Parameters<AnimatedSvgOptions['measure']>[1]): Width => (line, style) => options.measure(line, font, style);
   const casing = options.theme === 'github';
   const b = geometry.bounds;
   const parts: string[] = [`<g transform="translate(${r2(-b.x)} ${r2(-b.y)})">`];
@@ -448,7 +464,7 @@ export function compileTopologySvg(topology: Topology, geometry: TopologyGeometr
     const lines = labels.nodes.get(n.id) ?? [n.label];
     const cy = r.h / 2 + 4.5 - ((lines.length - 1) * 18) / 2;
     parts.push(
-      `<g class="${group}" transform="translate(${r2(r.x)} ${r2(r.y)})"><rect class="${ring}" x="-6" y="-6" width="${r2(r.w + 12)}" height="${r2(r.h + 12)}" rx="13" fill="none" stroke="var(--ac)" stroke-dasharray="3 3"/><rect class="${glow}" x="-2.5" y="-2.5" width="${r2(r.w + 5)}" height="${r2(r.h + 5)}" rx="10" fill="none" stroke="var(--ac)" stroke-width="1.5"/><rect class="bx" width="${r2(r.w)}" height="${r2(r.h)}" rx="8"/>${textEl(lines, r.w / 2, cy, 'tp', 'middle', width('participant'))}</g>`,
+      `<g class="${group}" transform="translate(${r2(r.x)} ${r2(r.y)})"><rect class="${ring}" x="-6" y="-6" width="${r2(r.w + 12)}" height="${r2(r.h + 12)}" rx="13" fill="none" stroke="var(--ac)" stroke-dasharray="3 3"/><rect class="${glow}" x="-2.5" y="-2.5" width="${r2(r.w + 5)}" height="${r2(r.h + 5)}" rx="10" fill="none" stroke="var(--ac)" stroke-width="1.5"/><rect class="bx" width="${r2(r.w)}" height="${r2(r.h)}" rx="8"/>${textEl(lines, r.w / 2, cy, 'tp', 'middle', width('participant'), '', { runs: labels.nodeRuns?.get(n.id), role: 'participant' })}</g>`,
     );
   }
   parts.push(...overlay, ...pulses, '</g>');

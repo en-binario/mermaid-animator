@@ -242,3 +242,54 @@ describe('gate', () => {
     expect(player.isPlaying).toBe(true);
   });
 });
+
+describe('initial overview', () => {
+  function overviewSetup(o: Partial<PlayerOptions> = {}) {
+    const d = compileDiagram('sequenceDiagram\nA->>B: one\nB->>C: two', { overview: true, dwellMs: 900 });
+    const timeline = d.sequence!.timeline;
+    return { player: new Player(timeline, { ...options, ...o }), timeline };
+  }
+
+  it('skips the overview dwell on Next and plays the clear before resting on step 1', () => {
+    const { player, timeline } = overviewSetup();
+    player.next();
+    expect(player.time).toBe(timeline.starts[0]);
+    expect(player.snapshot().displayStep).toBe(1);
+    const took = run(player);
+    expect(player.time).toBe(stepEnd(timeline, 0));
+    // The clear is part of step 1's transition.
+    expect(took).toBeGreaterThanOrEqual(timeline.transitions[0]! - 16);
+    expect(timeline.transitions[0]).toBeGreaterThan(timeline.clear!);
+  });
+
+  it('returns to the overview on Previous from step 1', () => {
+    const { player } = overviewSetup();
+    player.goTo(1);
+    player.previous();
+    run(player);
+    expect(player.time).toBe(0);
+    expect(player.snapshot().displayStep).toBe(0);
+  });
+
+  it('rests on the overview for the dwell when autoplay starts', () => {
+    const { player, timeline } = overviewSetup();
+    player.play();
+    player.tick(timeline.starts[0]! - 10);
+    expect(player.snapshot().displayStep).toBe(0);
+    player.tick(20);
+    expect(player.snapshot().displayStep).toBe(1);
+  });
+});
+
+describe('pausing from a user camera move', () => {
+  it('stays paused when the hover hold ends', () => {
+    const { player } = setup();
+    player.play();
+    player.hold('hover', true);
+    // A pan or zoom during playback pauses it (spec playback: automatic pausing).
+    player.pause();
+    player.hold('hover', false);
+    expect(player.isPlaying).toBe(false);
+    expect(player.isActive).toBe(false);
+  });
+});

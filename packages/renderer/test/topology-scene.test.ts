@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { approximateMeasure, buildTopology, compileDiagram, layoutSequence, stepEnd, type CompileOptions } from '@mermaid-animator/core';
+import { approximateMeasure, buildTopology, CLEAR_MS, compileDiagram, layoutSequence, stepEnd, type CompileOptions } from '@mermaid-animator/core';
 import { DEFAULT_DISPLAY, prepareScene, prepareTopologyScene, sceneAt, topologySceneAt } from '../src';
 
 function model(body: string, options: CompileOptions = {}) {
@@ -77,5 +77,36 @@ describe('topology scene', () => {
   it('ghosts edges whose messages never play', () => {
     const { topo, timeline } = model('A->>B: x\nalt ok\nB->>C: yes\nelse no\nB->>D: no\nend');
     expect(topologySceneAt(topo, timeline.duration).edges.get('B->D')).toMatchObject({ state: 'unplayed', opacity: 0.12 });
+  });
+});
+
+describe('topology scene with the initial overview', () => {
+  const ON = { ...DEFAULT_DISPLAY, overview: true };
+  const { topo, timeline } = model(flow, { overview: true, dwellMs: 900 });
+
+  it('shows every node and edge at step 0 without emphasis', () => {
+    const s = topologySceneAt(topo, 0, ON);
+    expect(s.position.index).toBe(-1);
+    for (const e of s.edges.values()) expect(e).toMatchObject({ state: 'past', opacity: 1, draw: 1, highlight: 0, label: 0, pulses: [] });
+    for (const n of s.nodes.values()) expect(n).toMatchObject({ opacity: 1, glow: 0 });
+  });
+
+  it('clears the overview at the start of step 1, then plays as usual', () => {
+    const clearStart = timeline.starts[0]!;
+    const mid = topologySceneAt(topo, clearStart + CLEAR_MS / 2, ON);
+    expect(mid.edges.get('G->G')!.opacity).toBeGreaterThan(0);
+    expect(mid.edges.get('G->G')!.opacity).toBeLessThan(1);
+    const cleared = topologySceneAt(topo, clearStart + CLEAR_MS, ON);
+    expect(cleared.edges.get('G->G')!.opacity).toBe(0);
+    expect(cleared.edges.get('U->G')).toMatchObject({ state: 'current', draw: 0 });
+    const plain = model(flow, { dwellMs: 900 });
+    const a = topologySceneAt(topo, stepEnd(timeline, 3), ON);
+    const b = topologySceneAt(plain.topo, stepEnd(plain.timeline, 3));
+    expect(JSON.stringify([...a.edges])).toBe(JSON.stringify([...b.edges]));
+  });
+
+  it('leaves step 0 unchanged when the overview is off', () => {
+    const plain = model(flow);
+    expect(topologySceneAt(plain.topo, 0).edges.get('U->G')!.opacity).toBe(0);
   });
 });

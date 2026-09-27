@@ -161,6 +161,8 @@ export type WebviewMessage =
   | { v: 1; type: 'export/progress'; payload: { fraction: number; phase: string } }
   /** The export stopped after `export/cancel` (or a sheet cancel); nothing will be written. */
   | { v: 1; type: 'export/cancelled'; payload: Record<string, never> }
+  /** Open the Settings UI filtered to this extension (spec animator-panel); the host picks the query. */
+  | { v: 1; type: 'settings/open'; payload: Record<string, never> }
   | { v: 1; type: 'export/player'; payload: PlayerExportPayload }
   /** Merge a patch into this diagram's sidecar entry (Save Topology Layout, Save as Diagram Defaults). */
   | { v: 1; type: 'sidecar/write'; payload: { patch: SidecarEntry } }
@@ -247,6 +249,7 @@ const webviewPayloads: Record<WebviewMessageType, Guard> = {
   'export/data': shape({ format: oneOf('svg', 'png', 'gif', 'webm', 'mp4', 'html'), suggestedName: str, data: bytes, index: num, total: num, pair: optional(oneOf('light', 'dark')) }),
   'export/progress': shape({ fraction: num, phase: str }),
   'export/cancelled': record,
+  'settings/open': record,
   'export/player': shape({ suggestedName: str, title: str, data: str, theme: oneOf('light', 'dark', 'auto') }),
   'sidecar/write': shape({ patch: sidecarEntry }),
   'sidecar/unresolved': shape({ entries: arrayOf(shape({ section: oneOf('captions', 'chapters'), key: str })) }),

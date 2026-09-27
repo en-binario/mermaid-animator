@@ -1,3 +1,4 @@
+import type { LabelMark } from '../markup';
 import type { SourceRange } from '../text';
 
 /** Structural model of a sequence diagram (spec §13.5, v1.1). Ranges are diagram-relative. */
@@ -10,6 +11,8 @@ export const PARTICIPANT_KINDS: readonly ParticipantKind[] = ['participant', 'ac
 export interface Participant {
   id: string;
   label: string;
+  /** Bold / italic ranges of `label` (spec label-formatting). */
+  labelMarks?: LabelMark[];
   kind: ParticipantKind;
   boxId?: string;
   /** Index into `body` order of the create / destroy statements, when present. */
@@ -29,6 +32,7 @@ export interface Message {
   from: string;
   to: string;
   label: string;
+  labelMarks?: LabelMark[];
   arrow: ArrowKind;
   dotted: boolean;
   /** `+` suffix: activates the receiver. */
@@ -45,6 +49,7 @@ export interface Note {
   placement: 'leftOf' | 'rightOf' | 'over';
   participants: [string] | [string, string];
   text: string;
+  textMarks?: LabelMark[];
   range: SourceRange;
 }
 
@@ -52,6 +57,7 @@ export type FragmentKind = 'loop' | 'alt' | 'opt' | 'par' | 'critical' | 'break'
 
 export interface FragmentBranch {
   label: string;
+  labelMarks?: LabelMark[];
   children: SequenceNode[];
   range: SourceRange;
 }
@@ -62,6 +68,7 @@ export interface Fragment {
   /** `par_over` spans all participants. */
   over?: boolean;
   label: string;
+  labelMarks?: LabelMark[];
   branches: FragmentBranch[];
   color?: string;
   range: SourceRange;
@@ -78,6 +85,7 @@ export type SequenceNode =
 export interface Box {
   id: string;
   label?: string;
+  labelMarks?: LabelMark[];
   color: string;
   members: string[];
   range: SourceRange;

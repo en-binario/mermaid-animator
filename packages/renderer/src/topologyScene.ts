@@ -3,7 +3,7 @@
  * as a pure function of playback time, driven by the same step list and timeline as the
  * sequence scene and sharing its state rules.
  */
-import { positionAt, type CompiledSequence, type Position, type Timeline, type Topology } from '@mermaid-animator/core';
+import { positionAt, transitionOf, type CompiledSequence, type Position, type Timeline, type Topology } from '@mermaid-animator/core';
 import { DURATION, EASE, windowed } from './easing';
 import { DEFAULT_DISPLAY, OPACITY, restingOpacity, stateOf, stepFor, type DisplayOptions, type ElementState } from './scene';
 
@@ -101,10 +101,52 @@ export function prepareTopologyScene(topology: Topology, compiled: CompiledSeque
 }
 
 export function topologySceneAt(model: TopologySceneModel, t: number, options: DisplayOptions = DEFAULT_DISPLAY, inputs: TopologySceneInputs = {}): TopologyScene {
+  const position = positionAt(model.timeline, t);
+  if (!options.overview || model.compiled.steps.length === 0) return computeTopologyScene(model, position, options, inputs);
+  // Initial overview (spec initial-overview), cleared at the start of step 0 as in the sequence scene.
+  if (position.index < 0) return { ...overviewScene(model, options, inputs), position };
+  const cut = options.motion === 'minimal' || options.motion === 'none';
+  if (position.index === 0 && position.cleared < 1 && !cut) {
+    const initial = computeTopologyScene(model, INITIAL_POSITION, options, inputs);
+    return blendScenes(overviewScene(model, options, inputs), initial, EASE.standard(position.cleared), position);
+  }
+  return computeTopologyScene(model, position, options, inputs);
+}
+
+const INITIAL_POSITION: Position = { index: -1, phase: 'initial', progress: 0, elapsed: 0, cleared: 0 };
+
+/** Every node and edge as it rests after the last step, without current-step emphasis. */
+function overviewScene(model: TopologySceneModel, options: DisplayOptions, inputs: TopologySceneInputs): TopologyScene {
+  const last = model.compiled.steps.length - 1;
+  const rest: Position = { index: last, phase: 'dwell', progress: 1, elapsed: Number.POSITIVE_INFINITY, cleared: 1 };
+  const scene = computeTopologyScene(model, rest, { ...options, pastSteps: 'full', indicator: 'none' }, inputs);
+  for (const e of scene.edges.values()) {
+    if (e.state === 'current') e.state = 'past';
+    e.highlight = 0;
+    e.pulses = [];
+    e.current = [];
+    e.label = 0;
+  }
+  for (const n of scene.nodes.values()) n.glow = n.focused ? 1 : 0;
+  for (const c of scene.clusters.values()) c.active = 0;
+  return scene;
+}
+
+const mix = (a: number, b: number, c: number) => a + (b - a) * c;
+
+function blendScenes(from: TopologyScene, to: TopologyScene, c: number, position: Position): TopologyScene {
+  return {
+    position,
+    edges: new Map([...from.edges].map(([key, e]) => [key, { ...e, opacity: mix(e.opacity, to.edges.get(key)?.opacity ?? 0, c) }])),
+    nodes: new Map([...from.nodes].map(([id, n]) => [id, { ...n, opacity: mix(n.opacity, to.nodes.get(id)?.opacity ?? 0, c) }])),
+    clusters: new Map([...from.clusters].map(([id, cl]) => [id, { ...cl, opacity: mix(cl.opacity, to.clusters.get(id)?.opacity ?? 0, c) }])),
+  };
+}
+
+function computeTopologyScene(model: TopologySceneModel, position: Position, options: DisplayOptions, inputs: TopologySceneInputs): TopologyScene {
   const { topology, compiled, timeline } = model;
-  const position = positionAt(timeline, t);
   const k = position.index;
-  const T = k >= 0 ? (timeline.transitions[k] as number) : 0;
+  const T = k >= 0 ? transitionOf(timeline, k) : 0;
   const e = options.motion === 'none' && k >= 0 ? Number.POSITIVE_INFINITY : position.elapsed;
   const minimal = options.motion === 'minimal';
   const current = k >= 0 ? compiled.steps[k] : undefined;

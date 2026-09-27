@@ -7,8 +7,9 @@ type Format = (key: string, ...args: (string | number)[]) => string;
  * Live-region text for a step (spec §16): "Step 7 of 24. Gateway to Auth: verify token. In loop Retry."
  * followed by the caption when there is one.
  */
-export function announcement(step: Step | undefined, index: number, count: number, participants: readonly Participant[], t: Format): string {
-  if (!step) return t('announce.start', count);
+export function announcement(step: Step | undefined, index: number, count: number, participants: readonly Participant[], t: Format, overview = false): string {
+  // Step 0 shows the complete diagram when the initial overview is on (spec initial-overview).
+  if (!step) return t(overview ? 'announce.overview' : 'announce.start', count);
   const name = (id?: string) => participants.find((p) => p.id === id)?.label.replace(/\n/g, ' ') ?? id ?? '';
   const parts = [t('announce.step', index + 1, count)];
   if (step.kind === 'message') parts.push(t('announce.message', name(step.from), name(step.to), step.label.replace(/\n/g, ' ')));

@@ -3,6 +3,7 @@
  * the top rail, the off-screen edge markers and the arrow-end tags, as HTML over the canvas. Elements
  * are created once per key and only repositioned each frame (CSSOM, CSP-safe).
  */
+import type { TextRun } from '@mermaid-animator/core';
 import type { ArrowTag, EdgeMarker, Measure, RailEntry } from './model';
 
 export interface OrientationFrame {
@@ -47,6 +48,23 @@ function reuse<T extends HTMLElement>(pool: Map<string, T>, key: string, create:
     parent.appendChild(el);
   }
   return el;
+}
+
+/** Sets a name's text, as `<b>` / `<i>` runs when it has formatting (spec label-formatting). */
+function setRuns(el: HTMLElement, text: string, runs: readonly TextRun[] | undefined): void {
+  if (!runs) {
+    el.textContent = text;
+    return;
+  }
+  el.replaceChildren(
+    ...runs.map((r) => {
+      if (!r.bold && !r.italic) return document.createTextNode(r.text);
+      const outer = document.createElement(r.bold ? 'b' : 'i');
+      if (r.bold && r.italic) outer.appendChild(document.createElement('i')).textContent = r.text;
+      else outer.textContent = r.text;
+      return outer;
+    }),
+  );
 }
 
 function hideUnused(pool: Map<string, HTMLElement>, used: Set<string>): void {
@@ -109,7 +127,7 @@ export class OrientationOverlay {
       name.hidden = false;
       name.classList.toggle('ma-orient__name--tick', e.tick);
       name.dataset.state = e.state;
-      if (name.textContent !== e.label) name.textContent = e.label;
+      if (name.textContent !== e.label) setRuns(name, e.label, e.runs);
       name.title = e.name;
       name.style.transform = `translate(${(e.tick ? e.lifelineX : e.x).toFixed(1)}px, 0) translateX(-50%)`;
     }
@@ -179,7 +197,7 @@ export class OrientationOverlay {
         return span;
       }, this.tagLayer);
       el.hidden = false;
-      if (el.textContent !== tag.text) el.textContent = tag.text;
+      if (el.textContent !== tag.text) setRuns(el, tag.text, tag.runs);
       el.style.transform = `translate(${tag.x.toFixed(1)}px, ${tag.y.toFixed(1)}px) translate(${tag.anchor === 'end' ? '-100%' : '0'}, -50%)`;
     }
     hideUnused(this.tags, used);

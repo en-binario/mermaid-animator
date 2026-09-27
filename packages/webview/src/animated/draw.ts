@@ -5,7 +5,7 @@
  */
 import { positionAt } from '@mermaid-animator/core';
 import {
-  canvasPalette, drawSequence, drawTopology, prepareScene, prepareTopologyScene, sceneAt, topologySceneAt,
+  canvasPalette, drawSequence, drawTopology, prepareScene, prepareTopologyScene, runFont, sceneAt, topologySceneAt,
   type CanvasPalette, type Ctx2D, type SceneModel, type TopologySceneModel,
 } from '@mermaid-animator/renderer';
 import { cameraAt } from './frames';
@@ -174,7 +174,23 @@ function drawRail(ctx: Ctx2D, prepared: PreparedJob, t: number, step: number, s:
   for (const e of entries) {
     ctx.fillStyle = e.state === 'current' ? c.accent : c['ink-1'];
     if (e.tick) ctx.fillRect(e.lifelineX - s, 7 * s, 2 * s, 10 * s);
-    else ctx.fillText(e.label, e.x, height / 2);
+    else if (e.runs) {
+      // Formatted name (spec label-formatting): runs left to right, centred as a whole.
+      const fonts = e.runs.map((r) => runFont(font, r, 'participant'));
+      const widths = e.runs.map((r, i) => {
+        ctx.font = fonts[i]!;
+        return ctx.measureText(r.text).width;
+      });
+      let x = e.x - widths.reduce((a, w) => a + w, 0) / 2;
+      ctx.textAlign = 'left';
+      e.runs.forEach((r, i) => {
+        ctx.font = fonts[i]!;
+        ctx.fillText(r.text, x, height / 2);
+        x += widths[i]!;
+      });
+      ctx.font = font;
+      ctx.textAlign = 'center';
+    } else ctx.fillText(e.label, e.x, height / 2);
   }
   return height;
 }

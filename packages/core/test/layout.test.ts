@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { approximateMeasure, compileDiagram, layoutSequence, wrapText, type SequenceLayout } from '../src';
+import { approximateMeasure, compileDiagram, layoutSequence, parseLabelMarkup, topologyNodeSize, wrapMarkedText, wrapText, type SequenceLayout } from '../src';
 
 function layout(body: string, options: { widthFactor?: number; mirrorActors?: boolean } = {}): SequenceLayout {
   const d = compileDiagram(`sequenceDiagram\n${body}`);
@@ -135,5 +135,44 @@ describe('determinism and bounds', () => {
       expect(r.x + r.w).toBeLessThanOrEqual(l.width);
       expect(r.y + r.h).toBeLessThanOrEqual(l.height);
     }
+  });
+});
+
+describe('formatted labels', () => {
+  it('measures bold labels wider than the same plain label', () => {
+    const bold = layout('A->>B: <b>reserve DR number</b>').messages[0]!;
+    const plain = layout('A->>B: reserve DR number').messages[0]!;
+    expect(bold.label.lines).toEqual(['reserve DR number']);
+    expect(bold.label.width).toBeGreaterThan(plain.label.width);
+    expect(bold.label.runs).toEqual([[{ text: 'reserve DR number', bold: true }]]);
+    expect(plain.label.runs).toBeUndefined();
+  });
+
+  it('wraps at word boundaries without tag text and keeps styles per line', () => {
+    const { plain, marks } = parseLabelMarkup('<b>FirmaDigitalService</b> iniciarFirma abrirAgente <i>consultarEstado</i>');
+    const wrapped = wrapMarkedText(plain, marks, approximateMeasure, 'label', 160, 5);
+    expect(wrapped.lines.join(' ')).toBe(plain);
+    expect(wrapped.lines.some((l) => l.includes('<'))).toBe(false);
+    expect(wrapped.runs![0]![0]).toEqual({ text: 'FirmaDigitalService', bold: true });
+    expect(wrapped.runs!.flat().find((r) => r.text.includes('consultarEstado'))).toMatchObject({ italic: true });
+    for (const [i, line] of wrapped.lines.entries()) expect(wrapped.runs![i]!.map((r) => r.text).join('')).toBe(line);
+  });
+
+  it('matches plain wrapping without marks and truncates with an ellipsis', () => {
+    expect(wrapMarkedText('one two three', undefined, approximateMeasure, 'label', 40, 2).lines).toEqual(wrapText('one two three', approximateMeasure, 'label', 40, 2));
+    const { plain, marks } = parseLabelMarkup('<b>one two three four five six</b>');
+    const cut = wrapMarkedText(plain, marks, approximateMeasure, 'label', 40, 2);
+    expect(cut.lines).toHaveLength(2);
+    expect(cut.lines[1]!.endsWith('…')).toBe(true);
+    expect(cut.runs![1]!.at(-1)!.text.endsWith('…')).toBe(true);
+  });
+
+  it('carries runs to participants, notes, fragments and topology nodes', () => {
+    const l = layout('participant G as <b>Gateway</b>\nNote over G: <i>cached</i>\nloop <b>retry</b>\nG->>G: x\nend');
+    expect(l.participants[0]!.runs).toEqual([[{ text: 'Gateway', bold: true }]]);
+    expect(l.notes[0]!.runs).toEqual([[{ text: 'cached', italic: true }]]);
+    expect(l.fragments[0]!.labelRuns).toEqual([{ text: 'retry', bold: true }]);
+    const size = topologyNodeSize({ label: 'Gateway', labelMarks: [{ start: 0, end: 7, bold: true }], kind: 'participant' }, approximateMeasure);
+    expect(size.runs).toEqual([[{ text: 'Gateway', bold: true }]]);
   });
 });

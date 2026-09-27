@@ -1,6 +1,7 @@
 /**
  * Camera (spec §8.6): d3-zoom for gestures and limits, plus automatic framing with smooth
- * van Wijk–Nuij interpolation, motion limits and a Manual override with "Resume following".
+ * van Wijk–Nuij interpolation and motion limits. User moves never turn following off; the
+ * controller re-frames from the user's zoom at the next step (spec camera).
  */
 import { select, type Selection } from 'd3-selection';
 import { zoom as d3zoom, zoomIdentity, type D3ZoomEvent, type ZoomBehavior, type ZoomTransform } from 'd3-zoom';
@@ -66,6 +67,33 @@ export function followView(current: View, target: Rect, viewport: Viewport): Vie
   else if (sy + sh + pad > safe.y + safe.h) y -= sy + sh + pad - (safe.y + safe.h);
   return { x, y, k };
 }
+
+/**
+ * Follow mode's starting view: the diagram's top, as wide as fits, never enlarged past 100 %.
+ */
+export function followStartView(content: Rect, viewport: Viewport): View {
+  const k = clamp(ZOOM_MIN, Math.min(1, (viewport.width - 48) / content.w), ZOOM_MAX);
+  return { k, x: viewport.width / 2 - (content.x + content.w / 2) * k, y: 24 - content.y * k };
+}
+
+/**
+ * Leaving the initial overview in Follow mode (spec initial-overview): the overview was fitted,
+ * so Follow's minimum-pan rule would never zoom back in. Start from the follow starting view and
+ * bring the step into the safe area from there.
+ */
+export function overviewExitView(content: Rect, step: Rect, viewport: Viewport): View {
+  const start = followStartView(content, viewport);
+  return followView(start, step, viewport) ?? start;
+}
+
+/** The view zoomed to `k` (clamped to the zoom range) about the screen point `at`. */
+export function zoomAbout(view: View, k: number, at: { x: number; y: number }): View {
+  const next = clamp(ZOOM_MIN, k, ZOOM_MAX);
+  return { k: next, x: at.x - ((at.x - view.x) / view.k) * next, y: at.y - ((at.y - view.y) / view.k) * next };
+}
+
+/** Zoom presets offered by the toolbar's percentage menu (spec zoom-controls). */
+export const ZOOM_PRESETS = [0.25, 0.5, 0.75, 1, 1.5, 2, 4] as const;
 
 /** Limits a zoom change for one automatic move to at most 1.6× in either direction. */
 export function limitZoomChange(from: number, to: number): number {
@@ -209,9 +237,11 @@ export class Camera {
   }
 
   zoomBy(factor: number, viewport: Viewport): void {
-    const k = clamp(ZOOM_MIN, this.view.k * factor, ZOOM_MAX);
-    const cx = viewport.width / 2;
-    const cy = viewport.height / 2;
-    this.userSet({ k, x: cx - ((cx - this.view.x) / this.view.k) * k, y: cy - ((cy - this.view.y) / this.view.k) * k });
+    this.zoomTo(this.view.k * factor, viewport);
+  }
+
+  /** User zoom to `k` about the centre of the view. */
+  zoomTo(k: number, viewport: Viewport): void {
+    this.userSet(zoomAbout(this.view, k, { x: viewport.width / 2, y: viewport.height / 2 }));
   }
 }

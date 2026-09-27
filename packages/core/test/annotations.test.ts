@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { animatorSettings, parseAnnotations, suggestDirective } from '../src';
+import { ANIMATOR_VALUES, animatorSettings, parseAnnotations, suggestDirective } from '../src';
 
 const parse = (lines: string) => parseAnnotations(`sequenceDiagram\n${lines}`);
 
@@ -69,6 +69,7 @@ describe('annotation diagnostics', () => {
     ['%% @animator speed', 'invalid-arguments'],
     ['%% @animator colour=red', 'invalid-arguments'],
     ['%% @animator camera=spin', 'invalid-arguments'],
+    ['%% @animator overview=maybe', 'invalid-arguments'],
     ['%% @type robot', 'invalid-arguments'],
   ])('%s is an error', (line, code) => {
     const { diagnostics, annotations } = parse(line);
@@ -78,6 +79,11 @@ describe('annotation diagnostics', () => {
 
   it('accepts later-milestone settings without warnings', () => {
     expect(parse('%% @animator view=topology layout=force').diagnostics).toEqual([]);
+  });
+
+  it('accepts the initial-overview switch and offers its values', () => {
+    expect(parse('%% @animator overview=false').diagnostics).toEqual([]);
+    expect(ANIMATOR_VALUES.overview).toEqual(['true', 'false']);
   });
 
   it('rejects duplicate step ids', () => {

@@ -8,7 +8,7 @@ describe('Participant orientation settings', () => {
   it('contributes both settings with their defaults', () => {
     const config = vscode.workspace.getConfiguration('mermaidAnimator');
     assert.equal(config.inspect('display.participantNames')?.defaultValue, 'auto');
-    assert.equal(config.inspect('display.arrowEndNames')?.defaultValue, 'off');
+    assert.equal(config.inspect('display.arrowEndNames')?.defaultValue, 'auto');
   });
 
   it('sends changes to open panels', async () => {

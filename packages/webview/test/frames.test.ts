@@ -69,3 +69,18 @@ describe('animated SVG file names', () => {
     expect(animatedSvgNames('checkout', true)).toEqual(['checkout.light.anim.svg', 'checkout.dark.anim.svg']);
   });
 });
+
+describe('export ranges with the initial overview', () => {
+  const timeline = compileDiagram('sequenceDiagram\nA->>B: one\nB->>A: two', { overview: true, dwellMs: 900 }).sequence!.timeline;
+
+  it('starts full exports on the overview and includes its dwell and clear', () => {
+    const range = exportRange('all', timeline, { rest: -1, chapters: [] });
+    expect(range).toEqual({ start: 0, end: timeline.duration });
+    expect(timeline.starts[0]).toBe(900);
+    expect(timeline.clear).toBeGreaterThan(0);
+  });
+
+  it('includes the overview when exporting the first step', () => {
+    expect(exportRange('step', timeline, { rest: 0, chapters: [] }).start).toBe(0);
+  });
+});

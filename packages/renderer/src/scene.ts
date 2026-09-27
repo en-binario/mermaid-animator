@@ -2,7 +2,7 @@
  * The scene: visual state of every element as a pure function of playback time (spec §13.7,
  * FR-ANIM-01). Choreography windows follow spec §9.8.3; step states follow §9.7.
  */
-import { positionAt, type CompiledSequence, type Position, type SequenceLayout, type Step, type Timeline } from '@mermaid-animator/core';
+import { positionAt, transitionOf, type CompiledSequence, type Position, type SequenceLayout, type Step, type Timeline } from '@mermaid-animator/core';
 import { DURATION, EASE, springy, windowed } from './easing';
 
 export type MotionProfile = 'formal' | 'expressive' | 'minimal' | 'none';
@@ -14,6 +14,8 @@ export interface DisplayOptions {
   trailLength: number;
   motion: MotionProfile;
   indicator: 'pulse' | 'comet' | 'none';
+  /** Step 0 shows the complete diagram, cleared at the start of step 1 (spec initial-overview). */
+  overview?: boolean;
 }
 
 export const DEFAULT_DISPLAY: DisplayOptions = { futureSteps: 'hidden', pastSteps: 'full', trailLength: 3, motion: 'formal', indicator: 'pulse' };
@@ -177,10 +179,61 @@ export function restingOpacity(state: ElementState, step: number, k: number, o: 
 
 /** Computes the scene at time `t` (ms on the timeline, speed-independent). */
 export function sceneAt(model: SceneModel, t: number, options: DisplayOptions = DEFAULT_DISPLAY, inputs: SceneInputs = {}): Scene {
+  const position = positionAt(model.timeline, t);
+  if (!options.overview || model.compiled.steps.length === 0) return computeScene(model, position, options, inputs);
+  // Initial overview (spec initial-overview): the complete diagram before the first step…
+  if (position.index < 0) return { ...overviewScene(model, options, inputs), position };
+  // …which clears to the pre-reveal state at the start of step 0 (a cut under minimal motion).
+  const cut = options.motion === 'minimal' || options.motion === 'none';
+  if (position.index === 0 && position.cleared < 1 && !cut) {
+    const initial = computeScene(model, INITIAL_POSITION, options, inputs);
+    return blendScenes(overviewScene(model, options, inputs), initial, EASE.standard(position.cleared), position);
+  }
+  return computeScene(model, position, options, inputs);
+}
+
+const INITIAL_POSITION: Position = { index: -1, phase: 'initial', progress: 0, elapsed: 0, cleared: 0 };
+
+/** Every element as it rests after the last step, without current-step emphasis. */
+function overviewScene(model: SceneModel, options: DisplayOptions, inputs: SceneInputs): Scene {
+  const last = model.compiled.steps.length - 1;
+  const rest: Position = { index: last, phase: 'dwell', progress: 1, elapsed: Number.POSITIVE_INFINITY, cleared: 1 };
+  const scene = computeScene(model, rest, { ...options, pastSteps: 'full', indicator: 'none' }, inputs);
+  for (const m of scene.messages.values()) {
+    if (m.state === 'current') m.state = 'past';
+    m.highlight = 0;
+    m.pulse = undefined;
+  }
+  for (const n of scene.notes.values()) if (n.state === 'current') n.state = 'past';
+  for (const p of scene.participants.values()) p.glow = p.focused || p.highlighted ? 1 : 0;
+  for (const f of scene.fragments.values()) {
+    f.active = 0;
+    f.iteration = undefined;
+  }
+  return scene;
+}
+
+const mix = (a: number, b: number, c: number) => a + (b - a) * c;
+
+/** The overview fading into the pre-reveal state: overview geometry, opacities moving toward `to` by `c`. */
+function blendScenes(from: Scene, to: Scene, c: number, position: Position): Scene {
+  const messages = new Map([...from.messages].map(([id, m]) => [id, { ...m, opacity: mix(m.opacity, to.messages.get(id)?.opacity ?? 0, c) }]));
+  const notes = new Map([...from.notes].map(([id, n]) => [id, { ...n, opacity: mix(n.opacity, to.notes.get(id)?.opacity ?? 0, c) }]));
+  const participants = new Map(
+    [...from.participants].map(([id, p]) => {
+      const q = to.participants.get(id);
+      return [id, { ...p, opacity: mix(p.opacity, q?.opacity ?? 0, c), destroyed: mix(p.destroyed, q?.destroyed ?? 0, c) }];
+    }),
+  );
+  const activations = from.activations.map((a, i) => ({ ...a, opacity: mix(a.opacity, to.activations[i]?.opacity ?? 0, c) }));
+  const fragments = new Map([...from.fragments].map(([id, f]) => [id, { ...f, opacity: mix(f.opacity, to.fragments.get(id)?.opacity ?? 0, c) }]));
+  return { position, messages, notes, participants, activations, fragments };
+}
+
+function computeScene(model: SceneModel, position: Position, options: DisplayOptions, inputs: SceneInputs): Scene {
   const { layout, compiled, timeline } = model;
-  const position = positionAt(timeline, t);
   const k = position.index;
-  const T = k >= 0 ? (timeline.transitions[k] as number) : 0;
+  const T = k >= 0 ? transitionOf(timeline, k) : 0;
   // Motion "none" jumps to the end of every window as soon as a step starts.
   const e = options.motion === 'none' && k >= 0 ? Number.POSITIVE_INFINITY : position.elapsed;
   const minimal = options.motion === 'minimal';

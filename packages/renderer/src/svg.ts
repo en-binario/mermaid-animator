@@ -4,8 +4,9 @@
  * CSS classes bound to Ink & Ivory tokens (diagram.css), so themes switch without re-rendering
  * and nothing relies on inline styles (CSP).
  */
-import type { ArrowKind, LaidMessage, ParticipantKind, SequenceLayout } from '@mermaid-animator/core';
+import type { ArrowKind, FontRole, LaidMessage, ParticipantKind, SequenceLayout, TextRun } from '@mermaid-animator/core';
 import type { ElementState, Scene } from './scene';
+import { runAttributes } from './measure';
 import { partialPath, pointAlong } from './geometry';
 
 export const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -19,14 +20,30 @@ function el<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Attrs = {}, par
   return node;
 }
 
-function textLines(parent: Element, lines: string[], x: number, y: number, cls: string, anchor: 'start' | 'middle' | 'end' = 'middle', lineHeight = 18): SVGTextElement {
+/**
+ * Multi-line text. With `styled`, each line is drawn as bold / italic runs (spec label-formatting);
+ * lines without runs are plain.
+ */
+export function textLines(parent: Element, lines: string[], x: number, y: number, cls: string, anchor: 'start' | 'middle' | 'end' = 'middle', lineHeight = 18, styled?: { runs?: TextRun[][]; role: FontRole }): SVGTextElement {
   const text = el('text', { class: cls, x, y, 'text-anchor': anchor }, parent);
   lines.forEach((line, i) => {
     const span = el('tspan', { x, dy: i === 0 ? 0 : lineHeight }, text);
-    span.textContent = line;
+    const runs = styled?.runs?.[i];
+    if (!runs || !styled) {
+      span.textContent = line;
+      return;
+    }
+    for (const run of runs) {
+      if (!run.bold && !run.italic) span.appendChild(document.createTextNode(run.text));
+      else el('tspan', runAttributes(run, styled.role), span).textContent = run.text;
+    }
   });
   return text;
 }
+
+/** A single-line label wrapped in brackets, keeping its runs. */
+const bracketed = (label: string, runs: TextRun[] | undefined): { lines: string[]; runs?: TextRun[][] } =>
+  runs ? { lines: [`[${label}]`], runs: [[{ text: '[' }, ...runs, { text: ']' }]] } : { lines: [`[${label}]`] };
 
 const round = (n: number) => Math.round(n * 100) / 100;
 
@@ -153,7 +170,7 @@ export class SequenceSvgRenderer {
     for (const box of layout.boxes) {
       const g = el('g', { class: 'ma-box' }, layers.boxes);
       el('rect', { class: 'ma-box-fill', x: box.rect.x, y: box.rect.y, width: box.rect.w, height: box.rect.h, rx: 10 }, g);
-      if (box.label) textLines(g, [box.label.toUpperCase()], box.rect.x + box.rect.w / 2, box.rect.y + 16, 'ma-box-label');
+      if (box.label) textLines(g, [box.label.toUpperCase()], box.rect.x + box.rect.w / 2, box.rect.y + 16, 'ma-box-label', 'middle', 18, { runs: box.labelRuns && [box.labelRuns.map((r) => ({ ...r, text: r.text.toUpperCase() }))], role: 'micro' });
     }
 
     for (const f of layout.fragments) {
@@ -176,10 +193,14 @@ export class SequenceSvgRenderer {
       const keyword = el('text', { class: 'ma-fragment-keyword', x: r.x + 10, y: r.y + 14 }, labels);
       keyword.textContent = f.kind === 'par' ? 'PAR' : f.kind.toUpperCase();
       if (f.label) {
-        const label = el('text', { class: 'ma-fragment-label', x: r.x + f.tabWidth + 8, y: r.y + 14 }, labels);
-        label.textContent = `[${f.label}]`;
+        const b = bracketed(f.label, f.labelRuns);
+        textLines(labels, b.lines, r.x + f.tabWidth + 8, r.y + 14, 'ma-fragment-label', 'start', 18, { runs: b.runs, role: 'label' });
       }
-      for (const sep of f.separators) if (sep.label) textLines(labels, [`[${sep.label}]`], r.x + 10, sep.y + 16, 'ma-fragment-label', 'start');
+      for (const sep of f.separators) {
+        if (!sep.label) continue;
+        const b = bracketed(sep.label, sep.runs);
+        textLines(labels, b.lines, r.x + 10, sep.y + 16, 'ma-fragment-label', 'start', 18, { runs: b.runs, role: 'label' });
+      }
       // Loop iteration counter, shown while the loop plays (spec sequence-rendering).
       const iteration = f.kind === 'loop' ? el('text', { class: 'ma-fragment-iteration', x: r.x + r.w - 10, y: r.y + 14, 'text-anchor': 'end' }, labels) : undefined;
       this.fragments.set(f.id, { group: g, labels, glow, iteration });
@@ -196,12 +217,12 @@ export class SequenceSvgRenderer {
           const fig = el('g', { class: 'ma-actor-figure' }, g);
           el('circle', { cx, cy: top + 6, r: 5.5 }, fig);
           el('path', { d: `M${round(cx)} ${round(top + 11.5)} V${round(top + 26)} M${round(cx - 9)} ${round(top + 16)} H${round(cx + 9)} M${round(cx)} ${round(top + 26)} L${round(cx - 7)} ${round(top + 35)} M${round(cx)} ${round(top + 26)} L${round(cx + 7)} ${round(top + 35)}` }, fig);
-          textLines(g, p.lines, cx, rect.y + rect.h - 6 - (p.lines.length - 1) * 18, 'ma-participant-label');
+          textLines(g, p.lines, cx, rect.y + rect.h - 6 - (p.lines.length - 1) * 18, 'ma-participant-label', 'middle', 18, { runs: p.runs, role: 'participant' });
         } else {
           el('rect', { class: 'ma-participant-box', x: rect.x, y: rect.y, width: rect.w, height: rect.h, rx: 6 }, g);
           const glyph = p.kind !== 'participant';
           const cy = rect.y + rect.h / 2 + 4.5 - ((p.lines.length - 1) * 18) / 2;
-          textLines(g, p.lines, rect.x + rect.w / 2 + (glyph ? 9 : 0), cy, 'ma-participant-label');
+          textLines(g, p.lines, rect.x + rect.w / 2 + (glyph ? 9 : 0), cy, 'ma-participant-label', 'middle', 18, { runs: p.runs, role: 'participant' });
           if (glyph) participantGlyph(p.kind, g, rect.x + rect.w / 2 - Math.max(...p.lines.map((l) => l.length)) * 3.8 - 6, rect.y + rect.h / 2);
         }
         return g;
@@ -226,7 +247,7 @@ export class SequenceSvgRenderer {
       const head = arrowHead(m.arrow);
       const heads = [el('path', { class: head.filled ? 'ma-arrowhead ma-arrowhead--filled' : 'ma-arrowhead', d: head.d }, group)];
       if (head.bothEnds) heads.push(el('path', { class: 'ma-arrowhead ma-arrowhead--filled', d: head.d }, group));
-      const label = textLines(group, m.label.lines, m.label.x, m.label.y, 'ma-message-label', m.label.anchor);
+      const label = textLines(group, m.label.lines, m.label.x, m.label.y, 'ma-message-label', m.label.anchor, 18, { runs: m.label.runs, role: 'label' });
       if (m.badge) {
         const b = el('g', { class: 'ma-badge' }, group);
         el('circle', { cx: m.badge.x, cy: m.badge.y, r: 9 }, b);
@@ -247,7 +268,7 @@ export class SequenceSvgRenderer {
       const { x, y, w, h } = n.rect;
       el('path', { class: 'ma-note-shape', d: `M${round(x)} ${round(y)} H${round(x + w - 8)} L${round(x + w)} ${round(y + 8)} V${round(y + h)} H${round(x)} Z` }, g);
       el('path', { class: 'ma-note-fold', d: `M${round(x + w - 8)} ${round(y)} V${round(y + 8)} H${round(x + w)}` }, g);
-      textLines(g, n.lines, x + w / 2, y + 8 + 13, 'ma-note-text');
+      textLines(g, n.lines, x + w / 2, y + 8 + 13, 'ma-note-text', 'middle', 18, { runs: n.runs, role: 'note' });
       this.notes.set(n.id, g);
     }
 

@@ -4,7 +4,7 @@
  * screen space from the layout and the camera view. Pure (no DOM), so the panel overlay and the
  * export renderer share the same rules.
  */
-import type { LaidParticipant, Rect, SequenceLayout, Step, Timeline } from '@mermaid-animator/core';
+import type { LaidParticipant, Rect, SequenceLayout, Step, TextRun, Timeline } from '@mermaid-animator/core';
 
 export interface ScreenView {
   x: number;
@@ -41,6 +41,8 @@ export interface RailEntry {
   /** Width of the shown label (0 for a tick). */
   width: number;
   state: NameState;
+  /** Bold / italic runs of `label` when the name has formatting (spec label-formatting). */
+  runs?: TextRun[];
 }
 
 export interface RailOptions {
@@ -54,6 +56,35 @@ export interface RailOptions {
 }
 
 const nameOf = (p: LaidParticipant): string => p.lines.join(' ').replace(/\s+/g, ' ').trim();
+
+/** The name's runs (lines joined by spaces), when the label has formatting and matches `nameOf`. */
+function nameRunsOf(p: LaidParticipant): TextRun[] | undefined {
+  if (!p.runs) return undefined;
+  const runs: TextRun[] = [];
+  p.runs.forEach((line, i) => {
+    if (i > 0) runs.push({ text: ' ' });
+    runs.push(...line);
+  });
+  return runs.map((r) => r.text).join('') === nameOf(p) ? runs : undefined;
+}
+
+/** Runs for `shown`: the full name, or a prefix of it ending in an ellipsis. */
+export function fitRuns(runs: readonly TextRun[] | undefined, shown: string): TextRun[] | undefined {
+  if (!runs || !shown) return undefined;
+  const ellipsis = shown.endsWith('…') && !runs.map((r) => r.text).join('').endsWith('…');
+  let left = shown.length - (ellipsis ? 1 : 0);
+  const out: TextRun[] = [];
+  for (const r of runs) {
+    if (left <= 0) break;
+    out.push({ ...r, text: r.text.slice(0, left) });
+    left -= r.text.length;
+  }
+  if (ellipsis) {
+    const last = out[out.length - 1];
+    if (last) last.text += '…';
+  }
+  return out;
+}
 const sx = (view: ScreenView, x: number) => view.x + x * view.k;
 const sy = (view: ScreenView, y: number) => view.y + y * view.k;
 
@@ -116,7 +147,8 @@ export function railEntries(layout: Pick<SequenceLayout, 'participants'>, view: 
     const width = fitted?.width ?? 0;
     const half = width / 2 + 4 * scale;
     const centre = width ? Math.min(Math.max(x, half), size.width - half) : x;
-    return { id: p.id, name, label: fitted?.text ?? '', tick: !fitted, lifelineX: x, x: centre, width, state: stateOf(p.id, options.involved, options.focus) };
+    const runs = fitRuns(nameRunsOf(p), fitted?.text ?? '');
+    return { id: p.id, name, label: fitted?.text ?? '', tick: !fitted, lifelineX: x, x: centre, width, state: stateOf(p.id, options.involved, options.focus), ...(runs ? { runs } : {}) };
   });
 }
 
@@ -163,6 +195,8 @@ export interface ArrowTag {
   key: string;
   participant: string;
   text: string;
+  /** Bold / italic runs of `text` when the name has formatting. */
+  runs?: TextRun[];
   x: number;
   y: number;
   anchor: 'start' | 'end';
@@ -188,9 +222,12 @@ export function arrowTags(layout: Pick<SequenceLayout, 'participants' | 'message
     const e = { x: sx(view, end.x), y: sy(view, end.y) };
     const fromName = byId.get(m.from) ? nameOf(byId.get(m.from)!) : m.from;
     const toName = byId.get(m.to) ? nameOf(byId.get(m.to)!) : m.to;
+    const fromRuns = byId.get(m.from) ? nameRunsOf(byId.get(m.from)!) : undefined;
+    const toRuns = byId.get(m.to) ? nameRunsOf(byId.get(m.to)!) : undefined;
+    const withRuns = (runs: TextRun[] | undefined) => (runs ? { runs } : {});
     if (m.self) {
       // One tag, left of the lifeline at the loop's start.
-      if (wanted(m.from)) tags.push({ key: `${m.id}:from`, participant: m.from, text: fromName, x: s.x - offset, y: s.y, anchor: 'end' });
+      if (wanted(m.from)) tags.push({ key: `${m.id}:from`, participant: m.from, text: fromName, ...withRuns(fromRuns), x: s.x - offset, y: s.y, anchor: 'end' });
       continue;
     }
     // Tags go on the side of the line away from the label (labels sit above arrows).
@@ -201,9 +238,9 @@ export function arrowTags(layout: Pick<SequenceLayout, 'participants' | 'message
     const badge = m.badge ? 9 * view.k : 0;
     const needed = measure(fromName, font) + measure(toName, font) + 4 * offset + 12 * scale + badge;
     const inside = Math.abs(e.x - s.x) >= needed;
-    if (wanted(m.from)) tags.push({ key: `${m.id}:from`, participant: m.from, text: fromName, x: s.x + (inside ? offset + badge : -offset - badge) * dir, y: s.y + dy, anchor: (inside ? dir > 0 : dir < 0) ? 'start' : 'end' });
+    if (wanted(m.from)) tags.push({ key: `${m.id}:from`, participant: m.from, text: fromName, ...withRuns(fromRuns), x: s.x + (inside ? offset + badge : -offset - badge) * dir, y: s.y + dy, anchor: (inside ? dir > 0 : dir < 0) ? 'start' : 'end' });
     // The receiver's tag stops short of the arrowhead (12 px), or sits beyond the lifeline when the arrow is short.
-    if (wanted(m.to)) tags.push({ key: `${m.id}:to`, participant: m.to, text: toName, x: e.x - (inside ? 12 * scale + offset : -offset) * dir, y: e.y + dy, anchor: (inside ? dir > 0 : dir < 0) ? 'end' : 'start' });
+    if (wanted(m.to)) tags.push({ key: `${m.id}:to`, participant: m.to, text: toName, ...withRuns(toRuns), x: e.x - (inside ? 12 * scale + offset : -offset) * dir, y: e.y + dy, anchor: (inside ? dir > 0 : dir < 0) ? 'end' : 'start' });
   }
   return tags;
 }
@@ -229,9 +266,11 @@ export function stepParticipants(step: Pick<Step, 'messages' | 'notes' | 'lanes'
 }
 
 /** Tag opacity: fades in while the step's arrow draws (its transition), then stays at 1. */
-export function tagOpacity(timeline: Pick<Timeline, 'starts' | 'transitions'>, step: number, time: number): number {
+export function tagOpacity(timeline: Pick<Timeline, 'starts' | 'transitions' | 'clear'>, step: number, time: number): number {
   const start = timeline.starts[step];
   if (start === undefined) return 0;
-  const transition = Math.max(1, timeline.transitions[step] ?? 0);
-  return Math.min(1, Math.max(0, (time - start) / transition));
+  // Step 0's transition begins with the overview clear; the arrow draws after it.
+  const clear = step === 0 ? (timeline.clear ?? 0) : 0;
+  const transition = Math.max(1, (timeline.transitions[step] ?? 0) - clear);
+  return Math.min(1, Math.max(0, (time - start - clear) / transition));
 }

@@ -4,9 +4,10 @@
  * applied per frame too (node transforms, edge paths), so layout transitions and live-reload
  * glides need no rebuild. Colours come from token CSS classes in diagram.css.
  */
-import { edgeWidth, GLYPH_KINDS, TOPOLOGY, type ParticipantKind, type Point, type Rect, type Topology, type TopologyEdge, type TopologyGeometry } from '@mermaid-animator/core';
+import { edgeWidth, GLYPH_KINDS, runsOf, TOPOLOGY, type LabelMark, type ParticipantKind, type Point, type Rect, type TextRun, type Topology, type TopologyEdge, type TopologyGeometry } from '@mermaid-animator/core';
 import { partialPath, pointAlong } from './geometry';
-import { SVG_NS } from './svg';
+import { runAttributes } from './measure';
+import { SVG_NS, textLines } from './svg';
 import type { TopologyScene } from './topologyScene';
 
 type Attrs = Record<string, string | number | undefined>;
@@ -31,6 +32,10 @@ export interface TopologyLabels {
   nodes: ReadonlyMap<string, string[]>;
   /** Message label per message id (for the transient current-message label). */
   messages: ReadonlyMap<string, string>;
+  /** Styled runs per line for node labels with bold / italic text (spec label-formatting). */
+  nodeRuns?: ReadonlyMap<string, TextRun[][]>;
+  /** Bold / italic ranges of message labels. */
+  messageMarks?: ReadonlyMap<string, LabelMark[]>;
 }
 
 interface NodeNodes {
@@ -52,13 +57,9 @@ interface EdgeNodes {
 }
 
 /** Node shape in local coordinates (0,0)–(w,h); glyph kinds draw above the label. */
-function nodeShape(kind: ParticipantKind, g: SVGGElement, w: number, h: number, lines: string[]): void {
+function nodeShape(kind: ParticipantKind, g: SVGGElement, w: number, h: number, lines: string[], runs?: TextRun[][]): void {
   const label = (y: number) => {
-    const text = el('text', { class: 'ma-participant-label', x: w / 2, y, 'text-anchor': 'middle' }, g);
-    lines.forEach((line, i) => {
-      const span = el('tspan', { x: w / 2, dy: i === 0 ? 0 : 18 }, text);
-      span.textContent = line;
-    });
+    textLines(g, lines, w / 2, y, 'ma-participant-label', 'middle', 18, { runs, role: 'participant' });
   };
   const extra = (lines.length - 1) * 18;
   const cx = w / 2;
@@ -184,7 +185,7 @@ export class TopologySvgRenderer {
       const group = el('g', { class: 'ma-participant ma-topo-node', 'data-kind': 'participant', 'data-id': n.id }, layers.nodes);
       const rings = [el('rect', { class: 'ma-topo-ring', x: -6, y: -6, width: r.w + 12, height: r.h + 12, rx: 13, opacity: 0 }, group), el('rect', { class: 'ma-topo-ring', x: -11, y: -11, width: r.w + 22, height: r.h + 22, rx: 17, opacity: 0 }, group)];
       const glow = el('rect', { class: 'ma-topo-glow', x: -2.5, y: -2.5, width: r.w + 5, height: r.h + 5, rx: 10, opacity: 0 }, group);
-      nodeShape(n.kind, group, r.w, r.h, this.labels.nodes.get(n.id) ?? [n.label]);
+      nodeShape(n.kind, group, r.w, r.h, this.labels.nodes.get(n.id) ?? [n.label], this.labels.nodeRuns?.get(n.id));
       this.nodes.set(n.id, { group, glow, rings, size: { w: r.w, h: r.h } });
     }
   }
@@ -245,7 +246,16 @@ export class TopologySvgRenderer {
         this.set(e.badge, 'data-state', s.state);
       }
       const message = s.current[s.current.length - 1];
-      this.setText(e.label, message ? (this.labels.messages.get(message) ?? '').replace(/\n/g, ' ') : '');
+      const text = message ? (this.labels.messages.get(message) ?? '').replace(/\n/g, ' ') : '';
+      const marks = message ? this.labels.messageMarks?.get(message) : undefined;
+      if (marks && e.label.textContent !== text) {
+        // Formatted message label: one run per style (spec label-formatting).
+        e.label.replaceChildren();
+        for (const run of runsOf(text, marks)) {
+          if (!run.bold && !run.italic) e.label.appendChild(document.createTextNode(run.text));
+          else el('tspan', runAttributes(run, 'label'), e.label).textContent = run.text;
+        }
+      } else if (!marks) this.setText(e.label, text);
       this.set(e.label, 'opacity', message ? s.label : 0);
       this.set(e.label, 'x', route.label.x);
       this.set(e.label, 'y', route.label.y - (e.badge ? 14 : 8));

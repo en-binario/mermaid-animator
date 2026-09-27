@@ -164,6 +164,11 @@
               "default": 3,
               "markdownDescription": "Number of recent steps in the trail."
             },
+            "playback.initialOverview": {
+              "type": "boolean",
+              "default": true,
+              "markdownDescription": "Show the complete diagram before the first step as an overview; the first step clears it and the reveal starts. Diagrams can override it with `%% @animator overview=false`."
+            },
             "motion.profile": {
               "type": "string",
               "enum": [
@@ -396,7 +401,7 @@
                 "auto",
                 "always"
               ],
-              "default": "off",
+              "default": "auto",
               "markdownDescription": "Show the sender and receiver names at the ends of the message playing in the current step.",
               "enumDescriptions": [
                 "No names on arrows.",

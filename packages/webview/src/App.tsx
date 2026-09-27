@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { stepEnd } from '@mermaid-animator/core';
 import { WEBVIEW_STRINGS, type DiagramSummary } from '@mermaid-animator/protocol';
 import type { DiagramController, ViewKind } from './controller';
+import { ZOOM_MAX, ZOOM_MIN, ZOOM_PRESETS } from './camera';
 import { SPEEDS } from './player';
 import type { HostState } from './state';
 import { format } from './state';
@@ -24,6 +25,8 @@ interface AppProps {
   sheetActions: SheetActions;
   onTogglePresentation: () => void;
   onToggleInspector: () => void;
+  /** Opens the extension's settings (spec animator-panel: settings access). */
+  onOpenSettings: () => void;
   reducedMotion: boolean;
   ui: UiState;
 }
@@ -38,6 +41,8 @@ export interface UiState {
   exportStart?: boolean;
   goTo: boolean;
   speedMenu: boolean;
+  /** The toolbar's zoom presets menu (spec zoom-controls). */
+  zoomMenu: boolean;
   toast?: string;
   /** Panel is at least 880 px wide: the inspector sits beside the canvas. */
   wide: boolean;
@@ -333,6 +338,88 @@ function Shortcuts({ t, close }: { t: T; close: () => void }) {
   );
 }
 
+/**
+ * Toolbar zoom group (spec zoom-controls): zoom out, the current zoom as a percentage that opens
+ * the presets, and zoom in. Toolbar and preset zooms are user camera moves; Fit is not.
+ */
+function ZoomGroup({ controller, t, open, setOpen }: { controller: DiagramController; t: T; open: boolean; setOpen: (open: boolean) => void }) {
+  const k = controller.zoomLevel.value;
+  const percent = Math.round(k * 100);
+  const anchor = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    // Focus the checked preset (or the first), and close on a click outside the group.
+    const items = [...(menu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"], [role="menuitem"]') ?? [])];
+    (items.find((i) => i.getAttribute('aria-checked') === 'true') ?? items[0])?.focus();
+    const outside = (e: PointerEvent) => {
+      if (!anchor.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', outside, true);
+    return () => document.removeEventListener('pointerdown', outside, true);
+  }, [open]);
+  const close = () => {
+    setOpen(false);
+    trigger.current?.focus();
+  };
+  const onKeyDown = (e: KeyboardEvent) => {
+    const items = [...(menu.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])];
+    const i = items.indexOf(document.activeElement as HTMLButtonElement);
+    if (e.key === 'Escape') close();
+    else if (e.key === 'ArrowDown') items[(i + 1) % items.length]?.focus();
+    else if (e.key === 'ArrowUp') items[(i - 1 + items.length) % items.length]?.focus();
+    else if (e.key === 'Home') items[0]?.focus();
+    else if (e.key === 'End') items[items.length - 1]?.focus();
+    else if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Tab') return;
+    if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Tab') {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  };
+  const choose = (preset: number | 'fit') => {
+    if (preset === 'fit') controller.fit();
+    else controller.zoomTo(preset);
+    close();
+  };
+  return (
+    <div class="ma-zoom" role="group" aria-label={t('toolbar.zoom')}>
+      <IconButton icon="zoom-out" label={t('toolbar.zoomOut')} onClick={() => controller.zoom(1 / 1.2)} disabled={k <= ZOOM_MIN + 1e-6} />
+      <div class="ma-anchor" ref={anchor}>
+        <button
+          ref={trigger}
+          type="button"
+          class="ma-zoom__level"
+          aria-label={t('toolbar.zoomLevel', percent)}
+          title={t('toolbar.zoomLevel', percent)}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+        >
+          {`${percent}%`}
+        </button>
+        {open && (
+          <div ref={menu} class="ma-popover ma-menu ma-menu--zoom" role="menu" aria-label={t('toolbar.zoom')} onKeyDown={onKeyDown}>
+            {ZOOM_PRESETS.map((preset) => {
+              const checked = Math.round(preset * 100) === percent;
+              return (
+                <button key={preset} type="button" role="menuitemradio" aria-checked={checked} class={`ma-menu__item${checked ? ' ma-menu__item--checked' : ''}`} onClick={() => choose(preset)}>
+                  {`${Math.round(preset * 100)}%`}
+                </button>
+              );
+            })}
+            <div class="ma-menu__rule" />
+            <button type="button" role="menuitem" class="ma-menu__item" onClick={() => choose('fit')}>
+              {t('toolbar.zoomFit')}
+            </button>
+          </div>
+        )}
+      </div>
+      <IconButton icon="zoom-in" label={t('toolbar.zoomIn')} onClick={() => controller.zoom(1.2)} disabled={k >= ZOOM_MAX - 1e-6} />
+    </div>
+  );
+}
+
 function ExportMenu({ t, onExport, close }: { t: T; onExport: (a: ExportAction) => void; close: () => void }) {
   const choose = (a: ExportAction) => {
     close();
@@ -361,7 +448,7 @@ function ExportMenu({ t, onExport, close }: { t: T; onExport: (a: ExportAction) 
   );
 }
 
-export function App({ state, controller, mountCanvas, onSelectDiagram, onExport, sheetActions, onTogglePresentation, onToggleInspector, reducedMotion, ui }: AppProps) {
+export function App({ state, controller, mountCanvas, onSelectDiagram, onExport, sheetActions, onTogglePresentation, onToggleInspector, onOpenSettings, reducedMotion, ui }: AppProps) {
   const t = (key: string, ...args: (string | number)[]) => format({ ...WEBVIEW_STRINGS, ...state.strings }, key, ...args);
   const doc = state.document;
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -390,9 +477,10 @@ export function App({ state, controller, mountCanvas, onSelectDiagram, onExport,
         {doc?.diagrams && <DiagramSwitcher diagrams={doc.diagrams} current={doc.diagramIndex ?? 0} t={t} onSelect={onSelectDiagram} />}
         <span class="ma-toolbar__spacer" />
         {controller && <ViewSwitcher controller={controller} t={t} />}
+        {controller && <ZoomGroup controller={controller} t={t} open={ui.zoomMenu} setOpen={(zoomMenu) => ui.set({ zoomMenu })} />}
         <IconButton icon="screen-full" label={t('toolbar.fit')} onClick={() => controller?.fit()} disabled={!controller} />
         <IconButton icon="target" label={t('toolbar.frame')} onClick={() => controller?.frameStep()} disabled={!controller} />
-        <IconButton icon="eye" label={t('toolbar.follow')} pressed={!!controller?.following.value && !controller.followSuspended.value} onClick={() => controller?.toggleFollow()} disabled={!controller} />
+        <IconButton icon="eye" label={t('toolbar.follow')} pressed={!!controller?.following.value} onClick={() => controller?.toggleFollow()} disabled={!controller} />
         <IconButton icon="go-to-file" label={t('toolbar.revealSource')} onClick={() => controller?.revealCurrent()} disabled={!controller} />
         <span class="ma-toolbar__rule" aria-hidden="true" />
         <div class="ma-anchor">
@@ -408,6 +496,7 @@ export function App({ state, controller, mountCanvas, onSelectDiagram, onExport,
           {ui.exportMenu && !controller && <ExportMenu t={t} onExport={onExport} close={() => ui.set({ exportMenu: false })} />}
         </div>
         <IconButton icon="keyboard" label={t('toolbar.shortcuts')} onClick={() => ui.set({ shortcuts: true })} />
+        <IconButton icon="settings-gear" label={t('toolbar.settings')} onClick={onOpenSettings} />
       </header>
 
       <div class={`ma-body${inspectorBeside ? ' ma-body--inspector' : ''}`}>
@@ -427,11 +516,6 @@ export function App({ state, controller, mountCanvas, onSelectDiagram, onExport,
             <div class="ma-banner ma-banner--info" role="status">
               <span class="ma-banner__text">{notice}</span>
             </div>
-          )}
-          {controller?.followSuspended.value && (
-            <button type="button" class="ma-chip ma-resume" onClick={() => controller.toggleFollow()}>
-              {t('camera.resume')}
-            </button>
           )}
           {controller && <ChoiceChips controller={controller} t={t} />}
           {controller && <EdgeCardView controller={controller} t={t} />}

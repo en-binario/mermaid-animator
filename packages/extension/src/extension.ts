@@ -232,6 +232,8 @@ export function activate(context: vscode.ExtensionContext): MermaidAnimatorApi {
     vscode.languages.registerHoverProvider(mermaidSelector, new AnnotationHoverProvider()),
     vscode.languages.registerCodeActionsProvider(mermaidSelector, new AnnotationCodeActionProvider(), { providedCodeActionKinds: AnnotationCodeActionProvider.kinds }),
     vscode.commands.registerCommand('mermaidAnimator.insertAnnotation', insertAnnotation),
+    // Settings UI filtered to this extension (spec animator-panel: settings access).
+    vscode.commands.registerCommand('mermaidAnimator.openSettings', () => vscode.commands.executeCommand('workbench.action.openSettings', `@ext:${context.extension.id}`)),
     vscode.window.onDidChangeVisibleTextEditors(() => highlighter.refresh()),
     vscode.workspace.onDidChangeTextDocument((event) => {
       if (vscode.window.visibleTextEditors.some((e) => e.document === event.document)) highlighter.refresh();

@@ -6,6 +6,7 @@
  */
 import { LineIndex, type Diagnostic, type SourceRange } from '../text';
 import { decodeEntities, preprocess } from '../preprocess';
+import { parseLabelMarkup, type LabelMark, type MarkedText } from '../markup';
 import { lex, type Token, type TokenKind } from './lexer';
 import type {
   ArrowKind, Box, Fragment, FragmentBranch, FragmentKind, Message, Note, Participant, ParticipantKind, SequenceModel, SequenceNode,
@@ -67,10 +68,29 @@ const describe = (kind: TokenKind) => DESCRIBE[kind] ?? `'${kind.replace('_', ' 
 
 class ParseError extends Error {}
 
-/** Removes Mermaid's `:wrap:` / `:nowrap:` prefix, decodes entities, normalises `<br>`. */
-export function cleanLabel(raw: string): string {
+/**
+ * Removes Mermaid's `:wrap:` / `:nowrap:` prefix, reads inline formatting tags (before entities are
+ * decoded, so `#lt;b>` stays literal), decodes entities and normalises `<br>`.
+ */
+export function cleanMarkedLabel(raw: string): MarkedText {
   const text = raw.trim().replace(/^:?(?:no)?wrap:/i, '').trim();
-  return decodeEntities(text).replace(/<br\s*\/?>/gi, '\n');
+  return parseLabelMarkup(text, (t) => decodeEntities(t).replace(/<br\s*\/?>/gi, '\n'));
+}
+
+/** The cleaned label's plain text (formatting tags removed). */
+export function cleanLabel(raw: string): string {
+  return cleanMarkedLabel(raw).plain;
+}
+
+/** `{ label, labelMarks? }` for spreading into model objects. */
+function markedLabel(raw: string): { label: string; labelMarks?: LabelMark[] } {
+  const { plain, marks } = cleanMarkedLabel(raw);
+  return marks ? { label: plain, labelMarks: marks } : { label: plain };
+}
+
+function noteText(raw: string): { text: string; textMarks?: LabelMark[] } {
+  const { plain, marks } = cleanMarkedLabel(raw);
+  return marks ? { text: plain, textMarks: marks } : { text: plain };
 }
 
 function parseMetadata(content: string): { type?: string; alias?: string } | undefined {
@@ -91,13 +111,13 @@ function parseMetadata(content: string): { type?: string; alias?: string } | und
   }
 }
 
-function boxData(raw: string): { color: string; label?: string } {
+function boxData(raw: string): { color: string; label?: string; labelMarks?: LabelMark[] } {
   const text = raw.trim();
   const m = /^((?:rgba?|hsla?)\s*\(.*\)|\w*)(.*)$/.exec(text);
   const color = m?.[1]?.trim() ?? '';
   const rest = m?.[2]?.trim() || undefined;
-  if (color && isCssColor(color)) return { color, label: rest ? cleanLabel(rest) : undefined };
-  return { color: 'transparent', label: text ? cleanLabel(text) : undefined };
+  if (color && isCssColor(color)) return { color, ...(rest ? markedLabel(rest) : { label: undefined }) };
+  return { color: 'transparent', ...(text ? markedLabel(text) : { label: undefined }) };
 }
 
 class Parser {
@@ -324,11 +344,11 @@ class Parser {
       }
       end = close.end;
     }
-    let description: string | undefined;
+    let description: { label: string; labelMarks?: LabelMark[] } | undefined;
     if (this.peek().kind === 'AS') {
       this.next();
       const rest = this.expect('restOfLine', "after 'as'");
-      description = cleanLabel(rest.text);
+      description = markedLabel(rest.text);
       end = rest.end;
     }
     this.expect('NEWLINE', 'after the participant declaration');
@@ -348,7 +368,11 @@ class Parser {
     const p = this.ensureParticipant(id, actor, metaKind ?? declared);
     if (!existing || description !== undefined || meta) {
       p.kind = metaKind ?? declared;
-      p.label = description ?? (meta?.alias ? cleanLabel(meta.alias) : p.label);
+      const named = description ?? (meta?.alias ? markedLabel(meta.alias) : undefined);
+      if (named) {
+        p.label = named.label;
+        p.labelMarks = named.labelMarks;
+      }
       p.range = this.range(keyword.start, end);
     }
     if (this.currentBox && !p.boxId) {
@@ -368,7 +392,7 @@ class Parser {
     const keyword = this.next();
     const rest = this.expect('restOfLine', "after 'box'");
     const data = boxData(rest.text);
-    const box: Box = { id: this.id('b'), label: data.label, color: data.color, members: [], range: this.range(keyword.start, rest.end) };
+    const box: Box = { id: this.id('b'), label: data.label, ...(data.labelMarks ? { labelMarks: data.labelMarks } : {}), color: data.color, members: [], range: this.range(keyword.start, rest.end) };
     const previous = this.currentBox;
     this.currentBox = box;
     this.boxes.push(box);
@@ -464,7 +488,7 @@ class Parser {
       id: this.id('m'),
       from: from.text,
       to: to.text,
-      label: cleanLabel(txt.text.slice(1)),
+      ...markedLabel(txt.text.slice(1)),
       arrow,
       dotted,
       activatesTarget: activatesTarget || undefined,
@@ -543,7 +567,7 @@ class Parser {
     }
     const txt = this.expect('TXT', 'after the note placement');
     this.expect('NEWLINE', 'after the note');
-    return { type: 'note', note: { id: this.id('n'), placement, participants, text: cleanLabel(txt.text.slice(1)), range: this.range(keyword.start, txt.end) } };
+    return { type: 'note', note: { id: this.id('n'), placement, participants, ...noteText(txt.text.slice(1)), range: this.range(keyword.start, txt.end) } };
   }
 
   private actorMenu(): void {
@@ -573,7 +597,7 @@ class Parser {
       id: this.id('f'),
       kind,
       over,
-      label: kind === 'rect' ? label.text.trim() : cleanLabel(label.text),
+      ...(kind === 'rect' ? { label: label.text.trim() } : markedLabel(label.text)),
       branches: [],
       range: this.range(keyword.start, label.end),
     };
@@ -581,11 +605,11 @@ class Parser {
     const terminators = new Set<TokenKind>(['end']);
     if (separator) terminators.add(separator);
     let branchStart = keyword;
-    let branchLabel = fragment.label;
+    let branchLabel: { label: string; labelMarks?: LabelMark[] } = { label: fragment.label, labelMarks: fragment.labelMarks };
     for (;;) {
       const children = this.document(terminators);
       const t = this.peek();
-      const branch: FragmentBranch = { label: branchLabel, children, range: this.range(branchStart.start, t.start) };
+      const branch: FragmentBranch = { label: branchLabel.label, ...(branchLabel.labelMarks ? { labelMarks: branchLabel.labelMarks } : {}), children, range: this.range(branchStart.start, t.start) };
       fragment.branches.push(branch);
       if (t.kind === 'EOF') {
         this.error(keyword, `'${keyword.kind}' is not closed with 'end'.`, 'parse/unclosed-block');
@@ -600,7 +624,7 @@ class Parser {
       // separator
       branchStart = this.next();
       const rest = this.expect('restOfLine', `after '${branchStart.kind}'`);
-      branchLabel = cleanLabel(rest.text);
+      branchLabel = markedLabel(rest.text);
     }
   }
 }

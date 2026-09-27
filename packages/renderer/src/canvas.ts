@@ -4,9 +4,9 @@
  * with resolved palette colours instead of CSS variables. It mirrors SequenceSvgRenderer,
  * TopologySvgRenderer and diagram.css; the geometry helpers and arrowhead paths are shared.
  */
-import { edgeWidth, GLYPH_KINDS, TOPOLOGY, type ParticipantKind, type SequenceLayout, type Topology, type TopologyGeometry } from '@mermaid-animator/core';
+import { edgeWidth, GLYPH_KINDS, runsOf, TOPOLOGY, type FontRole, type LabelMark, type ParticipantKind, type SequenceLayout, type TextRun, type Topology, type TopologyGeometry } from '@mermaid-animator/core';
 import { partialPath, pointAlong } from './geometry';
-import { FONTS } from './measure';
+import { BOLD_WEIGHT, FONTS } from './measure';
 import type { Scene } from './scene';
 import { arrowHead } from './svg';
 import { isHighContrast, PALETTES, type ColorToken, type PaletteName } from './theme';
@@ -49,26 +49,71 @@ function font(role: keyof typeof FONTS, overrides: { weight?: number; style?: st
   return f;
 }
 
+/** A run's font: the base font with the role's bold weight and/or italic (spec label-formatting). */
+export function runFont(base: string, run: TextRun, role: FontRole): string {
+  let f = run.bold ? base.replace(/\b\d{3}(?= [\d.]+px)/, String(BOLD_WEIGHT[role])) : base;
+  if (run.italic && !/^italic /.test(f)) f = `italic ${f}`;
+  return f;
+}
+
+interface TextStyleOptions {
+  font: string;
+  fill: string;
+  anchor?: 'start' | 'middle' | 'end';
+  halo?: string;
+  letterSpacing?: string;
+  /** Bold / italic runs per line, with the role that decides the bold weight. */
+  runs?: readonly (readonly TextRun[] | undefined)[];
+  role?: FontRole;
+}
+
 /** Draws text lines like `textLines` in svg.ts: baseline at y, 18 px line height, optional halo. */
-function text(ctx: Ctx2D, lines: readonly string[], x: number, y: number, style: { font: string; fill: string; anchor?: 'start' | 'middle' | 'end'; halo?: string; letterSpacing?: string }): void {
+function text(ctx: Ctx2D, lines: readonly string[], x: number, y: number, style: TextStyleOptions): void {
   ctx.font = style.font;
   ctx.textAlign = style.anchor === 'middle' || !style.anchor ? 'center' : style.anchor === 'end' ? 'right' : 'left';
   ctx.textBaseline = 'alphabetic';
   const spaced = ctx as Ctx2D & { letterSpacing?: string };
   if ('letterSpacing' in spaced) spaced.letterSpacing = style.letterSpacing ?? '0px';
-  lines.forEach((line, i) => {
-    const ly = y + i * 18;
+  const draw = (t: string, tx: number, ty: number) => {
     if (style.halo) {
       ctx.lineWidth = 4;
       ctx.lineJoin = 'round';
       ctx.strokeStyle = style.halo;
-      ctx.strokeText(line, x, ly);
+      ctx.strokeText(t, tx, ty);
     }
     ctx.fillStyle = style.fill;
-    ctx.fillText(line, x, ly);
+    ctx.fillText(t, tx, ty);
+  };
+  lines.forEach((line, i) => {
+    const ly = y + i * 18;
+    const runs = style.runs?.[i];
+    if (!runs) {
+      ctx.font = style.font;
+      ctx.textAlign = style.anchor === 'middle' || !style.anchor ? 'center' : style.anchor === 'end' ? 'right' : 'left';
+      draw(line, x, ly);
+      return;
+    }
+    // Styled runs: measure the whole line, then draw left to right from the aligned start.
+    const role = style.role ?? 'label';
+    const widths = runs.map((r) => {
+      ctx.font = runFont(style.font, r, role);
+      return ctx.measureText(r.text).width;
+    });
+    const total = widths.reduce((a, b) => a + b, 0);
+    let rx = style.anchor === 'start' ? x : style.anchor === 'end' ? x - total : x - total / 2;
+    ctx.textAlign = 'left';
+    runs.forEach((r, j) => {
+      ctx.font = runFont(style.font, r, role);
+      draw(r.text, rx, ly);
+      rx += widths[j] as number;
+    });
   });
+  ctx.font = style.font;
   if ('letterSpacing' in spaced) spaced.letterSpacing = '0px';
 }
+
+const upper = (runs: TextRun[] | undefined) => runs?.map((r) => ({ ...r, text: r.text.toUpperCase() }));
+const bracketRuns = (runs: TextRun[] | undefined) => (runs ? [[{ text: '[' }, ...runs, { text: ']' }]] : undefined);
 
 function strokePath(ctx: Ctx2D, path: Path2D, color: string, width: number, dash: number[] = [], cap: CanvasLineCap = 'butt'): void {
   ctx.strokeStyle = color;
@@ -152,7 +197,7 @@ export function drawSequence(ctx: Ctx2D, layout: SequenceLayout, scene: Scene, p
       ctx.fill(path);
     });
     strokePath(ctx, path, c.hairline, pal.stroke.hairline);
-    if (box.label) text(ctx, [box.label.toUpperCase()], r.x + r.w / 2, r.y + 16, { font: font('micro', { weight: 600 }), fill: c['ink-3'], letterSpacing: '0.84px' });
+    if (box.label) text(ctx, [box.label.toUpperCase()], r.x + r.w / 2, r.y + 16, { font: font('micro', { weight: 600 }), fill: c['ink-3'], letterSpacing: '0.84px', runs: box.labelRuns && [upper(box.labelRuns)], role: 'micro' });
   }
   // Fragment frames (rects first, like the SVG layers)
   const frag = (id: string) => scene.fragments.get(id) ?? { opacity: 1, active: 0 };
@@ -216,8 +261,8 @@ export function drawSequence(ctx: Ctx2D, layout: SequenceLayout, scene: Scene, p
       ctx.fill(tab);
       strokePath(ctx, tab, c.hairline, 1);
       text(ctx, [f.kind.toUpperCase()], r.x + 10, r.y + 14, { font: font('micro'), fill: c['ink-2'], anchor: 'start', halo: active ? c['accent-muted'] : c['surface-sunken'], letterSpacing: '0.84px' });
-      if (f.label) text(ctx, [`[${f.label}]`], r.x + f.tabWidth + 8, r.y + 14, { font: font('label', { style: 'italic', weight: 400 }), fill: c['ink-2'], anchor: 'start', halo: c.canvas });
-      for (const sep of f.separators) if (sep.label) text(ctx, [`[${sep.label}]`], r.x + 10, sep.y + 16, { font: font('label', { style: 'italic', weight: 400 }), fill: c['ink-2'], anchor: 'start', halo: c.canvas });
+      if (f.label) text(ctx, [`[${f.label}]`], r.x + f.tabWidth + 8, r.y + 14, { font: font('label', { style: 'italic', weight: 400 }), fill: c['ink-2'], anchor: 'start', halo: c.canvas, runs: bracketRuns(f.labelRuns), role: 'label' });
+      for (const sep of f.separators) if (sep.label) text(ctx, [`[${sep.label}]`], r.x + 10, sep.y + 16, { font: font('label', { style: 'italic', weight: 400 }), fill: c['ink-2'], anchor: 'start', halo: c.canvas, runs: bracketRuns(sep.runs), role: 'label' });
       if (s.iteration) text(ctx, [`${s.iteration.n} / ${s.iteration.of}`], r.x + r.w - 10, r.y + 14, { font: '600 11.5px "Inter Variable", system-ui, sans-serif', fill: c.brass, anchor: 'end', halo: c.canvas });
     });
   }
@@ -229,7 +274,7 @@ export function drawSequence(ctx: Ctx2D, layout: SequenceLayout, scene: Scene, p
       if (p.kind === 'actor') {
         const cx = rect.x + rect.w / 2;
         actorFigure(ctx, cx, rect.y + 4, c['ink-1'], pal.stroke.structural);
-        text(ctx, p.lines, cx, rect.y + rect.h - 6 - (p.lines.length - 1) * 18, { font: footer ? font('participant', { weight: 450 }) : font('participant'), fill: footer ? c['ink-2'] : c['ink-1'] });
+        text(ctx, p.lines, cx, rect.y + rect.h - 6 - (p.lines.length - 1) * 18, { font: footer ? font('participant', { weight: 450 }) : font('participant'), fill: footer ? c['ink-2'] : c['ink-1'], runs: p.runs, role: 'participant' });
         return;
       }
       const box = roundRect(rect.x, rect.y, rect.w, rect.h, 6);
@@ -239,7 +284,7 @@ export function drawSequence(ctx: Ctx2D, layout: SequenceLayout, scene: Scene, p
       strokePath(ctx, box, lit ? c.accent : pal.hc ? c['ink-1'] : footer ? c.hairline : c.rule, lit ? pal.stroke.active : pal.hc ? 2 : pal.stroke.structural);
       const glyph = p.kind !== 'participant';
       const cy = rect.y + rect.h / 2 + 4.5 - ((p.lines.length - 1) * 18) / 2;
-      text(ctx, p.lines, rect.x + rect.w / 2 + (glyph ? 9 : 0), cy, { font: footer ? font('participant', { weight: 450 }) : font('participant'), fill: footer ? c['ink-2'] : c['ink-1'] });
+      text(ctx, p.lines, rect.x + rect.w / 2 + (glyph ? 9 : 0), cy, { font: footer ? font('participant', { weight: 450 }) : font('participant'), fill: footer ? c['ink-2'] : c['ink-1'], runs: p.runs, role: 'participant' });
       if (glyph) headerGlyph(ctx, p.kind, rect.x + rect.w / 2 - Math.max(...p.lines.map((l) => l.length)) * 3.8 - 6, rect.y + rect.h / 2, c['ink-2']);
     };
     withAlpha(ctx, s.opacity, () => {
@@ -296,6 +341,8 @@ export function drawSequence(ctx: Ctx2D, layout: SequenceLayout, scene: Scene, p
           fill: current && !s.dimmed ? c['ink-1'] : muted ? c['ink-3'] : c['ink-2'],
           anchor: m.label.anchor,
           halo: c.canvas,
+          runs: m.label.runs,
+          role: 'label',
         });
       });
       if (m.badge) {
@@ -337,7 +384,7 @@ export function drawSequence(ctx: Ctx2D, layout: SequenceLayout, scene: Scene, p
       strokePath(ctx, shape, c['note-rule'], 1);
       strokePath(ctx, new Path2D(`M${x + w - 8} ${y} V${y + 8} H${x + w}`), c['note-rule'], 1);
       const muted = s.state === 'future' || s.state === 'unplayed' || s.dimmed;
-      text(ctx, n.lines, x + w / 2, y + 21, { font: font('note'), fill: muted ? c['ink-3'] : c['ink-1'] });
+      text(ctx, n.lines, x + w / 2, y + 21, { font: font('note'), fill: muted ? c['ink-3'] : c['ink-1'], runs: n.runs, role: 'note' });
     });
   }
   for (const p of pulses) drawPulse(ctx, pal, p.x, p.y, p.angle, p.opacity, p.emphasis, !!options.comet);
@@ -348,13 +395,15 @@ export function drawSequence(ctx: Ctx2D, layout: SequenceLayout, scene: Scene, p
 export interface CanvasTopologyLabels {
   nodes: ReadonlyMap<string, string[]>;
   messages: ReadonlyMap<string, string>;
+  nodeRuns?: ReadonlyMap<string, TextRun[][]>;
+  messageMarks?: ReadonlyMap<string, LabelMark[]>;
 }
 
-function topologyNode(ctx: Ctx2D, pal: CanvasPalette, kind: ParticipantKind, w: number, h: number, lines: string[], lit: boolean, destroyed: boolean): void {
+function topologyNode(ctx: Ctx2D, pal: CanvasPalette, kind: ParticipantKind, w: number, h: number, lines: string[], lit: boolean, destroyed: boolean, runs?: TextRun[][]): void {
   const c = pal.c;
   const cx = w / 2;
   const extra = (lines.length - 1) * 18;
-  const label = (y: number) => text(ctx, lines, cx, y, { font: font('participant'), fill: c['ink-1'] });
+  const label = (y: number) => text(ctx, lines, cx, y, { font: font('participant'), fill: c['ink-1'], runs, role: 'participant' });
   const boxStroke = lit ? c.accent : pal.hc ? c['ink-1'] : c.rule;
   const boxWidth = lit ? pal.stroke.active : pal.hc ? 2 : pal.stroke.structural;
   const shape = (p: Path2D) => {
@@ -472,7 +521,9 @@ export function drawTopology(ctx: Ctx2D, topology: Topology, geometry: TopologyG
     const message = s.current[s.current.length - 1];
     if (message && s.label > 0) {
       const y = route.label.y - (edge.messages.length > 1 ? 14 : 8);
-      badges.push(() => withAlpha(ctx, s.label, () => text(ctx, [(labels.messages.get(message) ?? '').replace(/\n/g, ' ')], route.label.x, y, { font: font('label', { weight: 560 }), fill: c['ink-1'], halo: c.canvas })));
+      const transient = (labels.messages.get(message) ?? '').replace(/\n/g, ' ');
+      const marks = labels.messageMarks?.get(message);
+      badges.push(() => withAlpha(ctx, s.label, () => text(ctx, [transient], route.label.x, y, { font: font('label', { weight: 560 }), fill: c['ink-1'], halo: c.canvas, runs: marks && [runsOf(transient, marks)], role: 'label' })));
     }
     for (const p of s.pulses) {
       const at = pointAlong(route.points, p.at);
@@ -494,7 +545,7 @@ export function drawTopology(ctx: Ctx2D, topology: Topology, geometry: TopologyG
         });
       });
       withAlpha(ctx, s.highlighted ? 1 : s.glow, () => strokePath(ctx, roundRect(-2.5, -2.5, r.w + 5, r.h + 5, 10), c.accent, 1.5));
-      topologyNode(ctx, pal, n.kind, r.w, r.h, labels.nodes.get(n.id) ?? [n.label], !!s.focused, s.destroyed);
+      topologyNode(ctx, pal, n.kind, r.w, r.h, labels.nodes.get(n.id) ?? [n.label], !!s.focused, s.destroyed, labels.nodeRuns?.get(n.id));
       ctx.restore();
     });
   }

@@ -3,9 +3,11 @@
  * one per step, with the same transport, camera and export as native diagrams.
  */
 import type { Point, Rect } from '@mermaid-animator/core';
-import { buildTimeline, positionAt, type Step, type Timeline } from '@mermaid-animator/core';
+import { buildTimeline, positionAt, type Step, type Timeline, type TimelineOptions } from '@mermaid-animator/core';
 import type { WebviewSettings } from '@mermaid-animator/protocol';
-import { DURATION, EASE, SVG_NS, windowed } from '@mermaid-animator/renderer';
+import { SVG_NS } from '@mermaid-animator/renderer';
+import { GENERIC_TRANSITION_MS, groupReveal } from './fallbackReveal';
+import { markFormatting, stripMarkers, styleMarkers } from './fallbackMarkup';
 import { orderGroups, type GroupInfo } from './fallbackOrder';
 
 import type mermaidDefault from 'mermaid';
@@ -96,6 +98,28 @@ interface Group {
   extra: SVGGraphicsElement[];
 }
 
+/**
+ * Mermaid measured bold words at regular weight: where a node's label now overflows its shape,
+ * tighten the bold words' letter spacing just enough to fit (at most 0.6 px per character).
+ */
+function fitBoldLabels(svg: SVGSVGElement): void {
+  for (const node of svg.querySelectorAll<SVGGElement>('g.node')) {
+    const label = node.querySelector<SVGGraphicsElement>('text');
+    const shape = node.querySelector<SVGGraphicsElement>('rect, polygon, path, circle, ellipse');
+    const bold = [...node.querySelectorAll<SVGTSpanElement>('tspan[font-weight]')];
+    if (!label || !shape || !bold.length) continue;
+    try {
+      const over = label.getBBox().width - (shape.getBBox().width - 8);
+      if (over <= 0) continue;
+      const chars = bold.reduce((n, t) => n + (t.textContent ?? '').length, 0);
+      const spacing = Math.max(-0.6, -over / Math.max(1, chars));
+      for (const t of bold) t.setAttribute('letter-spacing', spacing.toFixed(2));
+    } catch {
+      // getBBox is unavailable while detached; the label keeps Mermaid's size.
+    }
+  }
+}
+
 export class GenericDiagram {
   private readonly holder: SVGGElement;
   private groups: Group[] = [];
@@ -128,7 +152,7 @@ export class GenericDiagram {
     return this.groups.map((g) => g.label);
   }
 
-  async render(source: string, _settings: WebviewSettings): Promise<{ ok: true } | { ok: false; error: string }> {
+  async render(source: string, _settings: WebviewSettings, timing: TimelineOptions = {}): Promise<{ ok: true } | { ok: false; error: string }> {
     let svgText: string;
     try {
       const mermaid = await loadMermaid();
@@ -146,9 +170,23 @@ export class GenericDiagram {
       // to obtain the CSS, adopt it as a constructed stylesheet, then render again with the same id so
       // the measuring pass sees the real styles.
       const id = `ma-generic-${++renderCount}`;
-      const first = (await mermaid.render(id, source)).svg;
-      this.adoptStyles(extractCss(first));
-      svgText = (await mermaid.render(id, source)).svg;
+      const renderTwice = async (text: string) => {
+        const first = (await mermaid.render(id, text)).svg;
+        this.adoptStyles(extractCss(first));
+        return (await mermaid.render(id, text)).svg;
+      };
+      // Inline formatting (spec label-formatting): render with word markers in place of the tags,
+      // or, if Mermaid rejects them, the original source (the tags then show as text).
+      const marked = markFormatting(source);
+      if (marked === source) svgText = await renderTwice(source);
+      else {
+        try {
+          svgText = await renderTwice(marked);
+        } catch (error) {
+          console.debug('Mermaid Animator: formatting markers rejected, rendering the original source', error);
+          svgText = await renderTwice(source);
+        }
+      }
     } catch (error) {
       return { ok: false, error: String((error as Error)?.message ?? error).split('\n').slice(0, 3).join(' ') };
     }
@@ -168,10 +206,14 @@ export class GenericDiagram {
     imported.setAttribute('x', '0');
     imported.setAttribute('y', '0');
     this.holder.replaceChildren(imported);
+    if (styleMarkers(imported)) fitBoldLabels(imported);
     this.bounds = { x: 0, y: 0, w: width, h: height };
     const offset = { x: vb?.x ?? 0, y: vb?.y ?? 0 };
     this.discover(imported, offset);
-    this.timeline = buildTimeline(this.groups.map((_, i) => ({ timing: { transitionMs: 420, dwellMs: 650, hold: false }, index: i }) as unknown as Step));
+    this.timeline = buildTimeline(
+      this.groups.map((_, i) => ({ timing: { transitionMs: GENERIC_TRANSITION_MS, dwellMs: 650, hold: false }, index: i }) as unknown as Step),
+      timing,
+    );
     return { ok: true };
   }
 
@@ -255,7 +297,7 @@ export class GenericDiagram {
     const ordered = orderGroups(infos.map((x) => x.info));
     this.groups = ordered.map((info) => {
       const element = byId.get(info.id) as SVGGraphicsElement;
-      return { element, info, paths: info.kind === 'edge' ? pathsOf(element) : [], label: (element.textContent ?? '').replace(/\s+/g, ' ').trim() || `${info.kind} ${Number(info.id) + 1}`, extra: [] };
+      return { element, info, paths: info.kind === 'edge' ? pathsOf(element) : [], label: stripMarkers(element.textContent ?? '').replace(/\s+/g, ' ').trim() || `${info.kind} ${Number(info.id) + 1}`, extra: [] };
     });
     // Attach each edge label to the closest edge so they appear together.
     for (const label of edgeLabels) {
@@ -283,17 +325,9 @@ export class GenericDiagram {
   /** Applies the reveal state for time `t`. */
   renderAt(t: number, reducedMotion: boolean): void {
     const pos = positionAt(this.timeline, t);
+    const overview = this.timeline.clear !== undefined;
     this.groups.forEach((g, i) => {
-      let opacity = 0;
-      let draw = 1;
-      if (i < pos.index) opacity = 1;
-      else if (i === pos.index) {
-        if (reducedMotion) opacity = windowed(pos.elapsed, 0, DURATION.fast, EASE.linear);
-        else {
-          draw = windowed(pos.elapsed, 0, 420, EASE.travel);
-          opacity = g.info.kind === 'edge' ? Math.min(1, draw * 4) : windowed(pos.elapsed, 0, DURATION.base, EASE.enter);
-        }
-      }
+      const { opacity, draw } = groupReveal(i, g.info.kind, pos, reducedMotion, overview);
       for (const el of [g.element, ...g.extra]) {
         el.style.opacity = String(opacity);
         el.style.display = opacity <= 0 ? 'none' : '';

@@ -14,7 +14,22 @@ export interface Timeline {
   /** Steps whose dwell waits for the user during autoplay (`@pause` with no duration). */
   holds: boolean[];
   duration: number;
+  /**
+   * Initial overview (spec initial-overview): the part of step 0's transition, at its start, in
+   * which the complete diagram clears before the step draws. Absent without an overview.
+   */
+  clear?: number;
 }
+
+export interface TimelineOptions {
+  /** Show the complete diagram before the first step; step 0's transition begins with a clear. */
+  overview?: boolean;
+  /** How long playback rests on the overview when it plays through it (the overview's dwell). */
+  leadInMs?: number;
+}
+
+/** Fade-out of the overview at the start of step 0 (DURATION.base). */
+export const CLEAR_MS = 240;
 
 export interface Position {
   /** Step whose transition has started; -1 before the first step. */
@@ -22,31 +37,42 @@ export interface Position {
   phase: 'initial' | 'transition' | 'dwell';
   /** 0–1 progress through the transition (1 during the dwell). */
   progress: number;
-  /** Milliseconds elapsed since the transition started. */
+  /** Milliseconds elapsed since the transition started (after the overview clear; negative during it). */
   elapsed: number;
+  /** Overview clear progress: 0 while the complete diagram shows, 1 once it has cleared. */
+  cleared: number;
 }
 
 /** Choreography that follows the travel (arrowhead, activation growth, receiver glow): spec §9.8.3. */
 export const SETTLE_MS = 240;
 
-export function buildTimeline(steps: readonly Step[]): Timeline {
+export function buildTimeline(steps: readonly Step[], options: TimelineOptions = {}): Timeline {
   const starts: number[] = [];
   const transitions: number[] = [];
   const settles: number[] = [];
   const dwells: number[] = [];
   const holds: boolean[] = [];
-  let t = 0;
-  for (const step of steps) {
+  const overview = !!options.overview && steps.length > 0;
+  let t = overview ? Math.max(0, options.leadInMs ?? 0) : 0;
+  for (const [i, step] of steps.entries()) {
     // A hold still needs its settle time before playback rests.
     const dwell = step.timing.hold ? SETTLE_MS : step.timing.dwellMs;
     starts.push(t);
-    transitions.push(step.timing.transitionMs);
+    transitions.push(step.timing.transitionMs + (overview && i === 0 ? CLEAR_MS : 0));
     settles.push(Math.min(SETTLE_MS, dwell));
     dwells.push(dwell);
     holds.push(step.timing.hold);
-    t += step.timing.transitionMs + dwell;
+    t += (transitions[i] as number) + dwell;
   }
-  return { starts, transitions, settles, dwells, holds, duration: t };
+  const timeline: Timeline = { starts, transitions, settles, dwells, holds, duration: t };
+  if (overview) timeline.clear = CLEAR_MS;
+  return timeline;
+}
+
+/** Step `k`'s own transition, excluding the overview clear that precedes step 0. */
+export function transitionOf(timeline: Timeline, k: number): number {
+  const T = timeline.transitions[k] ?? 0;
+  return k === 0 && timeline.clear ? Math.max(0, T - timeline.clear) : T;
 }
 
 /** Where playback rests when paused "at" a step: after its transition and settle. */
@@ -57,8 +83,9 @@ export function stepEnd(timeline: Timeline, index: number): number {
 }
 
 export function positionAt(timeline: Timeline, t: number): Position {
-  const { starts, transitions } = timeline;
-  if (starts.length === 0 || t <= 0) return { index: -1, phase: 'initial', progress: 0, elapsed: 0 };
+  const { starts } = timeline;
+  // Before the first step starts (t ≤ 0, or within the overview's lead-in).
+  if (starts.length === 0 || t <= 0 || t <= (starts[0] as number)) return { index: -1, phase: 'initial', progress: 0, elapsed: 0, cleared: 0 };
   // Largest k with starts[k] < t (binary search).
   let lo = 0;
   let hi = starts.length - 1;
@@ -67,10 +94,13 @@ export function positionAt(timeline: Timeline, t: number): Position {
     if ((starts[mid] as number) < t) lo = mid;
     else hi = mid - 1;
   }
-  const elapsed = t - (starts[lo] as number);
-  const T = transitions[lo] as number;
-  const progress = T <= 0 ? 1 : Math.min(1, elapsed / T);
-  return { index: lo, phase: progress < 1 ? 'transition' : 'dwell', progress, elapsed };
+  const clear = lo === 0 ? (timeline.clear ?? 0) : 0;
+  const sinceStart = t - (starts[lo] as number);
+  const cleared = clear > 0 ? Math.min(1, sinceStart / clear) : 1;
+  const elapsed = sinceStart - clear;
+  const T = transitionOf(timeline, lo);
+  const progress = elapsed < 0 ? 0 : T <= 0 ? 1 : Math.min(1, elapsed / T);
+  return { index: lo, phase: progress < 1 ? 'transition' : 'dwell', progress, elapsed, cleared };
 }
 
 /** Nearest step boundary (end of a transition, or 0) to `t` — used when the scrubber is released. */

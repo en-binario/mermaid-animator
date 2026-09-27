@@ -35,9 +35,18 @@ describe('resolveSettings', () => {
   });
 
   it('resolves the participant-orientation settings', () => {
-    expect(resolveSettings({ themeMode: 'auto' })).toMatchObject({ participantNames: 'auto', arrowEndNames: 'off' });
+    expect(resolveSettings({ themeMode: 'auto' })).toMatchObject({ participantNames: 'auto', arrowEndNames: 'auto' });
     expect(resolveSettings({ themeMode: 'auto', 'display.participantNames': 'off', 'display.arrowEndNames': 'always' })).toMatchObject({ participantNames: 'off', arrowEndNames: 'always' });
-    expect(resolveSettings({ themeMode: 'auto', 'display.participantNames': 'sometimes', 'display.arrowEndNames': 7 })).toMatchObject({ participantNames: 'auto', arrowEndNames: 'off' });
+    expect(resolveSettings({ themeMode: 'auto', 'display.participantNames': 'sometimes', 'display.arrowEndNames': 7 })).toMatchObject({ participantNames: 'auto', arrowEndNames: 'auto' });
+  });
+
+  it('resolves the initial overview from the setting, with the annotation taking precedence', () => {
+    expect(resolveSettings({ themeMode: 'auto' }).display.overview).toBe(true);
+    expect(resolveSettings({ themeMode: 'auto', 'playback.initialOverview': false }).display.overview).toBe(false);
+    const off = compileDiagram('%% @animator overview=false\nsequenceDiagram\nA->>B: x');
+    expect(resolveSettings({ themeMode: 'auto', 'playback.initialOverview': true }, off.settings).display.overview).toBe(false);
+    const on = compileDiagram('%% @animator overview=true\nsequenceDiagram\nA->>B: x');
+    expect(resolveSettings({ themeMode: 'auto', 'playback.initialOverview': false }, on.settings).display.overview).toBe(true);
   });
 
   it('clamps speed to 0.25–4', () => {
@@ -58,5 +67,6 @@ describe('announcement', () => {
   it('describes notes and the initial state', () => {
     expect(announcement(steps[1], 1, 2, participants, t)).toBe('Step 2 of 2. Note: done.');
     expect(announcement(undefined, -1, 2, participants, t)).toBe('Start. 2 steps.');
+    expect(announcement(undefined, -1, 12, participants, t, true)).toBe('Overview of the complete diagram. 12 steps.');
   });
 });

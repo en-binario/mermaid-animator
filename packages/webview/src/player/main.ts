@@ -10,7 +10,8 @@ import './player.css';
 import interLatin from '@fontsource-variable/inter/files/inter-latin-wght-normal.woff2';
 import interLatinExt from '@fontsource-variable/inter/files/inter-latin-ext-wght-normal.woff2';
 import { positionAt, type Timeline } from '@mermaid-animator/core';
-import { prepareScene, prepareTopologyScene, sceneAt, SequenceSvgRenderer, SVG_NS, topologySceneAt, TopologySvgRenderer, DURATION, EASE, windowed } from '@mermaid-animator/renderer';
+import { prepareScene, prepareTopologyScene, sceneAt, SequenceSvgRenderer, SVG_NS, topologySceneAt, TopologySvgRenderer } from '@mermaid-animator/renderer';
+import { groupReveal } from '../fallbackReveal';
 import { Player, SPEEDS } from '../player';
 import { decodePlayerData, stepFromHash, type PlayerData } from './data';
 
@@ -74,16 +75,11 @@ function genericRenderer(parent: Element, data: NonNullable<PlayerData['generic'
     elements: [...svg.querySelectorAll<SVGElement>(`.ma-g${i}`)],
     paths: g.paths.map((p, j) => ({ length: p.length, el: svg.querySelector<SVGElement>(`.ma-p${i}-${j}`) })),
   }));
+  const overview = timeline.clear !== undefined;
   return (t: number) => {
     const pos = positionAt(timeline, t);
     groups.forEach((g, i) => {
-      let opacity = 0;
-      let draw = 1;
-      if (i < pos.index) opacity = 1;
-      else if (i === pos.index) {
-        draw = windowed(pos.elapsed, 0, 420, EASE.travel);
-        opacity = g.kind === 'edge' ? Math.min(1, draw * 4) : windowed(pos.elapsed, 0, DURATION.base, EASE.enter);
-      }
+      const { opacity, draw } = groupReveal(i, g.kind, pos, false, overview);
       for (const e of g.elements) {
         e.style.opacity = String(opacity);
         e.style.display = opacity <= 0 ? 'none' : '';

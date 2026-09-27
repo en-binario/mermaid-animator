@@ -4,13 +4,16 @@
  */
 import type { ParticipantKind, SequenceModel, SequenceNode } from './sequence/model';
 import type { CompiledSequence } from './steps';
-import { LAYOUT, wrapText, type Measure, type Point, type Rect } from './layout';
+import { LAYOUT, wrapMarkedText, wrappedWidth, type Measure, type Point, type Rect } from './layout';
+import type { LabelMark, TextRun } from './markup';
 
 export type ReturnMessages = 'merge' | 'separate' | 'hide';
 
 export interface TopologyNode {
   id: string;
   label: string;
+  /** Bold / italic ranges of `label` (spec label-formatting). */
+  labelMarks?: LabelMark[];
   kind: ParticipantKind;
   /** Cluster (box) id, when the participant belongs to one. */
   cluster?: string;
@@ -21,6 +24,7 @@ export interface TopologyNode {
 export interface TopologyCluster {
   id: string;
   label?: string;
+  labelMarks?: LabelMark[];
   color: string;
   members: string[];
 }
@@ -86,7 +90,7 @@ export function buildTopology(model: SequenceModel, compiled: Pick<CompiledSeque
     .filter((id) => declared.has(id))
     .map((id, i) => {
       const p = byId.get(id)!;
-      return { id, label: p.label, kind: compiled.participantKinds[id] ?? p.kind, cluster: clusterOf.get(id), order: i };
+      return { id, label: p.label, ...(p.labelMarks ? { labelMarks: p.labelMarks } : {}), kind: compiled.participantKinds[id] ?? p.kind, cluster: clusterOf.get(id), order: i };
     });
 
   const stepsOf = new Map<string, number[]>();
@@ -112,7 +116,7 @@ export function buildTopology(model: SequenceModel, compiled: Pick<CompiledSeque
   }
   for (const edge of edges.values()) edge.steps.sort((a, b) => a - b);
 
-  const clusters: TopologyCluster[] = model.boxes.map((b) => ({ id: b.id, label: b.label, color: b.color, members: [...b.members] }));
+  const clusters: TopologyCluster[] = model.boxes.map((b) => ({ id: b.id, label: b.label, ...(b.labelMarks ? { labelMarks: b.labelMarks } : {}), color: b.color, members: [...b.members] }));
   return { nodes, clusters, edges: [...edges.values()], messageEdge };
 }
 
@@ -144,6 +148,8 @@ export interface NodeSize {
   w: number;
   h: number;
   lines: string[];
+  /** Styled runs per line when the label has bold / italic text. */
+  runs?: TextRun[][];
 }
 
 /** Kinds drawn as a glyph above the label (the rest are boxes with the label inside). */
@@ -161,17 +167,19 @@ export const TOPOLOGY = {
 };
 
 /** Node box size for a participant kind and label (labels wrap like sequence headers). */
-export function topologyNodeSize(node: Pick<TopologyNode, 'label' | 'kind'>, measure: Measure): NodeSize {
+export function topologyNodeSize(node: Pick<TopologyNode, 'label' | 'kind' | 'labelMarks'>, measure: Measure): NodeSize {
   const L = LAYOUT;
-  const lines = wrapText(node.label, measure, 'participant', 200, 3);
-  const text = Math.max(...lines.map((l) => measure(l, 'participant')));
+  const wrapped = wrapMarkedText(node.label, node.labelMarks, measure, 'participant', 200, 3);
+  const lines = wrapped.lines;
+  const text = wrappedWidth(wrapped, measure, 'participant');
   const extraLines = (lines.length - 1) * L.lineHeight;
-  if (GLYPH_KINDS.has(node.kind)) return { w: Math.max(72, text + 16), h: TOPOLOGY.glyphHeight + 22 + extraLines, lines };
+  const runs = wrapped.runs ? { runs: wrapped.runs } : {};
+  if (GLYPH_KINDS.has(node.kind)) return { w: Math.max(72, text + 16), h: TOPOLOGY.glyphHeight + 22 + extraLines, lines, ...runs };
   const w = Math.max(L.minHeaderWidth, text + 2 * L.headerPaddingX);
-  if (node.kind === 'database') return { w, h: L.headerHeight + 16 + extraLines, lines };
-  if (node.kind === 'queue') return { w: w + 20, h: L.headerHeight + extraLines, lines };
-  if (node.kind === 'collections') return { w: w + 6, h: L.headerHeight + 6 + extraLines, lines };
-  return { w, h: L.headerHeight + extraLines, lines };
+  if (node.kind === 'database') return { w, h: L.headerHeight + 16 + extraLines, lines, ...runs };
+  if (node.kind === 'queue') return { w: w + 20, h: L.headerHeight + extraLines, lines, ...runs };
+  if (node.kind === 'collections') return { w: w + 6, h: L.headerHeight + 6 + extraLines, lines, ...runs };
+  return { w, h: L.headerHeight + extraLines, lines, ...runs };
 }
 
 const centre = (r: Rect): Point => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });

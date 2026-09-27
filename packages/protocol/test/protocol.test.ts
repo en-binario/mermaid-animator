@@ -71,6 +71,7 @@ describe('webview messages', () => {
     webviewMessage('clipboard/fallback', { reason: 'denied' }),
     webviewMessage('presentation/toggle', { on: true }),
     webviewMessage('layout/save', { key: 'checkout', positions: { A: { x: 1, y: 2 } } }),
+    webviewMessage('settings/open', {}),
   ])('accepts $type', (message) => {
     expect(validateWebviewMessage(message).ok).toBe(true);
   });

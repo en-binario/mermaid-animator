@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { compileDiagram, type Step } from '@mermaid-animator/core';
 import { chapterIndexAt, chapterTarget, contextText, deriveChapters, focusSkipSet, parseInline, stepInvolves, transcript } from '../src/narrative';
+import { announcement } from '../src/announce';
 import { buildSearchIndex, search } from '../src/search';
 import { format } from '../src/state';
 import { WEBVIEW_STRINGS } from '@mermaid-animator/protocol';
@@ -124,5 +125,33 @@ describe('step text for effect-only steps', () => {
     const { compiled } = compile('A->>+B: go\nloop again\nA->>B: x\nend\ndeactivate B\nA->>B: y');
     const lines = transcript(compiled.steps, t).flatMap((g) => g.entries.map((e) => e.line));
     expect(lines[2]).toBe('03. B deactivates');
+  });
+});
+
+describe('formatted labels outside the drawing', () => {
+  const d = compileDiagram('sequenceDiagram\nparticipant G as <b>Gateway</b>\nG->>A: <b>atomic DR lock</b>\nNote over A: <i>cached</i>', {});
+  const { model, compiled } = d.sequence!;
+
+  it('finds steps by their plain text', () => {
+    const index = buildSearchIndex({
+      participants: model.participants,
+      messages: model.body.flatMap((n) => (n.type === 'message' ? [n.message] : [])),
+      notes: model.body.flatMap((n) => (n.type === 'note' ? [n.note] : [])),
+      steps: compiled.steps,
+    });
+    expect(search(index, 'atomic DR').map((e) => e.text)).toEqual(['G → A: atomic DR lock']);
+    expect(index.some((e) => e.text.includes('<'))).toBe(false);
+  });
+
+  it('lists steps in the transcript without tags', () => {
+    const lines = transcript(compiled.steps, t).flatMap((g) => g.entries.map((e) => e.line));
+    expect(lines.some((l) => l.includes('atomic DR lock'))).toBe(true);
+    expect(lines.join('\n')).not.toMatch(/<\/?[bi]>/);
+  });
+
+  it('announces steps with plain names and labels', () => {
+    const text = announcement(compiled.steps[0], 0, compiled.steps.length, model.participants, t);
+    expect(text).toContain('Gateway to A: atomic DR lock.');
+    expect(text).not.toMatch(/<\/?[bi]>/);
   });
 });

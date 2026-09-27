@@ -155,3 +155,36 @@ describe('error recovery', () => {
     for (const text of noise) expect(() => parseSequence(text)).not.toThrow();
   });
 });
+
+describe('inline label formatting', () => {
+  it('keeps bold runs as marks over the plain label', () => {
+    const { model } = parse('A->>B: <b>reserve</b> DR number');
+    const m = messages(model.body)[0]!;
+    expect(m.label).toBe('reserve DR number');
+    expect(m.labelMarks).toEqual([{ start: 0, end: 7, bold: true }]);
+  });
+
+  it('leaves entity-encoded tags literal', () => {
+    const { model } = parse('Note over A: use #lt;b> for bold');
+    const note = model.body.find((n) => n.type === 'note');
+    expect(note?.type === 'note' && note.note.text).toBe('use <b> for bold');
+    expect(note?.type === 'note' && note.note.textMarks).toBeUndefined();
+  });
+
+  it('formats participant aliases, fragments, branches and boxes', () => {
+    const { model } = parse('box <i>Edge</i>\nparticipant G as <b>Gateway</b> API\nend\nalt <b>ok</b>\nG->>G: x\nelse <i>no</i>\nG->>G: y\nend');
+    expect(model.participants[0]).toMatchObject({ label: 'Gateway API', labelMarks: [{ start: 0, end: 7, bold: true }] });
+    expect(model.boxes[0]).toMatchObject({ label: 'Edge', labelMarks: [{ start: 0, end: 4, italic: true }] });
+    const alt = model.body.find((n) => n.type === 'fragment');
+    expect(alt?.type === 'fragment' && alt.fragment.label).toBe('ok');
+    expect(alt?.type === 'fragment' && alt.fragment.branches.map((b) => [b.label, b.labelMarks])).toEqual([
+      ['ok', [{ start: 0, end: 2, bold: true }]],
+      ['no', [{ start: 0, end: 2, italic: true }]],
+    ]);
+  });
+
+  it('keeps line breaks inside formatted text', () => {
+    const { model } = parse('A->>B: <b>one<br/>two</b>');
+    expect(messages(model.body)[0]).toMatchObject({ label: 'one\ntwo', labelMarks: [{ start: 0, end: 7, bold: true }] });
+  });
+});

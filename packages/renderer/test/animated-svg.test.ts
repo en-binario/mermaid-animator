@@ -112,3 +112,38 @@ G->>A: audit`).sequence!;
     expect(svg).toMatch(/×2/);
   });
 });
+
+describe('animated SVG with the initial overview', () => {
+  function overviewSvg(overview: boolean) {
+    const d = compileDiagram(source, { overview, dwellMs: 900 }).sequence!;
+    const layout = layoutSequence(d.model, d.compiled, { measure: approximateMeasure });
+    const options: AnimatedSvgOptions = {
+      start: 0, end: d.timeline.duration, speed: 1, hold: 1, loop: 0, theme: 'github', adaptive: false, display: { ...DEFAULT_DISPLAY, overview }, fontCss: '', measure: approximateMeasure,
+    };
+    return compileSequenceSvg(layout, prepareScene(layout, d.compiled, d.timeline), options, 'Sign-in');
+  }
+
+  it('starts with every message drawn, then clears before the first step draws', () => {
+    const on = overviewSvg(true);
+    const off = overviewSvg(false);
+    const firstDash = (svg: string) => [...svg.matchAll(/@keyframes \w+\{0%\{stroke-dashoffset:([\d.]+)\}/g)].map((m) => Number(m[1]));
+    expect(firstDash(on).length).toBeGreaterThan(0);
+    expect(firstDash(on).every((v) => v === 0)).toBe(true);
+    // Overview content is fully visible at 0% and fades during the clear; without it nothing does.
+    const clearing = /@keyframes \w+\{0%\{opacity:1\}[\d.]+%\{opacity:1\}[\d.]+%\{opacity:0\.\d+\}/;
+    expect(on).toMatch(clearing);
+    expect(off).not.toMatch(clearing);
+    expect(firstDash(off).length).toBe(firstDash(on).length);
+  });
+});
+
+describe('animated SVG with formatted labels', () => {
+  it('pins each styled run and never writes tag text', () => {
+    const d = compileDiagram('sequenceDiagram\nA->>B: <b>POST</b> /firma-dr/iniciar').sequence!;
+    const layout = layoutSequence(d.model, d.compiled, { measure: approximateMeasure });
+    const options: AnimatedSvgOptions = { start: 0, end: d.timeline.duration, speed: 1, hold: 1, loop: 0, theme: 'github', adaptive: false, display: DEFAULT_DISPLAY, fontCss: '', measure: approximateMeasure };
+    const svg = compileSequenceSvg(layout, prepareScene(layout, d.compiled, d.timeline), options, 'T');
+    expect(svg).toMatch(/<tspan font-weight="650" textLength="[\d.]+" lengthAdjust="spacing">POST<\/tspan>/);
+    expect(svg).not.toContain('&lt;b&gt;');
+  });
+});

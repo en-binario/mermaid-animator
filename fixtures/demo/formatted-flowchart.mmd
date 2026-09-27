@@ -1,0 +1,20 @@
+flowchart TB
+    subgraph UI["mr-ui · Angular 16"]
+        BAND["SucesEnProcesoFirmaComponent<br/>CA001-CA007"]
+        MODAL["ConfirmacionFirmaMasivaModal<br/>MSJ0475 · CA002"]
+        FSVC["<b>FirmaDigitalService</b><br/>iniciarFirma() · abrirAgente()<br/><b>consultarEstado() authoritative</b><br/>escucharSse() optional"]
+        BAND --> MODAL --> FSVC
+    end
+
+    subgraph NEG["mr-api-neg-resolucion-tramite · WebFlux"]
+        CTRLQ["SucesEnProcesoFirmaConsultaControlador"]
+        CTRLC["<b>FirmaDrComandoControlador</b><br/>POST /firma-dr/iniciar<br/>POST /firma-dr/{id}/cancelar<br/>GET /firma-dr/{id}/estado"]
+        SVCF["<b>IniciarFirmaServicio</b><br/>1 server-side validation<br/>2 <b>atomic DR lock</b><br/>3 reserve DR number<br/>4 build PDF + QR<br/>5 assemble signerPolicy + storageTarget"]
+        KC["KafkaConsumer<br/>mr2.firma.resultado.v1"]
+        SSE["SseHub<br/><i>Sinks.Many</i> (optional)"]
+        CTRLC --> SVCF
+        KC --> SSE
+    end
+
+    FSVC --> CTRLC
+    BAND --> CTRLQ

@@ -79,6 +79,7 @@ const textRun = (args: AnnotationArg[]) => (args.length && args.every((a) => !a.
 /** Enumerable values of `@animator` keys (used for validation and completions). */
 export const ANIMATOR_VALUES: Record<string, readonly string[]> = {
   autoplay: ['true', 'false'],
+  overview: ['true', 'false'],
   dwell: ['adaptive', 'fixed'],
   onEnd: ['stop', 'loop', 'rewind'],
   reverse: ['animate', 'cut'],

@@ -1,8 +1,9 @@
 export * from './text';
+export * from './markup';
 export * from './preprocess';
 export * from './detect';
 export * from './sequence/model';
-export { parseSequence, cleanLabel, type SequenceParseResult } from './sequence/parser';
+export { parseSequence, cleanLabel, cleanMarkedLabel, type SequenceParseResult } from './sequence/parser';
 export { MERMAID_VERSION } from './sequence/lexerRules.generated';
 export * from './locate';
 export * from './binding';
