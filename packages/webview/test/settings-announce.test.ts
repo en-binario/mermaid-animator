@@ -10,6 +10,18 @@ describe('resolveSettings', () => {
     expect(resolveSettings({ themeMode: 'auto', 'playback.speed': 'fast', 'camera.mode': 'orbit' })).toEqual(DEFAULT_SETTINGS);
   });
 
+  it.each([
+    ['uses 100 % for normal playback when unset', {}, 'playZoom', 1],
+    ['uses 150 % for presentations when unset', {}, 'presentationZoom', 1.5],
+    ['reads a percentage', { 'camera.playZoom': 80, 'camera.presentationZoom': 80 }, 'playZoom', 0.8],
+    ['clamps a zoom below the range to 10 %', { 'camera.playZoom': 5, 'camera.presentationZoom': 5 }, 'presentationZoom', 0.1],
+    ['clamps a zoom above the range to 800 %', { 'camera.playZoom': 1000, 'camera.presentationZoom': 1000 }, 'playZoom', 8],
+    ['replaces a non-number play zoom with 100 %', { 'camera.playZoom': 'large' }, 'playZoom', 1],
+    ['replaces a non-number presentation zoom with 150 %', { 'camera.presentationZoom': 'large' }, 'presentationZoom', 1.5],
+  ] as const)('%s', (_name, host, key, expected) => {
+    expect(resolveSettings({ themeMode: 'auto', ...host })[key]).toBeCloseTo(expected);
+  });
+
   it('reads VS Code settings and lets @animator annotations override them', () => {
     const d = compileDiagram('%% @animator speed=1.5 future=ghosted camera=follow autoplay=true\nsequenceDiagram\nA->>B: x');
     const s = resolveSettings({ themeMode: 'auto', 'playback.speed': 0.5, 'display.futureSteps': 'visible', 'display.pastSteps': 'muted' }, d.settings);

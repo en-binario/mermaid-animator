@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { orderGroups, type GroupInfo } from '../src/fallbackOrder';
+import { orderGroups, stepBoundsOf, type GroupInfo } from '../src/fallbackOrder';
 
 const node = (id: string, x: number, y: number): GroupInfo => ({ id, kind: 'node', bbox: { x, y, w: 60, h: 30 } });
 const edge = (id: string, from: GroupInfo, to: GroupInfo): GroupInfo => {
@@ -32,5 +32,19 @@ describe('orderGroups', () => {
   it('keeps edges without endpoints at the end', () => {
     const loose: GroupInfo = { id: 'L', kind: 'edge', bbox: { x: 0, y: 0, w: 5, h: 5 } };
     expect(orderGroups([loose, A, B]).map((g) => g.id)).toEqual(['A', 'B', 'L']);
+  });
+});
+
+describe('stepBoundsOf', () => {
+  it('includes the edge labels revealed with the step', () => {
+    const edge = { x: 100, y: 100, w: 4, h: 200 };
+    const label = { x: 40, y: 180, w: 150, h: 20 };
+    expect(stepBoundsOf(edge, [label])).toEqual({ x: 40, y: 100, w: 150, h: 200 });
+  });
+
+  it('keeps the box when there are no labels or only empty ones', () => {
+    const edge = { x: 100, y: 100, w: 4, h: 200 };
+    expect(stepBoundsOf(edge, [])).toEqual(edge);
+    expect(stepBoundsOf(edge, [{ x: 0, y: 0, w: 0, h: 0 }])).toEqual(edge);
   });
 });

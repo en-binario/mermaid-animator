@@ -20,7 +20,7 @@ Nothing in your diagrams needs to change. Edits appear live, and the panel keeps
 - **Overview first.** Step 0 shows the complete diagram, framed to fit, so you see the whole picture before the reveal. The first step clears it, and the diagram then builds up step by step; stepping back to 0 brings the overview back. Turn it off with `mermaidAnimator.playback.initialOverview` or, for one diagram, `%% @animator overview=false`.
 - Messages draw from sender to receiver with a travelling pulse; activations rise and fall; notes, created participants and destroyed lifelines appear on their step; `loop` / `alt` / `opt` / `par` / `critical` / `break` / `rect` frames light up while their steps play.
 - Loops repeat with an `n / N` counter in their tab; `par` lanes play together, each message with its own pulse; `alt` / `critical` / `opt` play the branch you choose — in the inspector, with `%% @branch`, or on the canvas when `playback.altBranches` is `ask`.
-- **Camera.** With *Camera follows playback* on (the eye button or `C`), the camera keeps each step in view. Pan, scroll or zoom whenever you like: following stays on, and if the animation is playing it pauses. Press play (or step) and the camera returns to the current step at the zoom you chose. Only the eye button or `C` turns following off.
+- **Camera.** With *Camera follows playback* on (the eye button or `C`), the camera keeps each step in view at a steady zoom: 100 % by default (`camera.playZoom`). It zooms out, never below 75 %, only for a step too wide to fit, and it never leaves most of the view empty: the drawing stays against the edges of the view, or centred when it is smaller. Pan, scroll or zoom whenever you like: following stays on, and if the animation is playing it pauses. Press play (or step) and the camera returns to the current step at the zoom you chose, which it keeps (replay included) until you open another diagram. Only the eye button or `C` turns following off.
 - **Settings.** The gear button at the end of the panel toolbar (or **Mermaid Animator: Open Settings**, also in the Mermaid Diagrams view's title bar) opens the Settings editor filtered to Mermaid Animator.
 - **Zoom.** The toolbar's zoom group shows the current zoom: `−` and `+` zoom out and in (like the `-` and `+` keys), and clicking the percentage offers 25 %–400 % and *Fit*. `Ctrl`/`Cmd` + wheel or a pinch zooms about the pointer.
 - **Bold and italic labels.** `<b>…</b>` / `<strong>…</strong>` and `<i>…</i>` / `<em>…</em>` in labels render as bold and italic, as in Mermaid's own preview — in sequence and topology views, flowcharts and every other diagram, and in every export. Wrapping and box sizes account for the formatting. Search, the transcript, captions and screen readers use the text without tags; other HTML stays as written.
@@ -43,7 +43,7 @@ Nothing in your diagrams needs to change. Edits appear live, and the panel keeps
 - **Search** (`/` or `Ctrl`/`Cmd+F`). Participants, messages, notes and captions, highlighted on the canvas and the scrubber; `Enter` seeks.
 - **A–B loop.** `I` and `O` mark a range that autoplay repeats; `Shift+I` clears it.
 - **Transcript** (`R`). The whole flow as an ordered, screen-reader-friendly list grouped by chapter; activate an entry to seek.
-- **Presentation** (`P`, or *Mermaid Animator: Start Presentation*). The editor area is maximised, the camera frames each step (Cinematic), chrome hides after 2 s, captions switch to a serif face, and title and chapter cards open the story. Advance with `→`, `Space` or a clicker (`PageDown`); `B` blanks the screen, hold `Z` for a laser pointer, `Esc` ends.
+- **Presentation** (`P`, or *Mermaid Animator: Start Presentation*). The editor area is maximised, the camera frames each step at 150 % (`camera.presentationZoom`; a zoom you choose while presenting is kept for presentations only), chrome hides after 2 s, captions switch to a serif face, and title and chapter cards open the story. Advance with `→`, `Space` or a clicker (`PageDown`); `B` blanks the screen, hold `Z` for a laser pointer, `Esc` ends.
 - Syntax errors never blank the panel: the last good drawing stays, dimmed, with the error and a *Reveal in source* link, and the problem is listed in the Problems panel.
 
 ## Keyboard (panel focused)
@@ -98,7 +98,7 @@ sequenceDiagram
     Shop-->>-Customer: Confirmed
 ```
 
-Supported in this release: `@animator`, `@id`, `@title`, `@step-id`, `@skip`, `@pause`, `@duration`, `@speed`, `@emphasis`, `@with-next`, `@type`, `@caption`, `@chapter`, `@focus` (Cinematic framing), `@latency` (shown in the inspector), `@iterations` and `@branch` (`1`, `"label"`, `all`, `ask`, `skip`). Mistakes are reported in the Problems panel.
+Supported in this release: `@animator`, `@id`, `@title`, `@step-id`, `@skip`, `@pause`, `@duration`, `@speed`, `@emphasis`, `@with-next`, `@type`, `@caption`, `@chapter`, `@focus` (Follow, Cinematic and presentation framing), `@latency` (shown in the inspector), `@iterations` and `@branch` (`1`, `"label"`, `all`, `ask`, `skip`). Mistakes are reported in the Problems panel.
 
 The editor helps as you write: typing `%% @` suggests directives and their values (participants, branch labels, `@animator` keys and values); hovering a directive shows what it does and which statement and step it applies to; unknown names get a one-click fix; **Mermaid Animator: Insert Annotation…** adds one above the current statement.
 
@@ -151,6 +151,8 @@ Steps are referenced by `#<number>`, `@step-id`, or the step's content or struct
 | `mermaidAnimator.motion.respectReducedMotion` | `true` | Minimal motion when reduced motion is requested. |
 | `mermaidAnimator.motion.travelIndicator` | `pulse` | `pulse`, `comet` or `none`. |
 | `mermaidAnimator.camera.mode` | `auto` | `auto`, `fit`, `follow`, `cinematic` or `manual`. |
+| `mermaidAnimator.camera.playZoom` | `100` | Zoom (10–800 %) at which a following camera frames steps during playback. Your own zoom replaces it until you open another diagram. |
+| `mermaidAnimator.camera.presentationZoom` | `150` | The same for presentation mode, kept separately from the normal zoom. |
 | `mermaidAnimator.view.default` | `sequence` | `sequence`, `topology` or `split` (`@animator view=` overrides it). |
 | `mermaidAnimator.topology.layout` / `.direction` | `layered` / `LR` | `layered`, `force` or `manual`; `LR` or `TB`. |
 | `mermaidAnimator.topology.edgeStyle` / `.edgeWeight` | `curved` / `count` | `curved`, `orthogonal` or `straight`; width by message count or `uniform`. |

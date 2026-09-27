@@ -8,6 +8,16 @@ export interface GroupInfo {
   endpoints?: Point[];
 }
 
+/** A step's bounds: its group's box together with the edge labels revealed with it (spec camera: wide-step zoom-out). */
+export function stepBoundsOf(bbox: Rect, labels: readonly Rect[]): Rect {
+  const all = [bbox, ...labels.filter((r) => r.w > 0 || r.h > 0)];
+  const x0 = Math.min(...all.map((r) => r.x));
+  const y0 = Math.min(...all.map((r) => r.y));
+  const x1 = Math.max(...all.map((r) => r.x + r.w));
+  const y1 = Math.max(...all.map((r) => r.y + r.h));
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+
 const contains = (r: Rect, p: Point, slack = 6) => p.x >= r.x - slack && p.x <= r.x + r.w + slack && p.y >= r.y - slack && p.y <= r.y + r.h + slack;
 const reading = (a: Rect, b: Rect) => (Math.abs(a.y - b.y) > 4 ? a.y - b.y : a.x - b.x);
 

@@ -1,0 +1,48 @@
+flowchart TB
+    subgraph UI["mr-ui · Angular 16"]
+        SPA["Portal SPA<br/>signature requests"]
+        Status["Status page<br/>polls every 5 s"]
+    end
+    subgraph Edge["API gateway"]
+        GW["Gateway<br/>OAuth2 · rate limits"]
+    end
+    subgraph Ext["External providers"]
+        SWF["SWF signing service<br/>REST"]
+        ECM[("FileNet ECM")]
+        Batch["ms-procesos-batch"]
+    end
+    subgraph API["mr-api-sp-firma-digital · Spring Boot 4 · Servlet · 5 Gradle modules"]
+        SC["SolicitudesController<br/><i>implements SolicitudesApi (generated)</i><br/>POST /solicitudes (Idempotency-Key)<br/>POST /solicitudes/{id}/cancelar<br/>GET /solicitudes/{id}"]
+        REC["<i>Secondary reconciler</i><br/>gaps and DLQ · SKIP LOCKED"]
+        WC["<b>WebhooksController</b><br/><i>implements WebhooksApi (generated)</i><br/>verifies HMAC + timestamp + nonce<br/>persists + outbox in one transaction<br/>responds 200"]
+        CLI["SwfClient<br/>RestClient · timeouts · ResponseDTO<br/><i>adapter of FirmadorPort</i>"]
+        OUT["OutboxPublisher<br/>Kafka with retry"]
+    end
+    subgraph Data["Data"]
+        PG[("PostgreSQL<br/>solicitudes · outbox · nonces")]
+        K[["Kafka<br/>firma.eventos"]]
+    end
+    subgraph Consumers["Downstream consumers"]
+        NOT["mr-api-sp-gestion-notificacion"]
+        AUD["Audit trail"]
+    end
+
+    SPA --> GW
+    Status --> GW
+    GW --> SC
+    SC --> CLI
+    REC --> CLI
+    CLI -->|"sign request"| SWF
+    SWF -->|"direct custody"| ECM
+    SWF -->|"HMAC + CloudEvents webhook<br/>carries ecmDocumentId"| WC
+    Batch --> REC
+    WC --> OUT
+    WC --> PG
+    SC --> PG
+    OUT --> K
+    K --> NOT
+    K --> AUD
+    NOT -->|"push status"| Status
+    AUD -->|"monthly report"| SPA
+    CLI -->|"timeout · retry later"| Batch
+    OUT -->|"poll outbox"| PG

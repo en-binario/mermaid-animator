@@ -225,6 +225,20 @@
                 "Never move automatically."
               ]
             },
+            "camera.playZoom": {
+              "type": "number",
+              "minimum": 10,
+              "maximum": 800,
+              "default": 100,
+              "markdownDescription": "Zoom, in percent, at which a following camera frames steps during normal playback. Your own zoom replaces it until another diagram is opened."
+            },
+            "camera.presentationZoom": {
+              "type": "number",
+              "minimum": 10,
+              "maximum": 800,
+              "default": 150,
+              "markdownDescription": "Zoom, in percent, at which the camera frames steps in presentation mode. Your own zoom while presenting replaces it until another diagram is opened."
+            },
             "playback.loopIterations": {
               "type": "integer",
               "minimum": 1,

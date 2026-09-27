@@ -18,6 +18,9 @@ export interface AnimatorSettings {
   display: DisplayOptions;
   respectReducedMotion: boolean;
   camera: CameraMode;
+  /** Zoom a following camera frames steps at (spec camera: play zoom settings), as a factor. */
+  playZoom: number;
+  presentationZoom: number;
   loopIterations: number;
   compressRepeats: boolean;
   altBranches: 'first' | 'all' | 'ask';
@@ -61,6 +64,8 @@ export const DEFAULT_SETTINGS: AnimatorSettings = {
   display: { futureSteps: 'hidden', pastSteps: 'full', trailLength: 3, motion: 'formal', indicator: 'pulse', overview: true },
   respectReducedMotion: true,
   camera: 'auto',
+  playZoom: 1,
+  presentationZoom: 1.5,
   loopIterations: 1,
   compressRepeats: true,
   altBranches: 'first',
@@ -116,6 +121,9 @@ export function resolveSettings(host: WebviewSettings, annotations: Record<strin
     },
     respectReducedMotion: bool(host['motion.respectReducedMotion'], d.respectReducedMotion),
     camera: pick(get('camera', 'camera.mode'), ['auto', 'fit', 'follow', 'cinematic', 'manual'], d.camera),
+    // Percent in settings; no `@animator` short name.
+    playZoom: num(host['camera.playZoom'], d.playZoom * 100, 10, 800) / 100,
+    presentationZoom: num(host['camera.presentationZoom'], d.presentationZoom * 100, 10, 800) / 100,
     loopIterations: Math.round(num(get('iterations', 'playback.loopIterations'), d.loopIterations, 1, 50)),
     compressRepeats: bool(host['playback.compressRepeats'], d.compressRepeats),
     altBranches: pick(get('branches', 'playback.altBranches'), ['first', 'all', 'ask'], d.altBranches),

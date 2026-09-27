@@ -31,6 +31,26 @@ describe('Settings access', () => {
     }
   });
 
+  it('contributes the play and presentation zoom settings and sends them to the panel', async () => {
+    const config = vscode.workspace.getConfiguration('mermaidAnimator');
+    assert.equal(config.inspect('camera.playZoom')?.defaultValue, 100);
+    assert.equal(config.inspect('camera.presentationZoom')?.defaultValue, 150);
+    const { panels } = await api();
+    await openEditor('flow.mmd');
+    await vscode.commands.executeCommand('mermaidAnimator.openToSide');
+    const panel = panels.find(workspaceFile('flow.mmd'))!;
+    await nextPost(panel, (m) => m.type === 'document/load');
+    const changed = nextPost(panel, (m) => m.type === 'settings/changed');
+    await config.update('camera.playZoom', 80, vscode.ConfigurationTarget.Global);
+    try {
+      const settings = ((await changed).payload as { settings: Record<string, unknown> }).settings;
+      assert.equal(settings['camera.playZoom'], 80);
+      assert.equal(settings['camera.presentationZoom'], 150);
+    } finally {
+      await config.update('camera.playZoom', undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
+
   it('opens the same settings when the panel asks, ignoring any payload', async () => {
     const { panels } = await api();
     await openEditor('flow.mmd');

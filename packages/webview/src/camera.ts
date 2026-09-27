@@ -37,53 +37,105 @@ export function autoFits(content: Rect, viewport: Viewport): boolean {
   return fitView(content, viewport, 24, Number.POSITIVE_INFINITY).k >= 0.75;
 }
 
+/** Margin kept around a framed step and between the drawing's edge and the view's edge (spec camera). */
+export const FRAME_MARGIN = 24;
+/** A following camera never zooms out below this to fit a wide step (spec camera: wide-step zoom-out). */
+export const WIDE_STEP_FLOOR = 0.75;
+
 /**
- * Follow mode (§8.6.2): if `target` leaves the central 80% of the viewport, returns the view
- * that brings it back with the minimum pan and 24 px padding (zooming out, by at most 1.6×,
- * only when it is larger than the viewport). Returns undefined when no move is needed.
+ * Keeps an automatic framing on the drawing (spec camera: framing stays on the drawing): on an
+ * axis where the drawing is larger than the view less the margins, at most `margin` of canvas shows
+ * beyond its edge; on an axis where it is not, the drawing is centred.
  */
-export function followView(current: View, target: Rect, viewport: Viewport): View | undefined {
-  const pad = 24;
-  const safe = { x: viewport.width * 0.1, y: viewport.height * 0.1, w: viewport.width * 0.8, h: viewport.height * 0.8 };
-  let k = current.k;
-  const fitting = Math.min((safe.w - 2 * pad) / target.w, (safe.h - 2 * pad) / target.h);
-  if (fitting < k) k = Math.max(fitting, k / 1.6, ZOOM_MIN);
-  if (k !== current.k) {
-    // Zooming out: centre the target.
-    return { k, x: viewport.width / 2 - (target.x + target.w / 2) * k, y: viewport.height / 2 - (target.y + target.h / 2) * k };
+export function clampToContent(view: View, content: Rect, viewport: Viewport, margin = FRAME_MARGIN): View {
+  const axis = (t: number, start: number, size: number, extent: number) => {
+    if (size * view.k + 2 * margin <= extent) return extent / 2 - (start + size / 2) * view.k;
+    return clamp(extent - margin - (start + size) * view.k, t, margin - start * view.k);
+  };
+  return { k: view.k, x: axis(view.x, content.x, content.w, viewport.width), y: axis(view.y, content.y, content.h, viewport.height) };
+}
+
+/** Zoom for framing `target` at session zoom `zoom`: zooms out for a wide step, never below 75 % (or `zoom` when lower). */
+export function playZoomFor(target: Rect, viewport: Viewport, zoom: number): number {
+  const fitting = Math.min((viewport.width - 2 * FRAME_MARGIN) / target.w, (viewport.height - 2 * FRAME_MARGIN) / target.h);
+  const k = fitting >= zoom ? zoom : Math.max(fitting, Math.min(zoom, WIDE_STEP_FLOOR));
+  return clamp(ZOOM_MIN, k, ZOOM_MAX);
+}
+
+/**
+ * A following camera's framing of `target` (spec camera: session play zoom, wide-step zoom-out,
+ * framing stays on the drawing). At an unchanged zoom it pans by the minimum distance that brings
+ * the target inside the central 80 % (centring it on an axis where it is larger than that); when
+ * the zoom changes it centres the target. The result is kept on the drawing. Returns undefined when
+ * the camera need not move.
+ */
+export function playView(current: View, target: Rect, content: Rect, viewport: Viewport, zoom: number): View | undefined {
+  const k = playZoomFor(target, viewport, zoom);
+  const centre = (start: number, size: number, extent: number) => extent / 2 - (start + size / 2) * k;
+  let view: View;
+  if (Math.abs(k - current.k) > 1e-3) view = { k, x: centre(target.x, target.w, viewport.width), y: centre(target.y, target.h, viewport.height) };
+  else {
+    const pan = (t: number, start: number, size: number, extent: number) => {
+      const safeStart = extent * 0.1;
+      const safeEnd = extent * 0.9;
+      if (size * k + 2 * FRAME_MARGIN > safeEnd - safeStart) return centre(start, size, extent);
+      const s0 = start * k + t - FRAME_MARGIN;
+      const s1 = (start + size) * k + t + FRAME_MARGIN;
+      if (s0 < safeStart) return t + safeStart - s0;
+      if (s1 > safeEnd) return t - (s1 - safeEnd);
+      return t;
+    };
+    view = { k, x: pan(current.x, target.x, target.w, viewport.width), y: pan(current.y, target.y, target.h, viewport.height) };
   }
-  const sx = target.x * k + current.x;
-  const sy = target.y * k + current.y;
-  const sw = target.w * k;
-  const sh = target.h * k;
-  const inside = sx >= safe.x && sy >= safe.y && sx + sw <= safe.x + safe.w && sy + sh <= safe.y + safe.h;
-  if (inside) return undefined;
-  let x = current.x;
-  let y = current.y;
-  // Minimum pan that brings the target, with padding, back inside the safe area.
-  if (sx - pad < safe.x) x += safe.x - (sx - pad);
-  else if (sx + sw + pad > safe.x + safe.w) x -= sx + sw + pad - (safe.x + safe.w);
-  if (sy - pad < safe.y) y += safe.y - (sy - pad);
-  else if (sy + sh + pad > safe.y + safe.h) y -= sy + sh + pad - (safe.y + safe.h);
-  return { x, y, k };
+  const next = clampToContent(view, content, viewport);
+  const same = Math.abs(next.x - current.x) < 0.5 && Math.abs(next.y - current.y) < 0.5 && Math.abs(next.k - current.k) < 1e-3;
+  return same ? undefined : next;
 }
 
-/**
- * Follow mode's starting view: the diagram's top, as wide as fits, never enlarged past 100 %.
- */
-export function followStartView(content: Rect, viewport: Viewport): View {
-  const k = clamp(ZOOM_MIN, Math.min(1, (viewport.width - 48) / content.w), ZOOM_MAX);
-  return { k, x: viewport.width / 2 - (content.x + content.w / 2) * k, y: 24 - content.y * k };
+/** A following camera's view before the first step without the overview: the drawing's top at the session zoom. */
+export function playStartView(content: Rect, viewport: Viewport, zoom: number): View {
+  const k = clamp(ZOOM_MIN, zoom, ZOOM_MAX);
+  return clampToContent({ k, x: viewport.width / 2 - (content.x + content.w / 2) * k, y: FRAME_MARGIN - content.y * k }, content, viewport);
 }
 
-/**
- * Leaving the initial overview in Follow mode (spec initial-overview): the overview was fitted,
- * so Follow's minimum-pan rule would never zoom back in. Start from the follow starting view and
- * bring the step into the safe area from there.
- */
-export function overviewExitView(content: Rect, step: Rect, viewport: Viewport): View {
-  const start = followStartView(content, viewport);
-  return followView(start, step, viewport) ?? start;
+/** Session zoom levels of one view, as factors (spec camera: session play zoom). */
+export interface SessionZoom {
+  normal: number;
+  presenting: number;
+}
+
+export type SessionZoomEvent =
+  /** A diagram was loaded into the panel. */
+  | { kind: 'load'; playZoom: number; presentationZoom: number }
+  /** A zoom setting's resolved value changed. */
+  | { kind: 'setting'; mode: keyof SessionZoom; zoom: number }
+  /** A user zoom (wheel, pinch, keys, toolbar, preset) left the view at `k`. */
+  | { kind: 'userZoom'; presenting: boolean; k: number }
+  /** Fit, frame step, pan, automatic move, presentation toggle or live reload. */
+  | { kind: 'other' };
+
+export function nextSessionZoom(state: SessionZoom, event: SessionZoomEvent): SessionZoom {
+  switch (event.kind) {
+    case 'load':
+      return { normal: event.playZoom, presenting: event.presentationZoom };
+    case 'setting':
+      return { ...state, [event.mode]: event.zoom };
+    case 'userZoom':
+      return { ...state, [event.presenting ? 'presenting' : 'normal']: event.k };
+    default:
+      return state;
+  }
+}
+
+/** How a camera frames steps (spec camera: framing zoom matrix). `mode` has `auto` already resolved. */
+export type Framing = { kind: 'none' } | { kind: 'fit' } | { kind: 'cinematic' } | { kind: 'play'; zoom: number };
+
+export function framingFor(presenting: boolean, mode: Exclude<CameraMode, 'auto'>, session: SessionZoom): Framing {
+  if (mode === 'manual') return { kind: 'none' };
+  if (presenting) return { kind: 'play', zoom: session.presenting };
+  if (mode === 'fit') return { kind: 'fit' };
+  if (mode === 'cinematic') return { kind: 'cinematic' };
+  return { kind: 'play', zoom: session.normal };
 }
 
 /** The view zoomed to `k` (clamped to the zoom range) about the screen point `at`. */
@@ -125,8 +177,14 @@ export function focusTarget(stepBounds: Rect, participants: readonly { id: strin
   return { x: x1, y: stepBounds.y, w: x2 - x1, h: stepBounds.h };
 }
 
+/** Whether a user move from `from` to `to` changed the zoom (spec camera: a user zoom sets the session zoom). */
+export function isZoomChange(from: View, to: View): boolean {
+  return Math.abs(from.k - to.k) > 1e-6;
+}
+
 export interface CameraCallbacks {
-  onUserMove(): void;
+  /** A user camera move; `zoomed` when it changed the zoom rather than only panning. */
+  onUserMove(zoomed: boolean): void;
   onChange(view: View): void;
   /** Returns true for pointer gestures the camera must ignore (e.g. dragging a node). */
   blockGesture?(event: Event): boolean;
@@ -176,11 +234,12 @@ export class Camera {
   }
 
   private applied(transform: ZoomTransform, sourceEvent: unknown): void {
+    const before = this.view;
     this.view = { x: transform.x, y: transform.y, k: transform.k };
     this.viewportGroup.setAttribute('transform', `translate(${transform.x} ${transform.y}) scale(${transform.k})`);
     if (sourceEvent && !this.programmatic) {
       this.tween = undefined;
-      this.callbacks.onUserMove();
+      this.callbacks.onUserMove(isZoomChange(before, this.view));
     }
     this.callbacks.onChange(this.view);
   }
@@ -193,9 +252,10 @@ export class Camera {
 
   /** A move initiated by the user through our own handlers (wheel, keyboard). */
   userSet(view: View): void {
+    const before = this.view;
     this.tween = undefined;
     this.write(view);
-    this.callbacks.onUserMove();
+    this.callbacks.onUserMove(isZoomChange(before, this.view));
   }
 
   /** Programmatic move; animated unless `animate` is false. */

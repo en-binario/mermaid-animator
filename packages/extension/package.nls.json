@@ -92,6 +92,8 @@
   "command.search": "Search Diagram",
   "command.insertAnnotation": "Insert Annotation…",
   "config.camera.mode.cinematic": "Frame each step tightly, gliding between steps.",
+  "config.camera.playZoom": "Zoom, in percent, at which a following camera frames steps during normal playback. Your own zoom replaces it until another diagram is opened.",
+  "config.camera.presentationZoom": "Zoom, in percent, at which the camera frames steps in presentation mode. Your own zoom while presenting replaces it until another diagram is opened.",
   "config.playback.loopIterations": "How many times loops play when `@iterations` is not given.",
   "config.playback.compressRepeats": "Play loop repetitions after the first at double speed.",
   "config.playback.altBranches": "Which branches of `alt` and `critical` fragments play (`@branch` and the inspector override it).",

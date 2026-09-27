@@ -23,7 +23,7 @@ export interface TopologySettings {
 
 export interface TopologyViewCallbacks {
   measure: Measure;
-  onUserMove(): void;
+  onUserMove(zoomed: boolean): void;
   requestFrame(): void;
   /** Manual positions changed (debounced): persist them. */
   onSave(positions: Record<string, Point>): void;
@@ -77,7 +77,7 @@ export class TopologyView {
     parent.appendChild(this.el);
     this.renderer = new TopologySvgRenderer(this.viewport);
     this.camera = new Camera(this.svg, this.viewport, {
-      onUserMove: () => callbacks.onUserMove(),
+      onUserMove: (zoomed) => callbacks.onUserMove(zoomed),
       onChange: () => callbacks.requestFrame(),
       blockGesture: (event) => this.settings.layout === 'manual' && !!this.nodeAt(event.target),
     });

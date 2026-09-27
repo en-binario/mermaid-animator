@@ -10,7 +10,7 @@ import {
 import { webviewMessage, type DocumentRange, type SidecarEntry, type WebviewSettings } from '@mermaid-animator/protocol';
 import { createCanvasMeasure, EASE, effectiveDisplay, morphAt, MORPH_FADE_MS, MORPH_MS, MorphRenderer, prepareScene, sceneAt, SequenceSvgRenderer, SVG_NS, type SceneModel } from '@mermaid-animator/renderer';
 import { announcement } from './announce';
-import { autoFits, Camera, cinematicView, fitView, focusTarget, followStartView, followView, overviewExitView, type View, type Viewport } from './camera';
+import { autoFits, Camera, cinematicView, fitView, focusTarget, framingFor, nextSessionZoom, playStartView, playView, type SessionZoom, type SessionZoomEvent, type View, type Viewport } from './camera';
 import { Minimap } from './minimap';
 import { TopologyView } from './topology/view';
 import { chapterTarget, deriveChapters, focusSkipSet, stepInvolves, stepText, type Chapter } from './narrative';
@@ -54,9 +54,11 @@ interface CameraSlot {
   size(): Viewport;
   content(): Rect;
   stepBounds(step: number): Rect | undefined;
-  /** Frame for Cinematic mode, honouring `@focus`. */
-  cinematicTarget(step: number, bounds: Rect): Rect;
+  /** What a following or Cinematic camera frames for a step, honouring `@focus`. */
+  framingTarget(step: number, bounds: Rect): Rect;
   mode: CameraMode;
+  /** Zoom a following camera frames steps at, per mode (spec camera: session play zoom). */
+  sessionZoom: SessionZoom;
   /**
    * The user moved this camera since it last framed a step (spec camera: following survives user
    * moves). The next step change, or resuming playback, frames the step from the user's zoom.
@@ -201,15 +203,16 @@ export class DiagramController {
       if (resumed) this.onResume();
       this.requestFrame();
     });
-    this.camera = new Camera(this.svg, this.viewport, { onUserMove: () => this.onUserMove(this.seqSlot), onChange: () => this.requestFrame() });
+    this.camera = new Camera(this.svg, this.viewport, { onUserMove: (zoomed) => this.onUserMove(this.seqSlot, zoomed), onChange: () => this.requestFrame() });
     this.seqSlot = {
       kind: 'sequence',
       camera: this.camera,
       size: () => this.viewportSize,
       content: () => this.contentBounds(),
       stepBounds: (step) => this.stepBounds(step),
-      cinematicTarget: (step, bounds) => focusTarget(bounds, this.sequence?.layout.participants ?? [], this.steps()[step]?.focus),
+      framingTarget: (step, bounds) => focusTarget(bounds, this.sequence?.layout.participants ?? [], this.steps()[step]?.focus),
       mode: 'fit',
+      sessionZoom: { normal: 1, presenting: 1.5 },
       displaced: false,
     };
     this.activeSlot = this.seqSlot;
@@ -235,7 +238,7 @@ export class DiagramController {
 
     this.topologyView = new TopologyView(this.views, {
       measure: this.measure,
-      onUserMove: () => this.onUserMove(this.topoSlot),
+      onUserMove: (zoomed) => this.onUserMove(this.topoSlot, zoomed),
       requestFrame: () => this.requestFrame(),
       onSave: (positions) => {
         this.ownLayout = true;
@@ -251,8 +254,9 @@ export class DiagramController {
       size: () => topo.size,
       content: () => topo.content(),
       stepBounds: (step) => topo.stepBounds(step, this.sequence?.compiled.sequence?.compiled),
-      cinematicTarget: (step, bounds) => topo.focusBounds(this.steps()[step]?.focus) ?? bounds,
+      framingTarget: (step, bounds) => topo.focusBounds(this.steps()[step]?.focus) ?? bounds,
       mode: 'fit',
+      sessionZoom: { normal: 1, presenting: 1.5 },
       displaced: false,
     };
     this.views.appendChild(this.morphSvg);
@@ -322,6 +326,8 @@ export class DiagramController {
     const count = this.stepCount();
     const startAt = this.settings.startAt;
     this.player.setTimeline(this.timeline(), startAt === 'end' ? count - 1 : -1);
+    // A newly loaded diagram starts from the zoom settings (spec camera: session play zoom).
+    this.sessionZoomEvent({ kind: 'load', playZoom: this.settings.playZoom, presentationZoom: this.settings.presentationZoom });
     this.applyCameraMode(true);
     // Initial view from `view.default` / `@animator view=` (spec view-switching), without a morph.
     await this.setView(this.sequence ? this.settings.view : 'sequence', false);
@@ -401,8 +407,11 @@ export class DiagramController {
     const previousIndex = this.snapshot.value.displayStep - 1;
     const compiled = compileDiagram(source, {});
     // Precedence (spec §11.8): settings < sidecar < front matter and annotations.
+    const before = this.settings;
     this.settings = resolveSettings(withSidecarSettings(this.hostSettings, this.sidecar), compiled.settings);
     this.effective.value = this.settings;
+    if (this.settings.playZoom !== before.playZoom) this.sessionZoomEvent({ kind: 'setting', mode: 'normal', zoom: this.settings.playZoom });
+    if (this.settings.presentationZoom !== before.presentationZoom) this.sessionZoomEvent({ kind: 'setting', mode: 'presenting', zoom: this.settings.presentationZoom });
     const options = {
       notes: this.settings.notes,
       dwell: this.settings.dwell,
@@ -878,8 +887,8 @@ export class DiagramController {
       slot.displaced = false;
       // Back on the overview: show the whole diagram (spec initial-overview).
       if (slot.mode === 'follow' && overview && step < 0 && previous >= 0 && !displaced) this.fitSlot(slot, !this.reducedMotion);
-      else if (slot.mode === 'follow' && overview && step >= 0 && previous === -1 && !displaced) this.leaveOverview(slot, step, now);
-      else if (slot.mode === 'follow' && step >= 0 && (forward || displaced)) this.followStep(slot, step, now);
+      // Every step is framed at the session zoom and kept on the drawing (spec camera).
+      else if (slot.mode === 'follow' && step >= 0) this.playStep(slot, step, now, forward);
       else if (slot.mode === 'cinematic' && (step >= 0 || !displaced)) this.cinematicStep(slot, step, forward, now);
     }
   }
@@ -923,7 +932,8 @@ export class DiagramController {
 
   /** Resolves `auto` for a slot (the topology is usually compact) and applies the mode. */
   private applySlotMode(slot: CameraSlot, initial: boolean): void {
-    const mode = this.presenting ? 'cinematic' : this.settings.camera;
+    // Presentation frames steps as Follow does, at the presentation zoom (spec presentation-mode).
+    const mode = this.presenting ? 'follow' : this.settings.camera;
     slot.mode = mode === 'auto' ? (autoFits(slot.content(), slot.size()) ? 'fit' : 'follow') : mode;
     if (slot.kind === 'sequence') this.cameraMode = slot.mode;
     const step = this.snapshot.value.displayStep - 1;
@@ -936,9 +946,9 @@ export class DiagramController {
     // The overview at step 0 is framed whole (spec initial-overview).
     else if (initial && step < 0 && this.overviewShown()) this.fitSlot(slot, false);
     else if (initial) {
-      // Follow: start at the top, as wide as fits (never enlarged).
+      // Follow: start at the drawing's top, at the session zoom.
       const size = slot.size();
-      slot.camera.moveTo(followStartView(slot.content(), size), { animate: false, viewport: size, now: performance.now() });
+      slot.camera.moveTo(playStartView(slot.content(), size, this.playZoom(slot) ?? 1), { animate: false, viewport: size, now: performance.now() });
     }
   }
 
@@ -949,7 +959,7 @@ export class DiagramController {
     if (slot.mode === 'fit') this.fitSlot(slot, false);
     else if (slot.displaced) return;
     else if (slot.mode === 'cinematic') this.cinematicStep(slot, step, false, performance.now());
-    else if (slot.mode === 'follow' && step >= 0) this.followStep(slot, step, performance.now(), false);
+    else if (slot.mode === 'follow' && step >= 0) this.playStep(slot, step, performance.now(), false);
     else if (slot.mode === 'follow' && this.overviewShown()) this.fitSlot(slot, false);
   }
 
@@ -980,28 +990,41 @@ export class DiagramController {
     return !!this.settings.display.overview && this.stepCount() > 0;
   }
 
-  /** Follow mode leaving the fitted overview: zoom back in to the follow starting zoom, framing the step. */
-  private leaveOverview(slot: CameraSlot, step: number, now: number): void {
-    const bounds = slot.stepBounds(step);
-    if (!bounds) return;
-    const size = slot.size();
-    const animate = !this.reducedMotion;
-    slot.camera.moveTo(overviewExitView(slot.content(), bounds, size), { animate, viewport: size, now, speed: this.snapshot.value.speed });
-    if (animate) this.player.hold('camera', true);
-    this.requestFrame();
+  /** The zoom a following camera frames steps at in this slot, or undefined when it does not follow. */
+  private playZoom(slot: CameraSlot): number | undefined {
+    const framing = framingFor(this.presenting, slot.mode, slot.sessionZoom);
+    return framing.kind === 'play' ? framing.zoom : undefined;
   }
 
-  private followStep(slot: CameraSlot, step: number, now: number, hold = true): void {
+  /** Applies a session zoom event to every view (spec camera: session zoom lifetime). */
+  private sessionZoomEvent(event: SessionZoomEvent): void {
+    for (const slot of [this.seqSlot, this.topoSlot]) slot.sessionZoom = nextSessionZoom(slot.sessionZoom, event);
+  }
+
+  /**
+   * Follow mode and presentation: frames the step at the session zoom, zooming out for a wide step
+   * and keeping the view on the drawing (spec camera). Moving forward, the playhead waits for the
+   * camera so the step is in view before it draws.
+   */
+  private playStep(slot: CameraSlot, step: number, now: number, hold = true): void {
     const bounds = slot.stepBounds(step);
-    if (!bounds) return;
+    const zoom = this.playZoom(slot);
+    if (!bounds || zoom === undefined) return;
     const size = slot.size();
-    const next = followView(slot.camera.view, bounds, size);
+    const next = playView(slot.camera.view, slot.framingTarget(step, bounds), slot.content(), size, zoom);
     if (!next) return;
     const animate = !this.reducedMotion;
     slot.camera.moveTo(next, { animate, viewport: size, now, speed: this.snapshot.value.speed });
-    // Hold the playhead at the step's start until the camera arrives (spec camera: in view before drawing).
     if (animate && hold) this.player.hold('camera', true);
     this.requestFrame();
+  }
+
+  /** Frames the current position: the fitted overview at step 0, otherwise the step at the session zoom. */
+  private frameCurrent(slot: CameraSlot): void {
+    const step = this.snapshot.value.displayStep - 1;
+    if (slot.mode === 'fit' || (slot.mode !== 'manual' && step < 0 && this.overviewShown())) this.fitSlot(slot, !this.reducedMotion);
+    else if (slot.mode === 'cinematic') this.cinematicStep(slot, step, false, performance.now());
+    else if (slot.mode === 'follow' && step >= 0) this.playStep(slot, step, performance.now(), false);
   }
 
   /** Cinematic mode: frames the step (or its `@focus` participants) tightly, before it draws when moving forward. */
@@ -1013,7 +1036,7 @@ export class DiagramController {
     const bounds = slot.stepBounds(step);
     if (!bounds) return;
     const size = slot.size();
-    const next = cinematicView(slot.cinematicTarget(step, bounds), size, slot.camera.view);
+    const next = cinematicView(slot.framingTarget(step, bounds), size, slot.camera.view);
     const view = slot.camera.view;
     if (Math.abs(next.x - view.x) < 0.5 && Math.abs(next.y - view.y) < 0.5 && Math.abs(next.k - view.k) < 0.001) return;
     const animate = !this.reducedMotion;
@@ -1029,15 +1052,15 @@ export class DiagramController {
     this.seqSlot.displaced = false;
     this.topoSlot.displaced = false;
     if (on) {
-      this.cameraMode = 'cinematic';
+      this.cameraMode = 'follow';
       this.following.value = true;
-      for (const slot of [this.seqSlot, this.topoSlot]) slot.mode = 'cinematic';
-      for (const slot of this.visibleSlots()) this.cinematicStep(slot, this.snapshot.value.displayStep - 1, false, performance.now());
+      for (const slot of [this.seqSlot, this.topoSlot]) slot.mode = 'follow';
     } else {
       this.dismissChapterCard();
       this.applyCameraMode(false);
-      for (const slot of this.visibleSlots()) if (slot.mode === 'fit') this.fitSlot(slot, true);
     }
+    // Each mode frames the current step at its own session zoom (spec presentation-mode).
+    for (const slot of this.visibleSlots()) this.frameCurrent(slot);
     this.requestFrame();
   }
 
@@ -1055,7 +1078,7 @@ export class DiagramController {
       for (const slot of slots) slot.mode = 'manual';
       return;
     }
-    const mode: CameraMode = this.presenting || this.settings.camera === 'cinematic' ? 'cinematic' : 'follow';
+    const mode: CameraMode = !this.presenting && this.settings.camera === 'cinematic' ? 'cinematic' : 'follow';
     this.cameraMode = mode;
     this.following.value = true;
     for (const slot of slots) {
@@ -1064,7 +1087,7 @@ export class DiagramController {
     }
     for (const slot of this.visibleSlots()) {
       if (mode === 'cinematic') this.cinematicStep(slot, step, false, performance.now());
-      else if (step >= 0) this.followStep(slot, step, performance.now(), false);
+      else if (step >= 0) this.playStep(slot, step, performance.now(), false);
     }
   }
 
@@ -1072,8 +1095,10 @@ export class DiagramController {
    * A user pan, scroll or zoom (spec camera, playback): following stays on, any automatic move is
    * cancelled, and running playback pauses until the user resumes it.
    */
-  private onUserMove(slot: CameraSlot): void {
+  private onUserMove(slot: CameraSlot, zoomed: boolean): void {
     this.activeSlot = slot;
+    // A user zoom replaces the current mode's session zoom (spec camera: session play zoom).
+    if (zoomed) slot.sessionZoom = nextSessionZoom(slot.sessionZoom, { kind: 'userZoom', presenting: this.presenting, k: slot.camera.view.k });
     if (slot.mode === 'follow' || slot.mode === 'cinematic') slot.displaced = true;
     if (this.player.waitingForCamera) this.player.hold('camera', false);
     if (this.player.isPlaying) this.player.pause();
@@ -1088,7 +1113,7 @@ export class DiagramController {
       if (!slot.displaced) continue;
       slot.displaced = false;
       if (step < 0) continue;
-      if (slot.mode === 'follow') this.followStep(slot, step, now);
+      if (slot.mode === 'follow') this.playStep(slot, step, now);
       else if (slot.mode === 'cinematic') this.cinematicStep(slot, step, true, now);
     }
   }
@@ -1352,7 +1377,7 @@ export class DiagramController {
         view: this.camera.view,
         viewport: this.viewportSize,
         stepBounds: (k) => this.stepBounds(k),
-        cinematicTarget: (k, b) => this.seqSlot.cinematicTarget(k, b),
+        cinematicTarget: (k, b) => this.seqSlot.framingTarget(k, b),
         source: () => ({ kind: 'sequence', layout: seq.layout, compiled, timeline }),
       };
     }
@@ -1367,7 +1392,7 @@ export class DiagramController {
         view: topo.camera.view,
         viewport: topo.size,
         stepBounds: (k) => this.topoSlot.stepBounds(k),
-        cinematicTarget: (k, b) => this.topoSlot.cinematicTarget(k, b),
+        cinematicTarget: (k, b) => this.topoSlot.framingTarget(k, b),
         source: () => ({ kind: 'topology', topology, geometry, labels: topo.labels, compiled, timeline, weight: topo.edgeWeight }),
       };
     }

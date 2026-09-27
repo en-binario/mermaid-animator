@@ -43,6 +43,8 @@ export const WEBVIEW_SETTING_KEYS = [
   'motion.respectReducedMotion',
   'motion.travelIndicator',
   'camera.mode',
+  'camera.playZoom',
+  'camera.presentationZoom',
   'playback.loopIterations',
   'playback.compressRepeats',
   'playback.altBranches',

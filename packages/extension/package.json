@@ -827,6 +827,20 @@
             "%config.camera.mode.manual%"
           ]
         },
+        "mermaidAnimator.camera.playZoom": {
+          "type": "number",
+          "default": 100,
+          "minimum": 10,
+          "maximum": 800,
+          "markdownDescription": "%config.camera.playZoom%"
+        },
+        "mermaidAnimator.camera.presentationZoom": {
+          "type": "number",
+          "default": 150,
+          "minimum": 10,
+          "maximum": 800,
+          "markdownDescription": "%config.camera.presentationZoom%"
+        },
         "mermaidAnimator.playback.loopIterations": {
           "type": "integer",
           "default": 1,

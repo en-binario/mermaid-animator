@@ -92,6 +92,8 @@
   "command.search": "Buscar en el diagrama",
   "command.insertAnnotation": "Insertar anotación…",
   "config.camera.mode.cinematic": "Encuadrar cada paso de cerca, deslizándose entre pasos.",
+  "config.camera.playZoom": "Zoom, en porcentaje, con el que una cámara que sigue encuadra los pasos durante la reproducción normal. Tu propio zoom lo sustituye hasta que se abre otro diagrama.",
+  "config.camera.presentationZoom": "Zoom, en porcentaje, con el que la cámara encuadra los pasos en el modo presentación. Tu propio zoom al presentar lo sustituye hasta que se abre otro diagrama.",
   "config.playback.loopIterations": "Cuántas veces se reproducen los bucles cuando no se indica `@iterations`.",
   "config.playback.compressRepeats": "Reproducir las repeticiones de un bucle tras la primera al doble de velocidad.",
   "config.playback.altBranches": "Qué ramas de los fragmentos `alt` y `critical` se reproducen (`@branch` y el inspector lo reemplazan).",

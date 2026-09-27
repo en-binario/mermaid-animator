@@ -8,7 +8,7 @@ import type { WebviewSettings } from '@mermaid-animator/protocol';
 import { SVG_NS } from '@mermaid-animator/renderer';
 import { GENERIC_TRANSITION_MS, groupReveal } from './fallbackReveal';
 import { markFormatting, stripMarkers, styleMarkers } from './fallbackMarkup';
-import { orderGroups, type GroupInfo } from './fallbackOrder';
+import { orderGroups, stepBoundsOf, type GroupInfo } from './fallbackOrder';
 
 import type mermaidDefault from 'mermaid';
 
@@ -96,6 +96,8 @@ interface Group {
   label: string;
   /** Elements revealed together with this group (edge labels). */
   extra: SVGGraphicsElement[];
+  /** The group's box with its edge labels: what the camera frames for this step. */
+  bounds: Rect;
 }
 
 /**
@@ -249,13 +251,18 @@ export class GenericDiagram {
     // Edge labels travel with the nearest edge.
     const edgeLabels = [...svg.querySelectorAll<SVGGraphicsElement>('g.edgeLabel, g.edgeLabels > g')].filter((el) => !seen.has(el));
 
+    // An element's getCTM() is relative to the nearest viewport (this nested <svg>), but the <svg>'s
+    // own getCTM() includes the camera: compare screen CTMs so bounds never depend on the camera.
+    const toUser = (el: SVGGraphicsElement): DOMMatrix | undefined => {
+      const m = el.getScreenCTM();
+      const root = svg.getScreenCTM();
+      return m && root ? root.inverse().multiply(m) : undefined;
+    };
     const toRect = (el: SVGGraphicsElement): Rect => {
       try {
         const b = el.getBBox();
-        const m = el.getCTM();
-        const root = svg.getCTM();
-        if (m && root) {
-          const inv = root.inverse().multiply(m);
+        const inv = toUser(el);
+        if (inv) {
           return { x: b.x * inv.a + inv.e - offset.x, y: b.y * inv.d + inv.f - offset.y, w: b.width * inv.a, h: b.height * inv.d };
         }
         return { x: b.x - offset.x, y: b.y - offset.y, w: b.width, h: b.height };
@@ -283,7 +290,7 @@ export class GenericDiagram {
         try {
           if (path) {
             const len = path.getTotalLength();
-            const ctm = svg.getCTM()?.inverse().multiply(path.getCTM() ?? svg.createSVGMatrix());
+            const ctm = toUser(path);
             const map = (p: DOMPoint) => (ctm ? p.matrixTransform(ctm) : p);
             endpoints = [map(path.getPointAtLength(0)), map(path.getPointAtLength(len))].map((p) => ({ x: p.x - offset.x, y: p.y - offset.y }));
           }
@@ -297,9 +304,10 @@ export class GenericDiagram {
     const ordered = orderGroups(infos.map((x) => x.info));
     this.groups = ordered.map((info) => {
       const element = byId.get(info.id) as SVGGraphicsElement;
-      return { element, info, paths: info.kind === 'edge' ? pathsOf(element) : [], label: stripMarkers(element.textContent ?? '').replace(/\s+/g, ' ').trim() || `${info.kind} ${Number(info.id) + 1}`, extra: [] };
+      return { element, info, paths: info.kind === 'edge' ? pathsOf(element) : [], label: stripMarkers(element.textContent ?? '').replace(/\s+/g, ' ').trim() || `${info.kind} ${Number(info.id) + 1}`, extra: [], bounds: info.bbox };
     });
     // Attach each edge label to the closest edge so they appear together.
+    const labelRects = new Map<Group, Rect[]>();
     for (const label of edgeLabels) {
       const r = toRect(label);
       const c = { x: r.x + r.w / 2, y: r.y + r.h / 2 };
@@ -314,12 +322,15 @@ export class GenericDiagram {
           best = g;
         }
       }
-      best?.extra.push(label);
+      if (!best) continue;
+      best.extra.push(label);
+      labelRects.set(best, [...(labelRects.get(best) ?? []), r]);
     }
+    for (const [group, rects] of labelRects) group.bounds = stepBoundsOf(group.info.bbox, rects);
   }
 
   stepBounds(step: number): Rect | undefined {
-    return this.groups[step]?.info.bbox;
+    return this.groups[step]?.bounds;
   }
 
   /** Applies the reveal state for time `t`. */
