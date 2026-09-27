@@ -4,7 +4,7 @@
 
 Work is planned and delivered as [OpenSpec](https://github.com/Fission-AI/OpenSpec) changes (spec §23.1).
 
-1. **Propose** — `openspec new change <id>` (or `/opsx:propose` in Claude Code), then write `proposal.md`, the capability spec deltas under `specs/`, `design.md` and `tasks.md`.
+1. **Propose** — `openspec new change <id>` (or `/opsx:propose` in Claude Code), then write `proposal.md`, the capability spec deltas under `specs/`, `design.md` and `tasks.md`. Write the deltas by [docs/spec-writing.md](docs/spec-writing.md): decision tables when an outcome depends on two or more conditions, checkable outcomes, one test case per table row.
 2. **Validate** — `openspec validate <id> --strict` must pass before implementation starts.
 3. **Apply** — implement the tasks in order (`/opsx:apply`), ticking each checkbox in `tasks.md` only when its stated verification passes.
 4. **Archive** — `openspec archive <id> --yes` merges the requirement deltas into `openspec/specs/` and moves the change to `openspec/changes/archive/`.

@@ -20,15 +20,19 @@ context: |
 #     We use conventional commits
 #     Domain: e-commerce platform
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+# Per-artifact rules: the full standard is docs/spec-writing.md.
+rules:
+  specs:
+    - 'Follow docs/spec-writing.md.'
+    - 'When an outcome depends on two or more conditions (settings, camera mode, playback state, engine, view), write a decision table under a "#### Scenario: … matrix" header instead of several WHEN/THEN scenarios.'
+    - 'Decision tables: first column # with stable ids R1, R2, … (never reused); conditions, then outcomes; no blank cells (use *Any* or *N/A*); bold outcome values; short-circuit rows first; the requirement text stays normative.'
+    - 'Non-table scenario bullets start with **GIVEN**, **WHEN**, **THEN** or **AND** (AND WHEN / AND THEN for sequences); no RFC 2119 keywords in scenarios or cells.'
+    - 'Outcomes name checkable values; failures name the diagnostic code and severity, the logged message rejection, or the exact English string. Never "is rejected", "shows an error", "properly", "as expected".'
+    - 'Name settings by key, default and @animator short name; state the reduced-motion outcome of any animation; put limits in a **Constraints:** list exercised by a scenario or row.'
+    - 'Non-goals go inside ## Purpose, never a separate section. A MODIFIED block copies every existing scenario; to drop or convert one, REMOVED + ADDED under a new name with "> **Supersedes:** <old name>".'
+    - 'When behaviour is removed or renamed, give every other spec that mentions it a MODIFIED delta in the same change.'
+  tasks:
+    - 'For every decision table in the deltas, add one task naming the table and its test (it.each in Vitest, an integration test, or a harness checklist), one case per row id.'
 
 # Per-operation guidance (optional)
 # Add advisory guidance for how apply and archive work should be conducted.
