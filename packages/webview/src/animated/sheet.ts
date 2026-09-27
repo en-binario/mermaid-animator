@@ -39,7 +39,7 @@ export function autoFps(format: SheetFormat): number {
   return format === 'gif' ? 15 : 30;
 }
 
-export function initialSheet(defaults: { format: string; fps?: number; scale: number; background: string; captions: boolean }, mp4: boolean): SheetState {
+export function initialSheet(defaults: { format: string; fps?: number; scale: number; background: string; captions: boolean; names?: boolean }, mp4: boolean): SheetState {
   const wanted = defaults.format as SheetFormat;
   const sheetFormat: SheetFormat = wanted === 'mp4' && !mp4 ? 'webm' : wanted;
   return {
@@ -55,7 +55,7 @@ export function initialSheet(defaults: { format: string; fps?: number; scale: nu
     speed: 1,
     theme: 'current',
     background: defaults.background,
-    burnIn: { captions: defaults.captions, title: false, counter: false, transport: false },
+    burnIn: { captions: defaults.captions, title: false, counter: false, transport: false, names: defaults.names ?? true },
     loop: 0,
     hold: 1.5,
     quality: 'medium',

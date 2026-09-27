@@ -33,7 +33,9 @@ function Field({ label, disabled, children }: { label: string; disabled: boolean
 }
 
 export function ExportSheet({ controller, t, close, actions, svgAdaptive, format, start }: { controller: DiagramController; t: T; close: () => void; actions: SheetActions; svgAdaptive: boolean; format?: string; start?: boolean }) {
-  const defaults = format ? { ...controller.effective.value.exportDefaults, format: format as SheetFormat } : controller.effective.value.exportDefaults;
+  // *Participant names* follows `display.participantNames` (spec animated-export).
+  const names = controller.effective.value.participantNames !== 'off';
+  const defaults = { ...controller.effective.value.exportDefaults, names, ...(format ? { format: format as SheetFormat } : {}) };
   const [mp4, setMp4] = useState(false);
   const [state, setState] = useState<SheetState>(() => initialSheet(defaults, false));
   const [svgBytes, setSvgBytes] = useState<number | undefined>(undefined);
@@ -221,9 +223,10 @@ export function ExportSheet({ controller, t, close, actions, svgAdaptive, format
         </Field>
         <fieldset class={`ma-field ma-field--group${on('burnIn') ? '' : ' ma-field--disabled'}`} disabled={!on('burnIn')}>
           <legend class="ma-field__label">{t('sheet.burnIn')}</legend>
-          {(['captions', 'title', 'counter', 'transport'] as const).map((k) => (
+          {(['captions', 'title', 'counter', 'transport', 'names'] as const).map((k) => (
             <label key={k} class="ma-inspector__check">
-              <input type="checkbox" checked={state.burnIn[k]} onChange={(e) => set({ burnIn: { ...state.burnIn, [k]: (e.target as HTMLInputElement).checked } })} />
+              {/* Participant names apply to the sequence view only. */}
+              <input type="checkbox" disabled={k === 'names' && (!native || state.view === 'topology')} checked={state.burnIn[k]} onChange={(e) => set({ burnIn: { ...state.burnIn, [k]: (e.target as HTMLInputElement).checked } })} />
               {t(`sheet.burnIn.${k}`)}
             </label>
           ))}

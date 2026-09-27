@@ -14,6 +14,8 @@ export interface BurnIn {
   title: boolean;
   counter: boolean;
   transport: boolean;
+  /** Participant rail where the camera hides the headers (sequence view; spec participant-orientation). */
+  names: boolean;
 }
 
 export interface ExportText {

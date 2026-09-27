@@ -42,6 +42,11 @@ describe('export sheet', () => {
     expect(initialSheet({ ...defaults, fps: 24 }, true)).toMatchObject({ fps: 24, fpsAuto: false });
   });
 
+  it('burns in participant names by default, following display.participantNames', () => {
+    expect(initialSheet(defaults, true).burnIn.names).toBe(true);
+    expect(initialSheet({ ...defaults, names: false }, true).burnIn.names).toBe(false);
+  });
+
   it('formats sizes', () => {
     expect(formatBytes(512)).toBe('512 B');
     expect(formatBytes(2048)).toBe('2 KB');

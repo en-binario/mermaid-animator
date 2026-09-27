@@ -24,6 +24,8 @@ import type { Host } from './host';
 import { GenericDiagram } from './fallback';
 import { chooseEngine } from './engine';
 import { resolveGenericSidecar, resolveSidecar, withSidecarSettings, type UnresolvedKey } from './sidecar';
+import { arrowTags, edgeMarkers, panToReveal, railEntries, stepMessages, stepParticipants, tagOpacity } from './orientation/model';
+import { canvasMeasure, OrientationOverlay } from './orientation/overlay';
 
 export type Translate = (key: string, ...args: (string | number)[]) => string;
 
@@ -131,6 +133,9 @@ export class DiagramController {
   private readonly container: HTMLElement;
   private readonly views: HTMLDivElement;
   private readonly seqSlotEl: HTMLDivElement;
+  /** Participant rail, edge markers and arrow-end tags of the sequence slot (spec participant-orientation). */
+  private readonly orientation: OrientationOverlay;
+  private readonly orientationMeasure = canvasMeasure();
   private readonly seqSlot: CameraSlot;
   private readonly topoSlot: CameraSlot;
   private readonly seqMinimap: Minimap;
@@ -207,6 +212,17 @@ export class DiagramController {
         panBy: (dx, dy) => this.camera.userSet({ ...this.camera.view, x: this.camera.view.x - dx * this.camera.view.k, y: this.camera.view.y - dy * this.camera.view.k }),
       },
       t('minimap.label'),
+    );
+    this.orientation = new OrientationOverlay(
+      this.seqSlotEl,
+      {
+        focus: (id, additive) => this.toggleFocus(id, additive),
+        reveal: (id) => {
+          const p = this.sequence?.layout.participants.find((q) => q.id === id);
+          if (p) this.camera.userSet(panToReveal(this.camera.view, this.viewportSize, p.x));
+        },
+      },
+      t,
     );
 
     this.topologyView = new TopologyView(this.views, {
@@ -766,6 +782,7 @@ export class DiagramController {
       busy = this.renderViews(time, now, view === 'split' ? ['sequence', 'topology'] : [view]);
     } else this.generic?.renderAt(time, this.reducedMotion);
     this.updateMinimaps();
+    this.updateOrientation();
     const step = this.snapshot.value.displayStep - 1;
     if (step !== this.lastStep) {
       const forward = step > this.lastStep;
@@ -800,6 +817,32 @@ export class DiagramController {
     } else this.seqMinimap.update(this.camera.view, this.viewportSize, undefined, 'never', true);
     const topo = this.topologyView;
     if (topo.hasLayout) topo.minimap.update(topo.camera.view, topo.size, topo.marker(step, this.sequence?.compiled.sequence?.compiled), mode, hidden || view === 'sequence' || !this.sequence);
+  }
+
+  /**
+   * Participant orientation (spec participant-orientation): sequence view and the sequence side of
+   * split only, hidden during morphs, kept while presenting.
+   */
+  private updateOrientation(): void {
+    const seq = this.sequence;
+    if (!seq || this.morph || this.view.value === 'topology') {
+      this.orientation.update(undefined);
+      return;
+    }
+    const { layout } = seq;
+    const view = this.camera.view;
+    const size = this.viewportSize;
+    const index = this.snapshot.value.displayStep - 1;
+    const step = index >= 0 ? this.steps()[index] : undefined;
+    const involved = step ? stepParticipants(step, layout) : [];
+    const names = this.settings.participantNames === 'auto';
+    const measure = this.orientationMeasure;
+    this.orientation.update({
+      rail: names ? railEntries(layout, view, size, { measure, involved: new Set(involved), focus: this.focus.value }) : [],
+      markers: names && step ? edgeMarkers(layout, view, size, involved, this.stepBounds(index)) : [],
+      tags: step ? arrowTags(layout, stepMessages(step, layout), view, size, this.settings.arrowEndNames, measure) : [],
+      tagOpacity: step ? tagOpacity(this.timeline(), index, this.player.time) : 0,
+    });
   }
 
   private onStepChanged(step: number, forward: boolean, now: number): void {

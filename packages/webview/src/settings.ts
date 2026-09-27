@@ -32,6 +32,10 @@ export interface AnimatorSettings {
   returnMessages: 'merge' | 'separate' | 'hide';
   edgeWeight: 'count' | 'uniform';
   showMinimap: 'auto' | 'always' | 'never';
+  /** Participant rail and off-screen markers (spec participant-orientation). */
+  participantNames: 'auto' | 'off';
+  /** Sender/receiver tags on the current step's arrows. */
+  arrowEndNames: 'off' | 'auto' | 'always';
   exportDefaults: {
     format: 'svg' | 'png' | 'gif' | 'webm' | 'mp4' | 'animated-svg' | 'html';
     /** Undefined when not set: GIF then uses 15 fps and video 30 fps. */
@@ -71,6 +75,8 @@ export const DEFAULT_SETTINGS: AnimatorSettings = {
   returnMessages: 'merge',
   edgeWeight: 'count',
   showMinimap: 'auto',
+  participantNames: 'auto',
+  arrowEndNames: 'off',
   exportDefaults: { format: 'animated-svg', scale: 2, background: 'theme', captions: true, svgAdaptiveTheme: false },
 };
 
@@ -123,6 +129,8 @@ export function resolveSettings(host: WebviewSettings, annotations: Record<strin
     returnMessages: pick(get('returns', 'topology.returnMessages'), ['merge', 'separate', 'hide'], d.returnMessages),
     edgeWeight: pick(host['topology.edgeWeight'], ['count', 'uniform'], d.edgeWeight),
     showMinimap: pick(host['display.showMinimap'], ['auto', 'always', 'never'], d.showMinimap),
+    participantNames: pick(host['display.participantNames'], ['auto', 'off'], d.participantNames),
+    arrowEndNames: pick(host['display.arrowEndNames'], ['off', 'auto', 'always'], d.arrowEndNames),
     exportDefaults: {
       // The manifest spells it `animatedSvg`.
       format: pick(host['export.defaultFormat'] === 'animatedSvg' ? 'animated-svg' : host['export.defaultFormat'], ['svg', 'png', 'gif', 'webm', 'mp4', 'animated-svg', 'html'], d.exportDefaults.format),

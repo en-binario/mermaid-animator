@@ -6,12 +6,12 @@
 import { sceneAt, SequenceSvgRenderer, SVG_NS, TopologySvgRenderer, prepareScene, prepareTopologyScene, topologySceneAt } from '@mermaid-animator/renderer';
 import type { DiagramController } from '../controller';
 import { rasterize, serializeSvg } from '../export';
-import { drawBackground, drawScene, prepareJob } from './draw';
+import { drawBackground, drawFrame, drawScene, prepareJob } from './draw';
 import { buildJob, type AnimatedOptions } from './exporter';
 
 const BASE: AnimatedOptions = {
   format: 'gif', range: 'all', view: 'sequence', camera: 'fit', size: 'fit', scale: 1, fps: 30, speed: 1, theme: 'current', background: 'theme',
-  burnIn: { captions: false, title: false, counter: false, transport: false }, loop: 0, hold: 0, quality: 'high', dither: false,
+  burnIn: { captions: false, title: false, counter: false, transport: false, names: false }, loop: 0, hold: 0, quality: 'high', dither: false,
 };
 
 async function bitmapOf(blob: Blob): Promise<ImageBitmap> {
@@ -107,18 +107,18 @@ export async function measureInWorker(samples: string[], font: string): Promise<
 }
 
 /** Frame `n` of a worker export against the Canvas backend at the frame's time on the main thread (task 2.1). */
-export async function workerFrameMatches(controller: DiagramController, n: number, fps: number): Promise<{ t: number; identical: boolean; differing: number }> {
+export async function workerFrameMatches(controller: DiagramController, n: number, fps: number, overrides: Partial<AnimatedOptions> = {}): Promise<{ t: number; identical: boolean; differing: number }> {
   const material = controller.exportMaterial('sequence')!;
   const { EMBEDDED_FONTS, dataUrlBytes } = await import('../export');
   const fonts = EMBEDDED_FONTS.map((f) => ({ family: f.family, data: dataUrlBytes(f.url), unicodeRange: f.unicodeRange }));
-  const job = buildJob(material, { ...BASE, fps }, fonts);
+  const job = buildJob(material, { ...BASE, ...overrides, fps }, fonts);
   const t = job.range.start + (n * 1000 * job.plan.speed) / fps;
   // Main thread
   const canvas = new OffscreenCanvas(job.width, job.height);
   const ctx = canvas.getContext('2d')!;
   const prepared = prepareJob(job);
-  drawBackground(ctx, prepared);
-  drawScene(ctx, prepared, t);
+  // The whole frame, burn-ins included, as the worker draws it.
+  drawFrame(ctx, prepared, t, (n * 1000) / fps);
   const mine = ctx.getImageData(0, 0, job.width, job.height).data;
   // Worker: the real export worker draws frame n of the same job.
   const { exportWorkerUrl } = await import('../workers/embedded');

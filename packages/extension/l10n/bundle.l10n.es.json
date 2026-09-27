@@ -223,5 +223,7 @@
   "The user submits the sign-in form.": "El usuario envía el formulario de inicio de sesión.",
   "Auth looks the user up by e-mail address.": "Auth busca al usuario por su dirección de correo.",
   "Session": "Sesión",
-  "The session cookie is set and the user is in.": "Se establece la cookie de sesión y el usuario entra."
+  "The session cookie is set and the user is in.": "Se establece la cookie de sesión y el usuario entra.",
+  "Show {0}": "Mostrar {0}",
+  "Participant names": "Nombres de los participantes"
 }

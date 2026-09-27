@@ -56,6 +56,8 @@ export const WEBVIEW_SETTING_KEYS = [
   'topology.returnMessages',
   'topology.edgeWeight',
   'display.showMinimap',
+  'display.participantNames',
+  'display.arrowEndNames',
   'export.defaultFormat',
   'export.fps',
   'export.scale',

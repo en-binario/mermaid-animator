@@ -1,6 +1,6 @@
 /**
  * Draws one export frame (M3 D1/D2): background, camera, the scene at time `t` through the
- * Canvas 2D backend, and the burn-ins (captions, title card, step counter, transport). Runs in the
+ * Canvas 2D backend, and the burn-ins (captions, title card, step counter, transport, participant names). Runs in the
  * export worker on an OffscreenCanvas and on the main thread for verification.
  */
 import { positionAt } from '@mermaid-animator/core';
@@ -9,6 +9,7 @@ import {
   type CanvasPalette, type Ctx2D, type SceneModel, type TopologySceneModel,
 } from '@mermaid-animator/renderer';
 import { cameraAt } from './frames';
+import { RAIL, railEntries, railFont, stepParticipants } from '../orientation/model';
 import type { ExportJob } from './job';
 
 export interface PreparedJob {
@@ -74,12 +75,15 @@ export function drawBurnIns(ctx: Ctx2D, prepared: PreparedJob, t: number, elapse
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   const inter = (size: number, weight = 500) => `${weight} ${Math.round(size * s)}px "Inter Variable", system-ui, sans-serif`;
 
+  const railHeight = job.burnIn.names ? drawRail(ctx, prepared, t, k, s) : 0;
+
   if (job.burnIn.counter && job.text.stepCount) {
     const label = `${String(Math.max(0, k + 1)).padStart(2, '0')} / ${String(job.text.stepCount).padStart(2, '0')}`;
     ctx.font = inter(15, 600);
     const w = ctx.measureText(label).width + 20 * s;
     const x = job.width - w - 16 * s;
-    const y = 16 * s;
+    // Below the participant rail when it is shown.
+    const y = railHeight + 16 * s;
     ctx.fillStyle = c.surface;
     ctx.globalAlpha = 0.92;
     ctx.beginPath();
@@ -137,6 +141,42 @@ export function drawBurnIns(ctx: Ctx2D, prepared: PreparedJob, t: number, elapse
     ctx.globalAlpha = 1;
   }
   ctx.restore();
+}
+
+/**
+ * The participant rail (spec participant-orientation) in frame pixels, from the frame's camera and the
+ * same rules as the panel. Returns the band's height (0 when no participant qualifies).
+ */
+function drawRail(ctx: Ctx2D, prepared: PreparedJob, t: number, step: number, s: number): number {
+  const { job, palette } = prepared;
+  if (job.source.kind !== 'sequence') return 0;
+  const { layout, compiled } = job.source;
+  const current = step >= 0 ? compiled.steps[step] : undefined;
+  const involved = new Set(current ? stepParticipants(current, layout) : []);
+  const font = railFont(s);
+  const measure = (text: string, f: string) => {
+    ctx.font = f;
+    return ctx.measureText(text).width;
+  };
+  const entries = railEntries(layout, cameraAt(job.camera, t), { width: job.width, height: job.height }, { measure, involved, scale: s });
+  if (!entries.length) return 0;
+  const c = palette.c;
+  const height = RAIL.height * s;
+  ctx.globalAlpha = 0.86;
+  ctx.fillStyle = c.surface;
+  ctx.fillRect(0, 0, job.width, height);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = c.hairline;
+  ctx.fillRect(0, height - Math.max(1, s), job.width, Math.max(1, s));
+  ctx.font = font;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (const e of entries) {
+    ctx.fillStyle = e.state === 'current' ? c.accent : c['ink-1'];
+    if (e.tick) ctx.fillRect(e.lifelineX - s, 7 * s, 2 * s, 10 * s);
+    else ctx.fillText(e.label, e.x, height / 2);
+  }
+  return height;
 }
 
 /** One complete frame for a scene source. */

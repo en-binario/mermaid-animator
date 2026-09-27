@@ -34,6 +34,12 @@ describe('resolveSettings', () => {
     expect(resolveSettings({ themeMode: 'auto' })).toMatchObject({ view: 'sequence', topologyLayout: 'layered', direction: 'LR', edgeStyle: 'curved', returnMessages: 'merge', edgeWeight: 'count', showMinimap: 'auto' });
   });
 
+  it('resolves the participant-orientation settings', () => {
+    expect(resolveSettings({ themeMode: 'auto' })).toMatchObject({ participantNames: 'auto', arrowEndNames: 'off' });
+    expect(resolveSettings({ themeMode: 'auto', 'display.participantNames': 'off', 'display.arrowEndNames': 'always' })).toMatchObject({ participantNames: 'off', arrowEndNames: 'always' });
+    expect(resolveSettings({ themeMode: 'auto', 'display.participantNames': 'sometimes', 'display.arrowEndNames': 7 })).toMatchObject({ participantNames: 'auto', arrowEndNames: 'off' });
+  });
+
   it('clamps speed to 0.25–4', () => {
     expect(resolveSettings({ themeMode: 'auto', 'playback.speed': 10 }).speed).toBe(4);
   });

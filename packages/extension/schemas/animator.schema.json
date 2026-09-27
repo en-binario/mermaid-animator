@@ -376,6 +376,34 @@
                 "Never."
               ]
             },
+            "display.participantNames": {
+              "type": "string",
+              "enum": [
+                "auto",
+                "off"
+              ],
+              "default": "auto",
+              "markdownDescription": "Keep participants identifiable when their headers are out of view: a band at the top of the sequence view names the visible lifelines, and markers on the left and right edges point to participants of the current step that are off-screen.",
+              "enumDescriptions": [
+                "Show the band and the markers when headers are out of view.",
+                "Never show them."
+              ]
+            },
+            "display.arrowEndNames": {
+              "type": "string",
+              "enum": [
+                "off",
+                "auto",
+                "always"
+              ],
+              "default": "off",
+              "markdownDescription": "Show the sender and receiver names at the ends of the message playing in the current step.",
+              "enumDescriptions": [
+                "No names on arrows.",
+                "Only for participants whose header is out of view.",
+                "Always, for the current step."
+              ]
+            },
             "export.defaultFormat": {
               "type": "string",
               "enum": [

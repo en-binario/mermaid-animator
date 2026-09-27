@@ -1622,3 +1622,148 @@ body {
   width: 100%;
   max-width: 100%;
 }
+
+/* Participant orientation (spec participant-orientation): rail, edge markers, arrow-end tags */
+.ma-orient {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ma-orient[hidden] {
+  display: none;
+}
+
+.ma-orient__rail {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 24px;
+  background: color-mix(in srgb, var(--ma-surface) 86%, transparent);
+  border-bottom: var(--ma-border-width) solid var(--ma-hairline);
+  backdrop-filter: blur(3px);
+  opacity: 0;
+  transition: opacity var(--ma-duration-fast) var(--ma-ease-standard);
+}
+
+.ma-orient__rail.is-shown {
+  opacity: 1;
+}
+
+.ma-orient__name {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 24px;
+  padding: 0 4px;
+  font: 560 12px/24px var(--ma-font-label);
+  color: var(--ma-ink-1);
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.ma-orient__rail:not(.is-shown) .ma-orient__name {
+  pointer-events: none;
+}
+
+.ma-orient__name[hidden],
+.ma-orient__marker[hidden],
+.ma-orient__tag[hidden] {
+  display: none;
+}
+
+.ma-orient__name[data-state='current'] {
+  color: var(--ma-accent);
+}
+
+.ma-orient__name[data-state='dim'] {
+  color: var(--ma-ink-3);
+  opacity: 0.6;
+}
+
+.ma-orient__name:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.ma-orient__name--tick {
+  width: 8px;
+  padding: 0;
+}
+
+.ma-orient__name--tick::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 7px;
+  width: 2px;
+  height: 10px;
+  border-radius: 1px;
+  background: currentColor;
+}
+
+.ma-orient__marker {
+  position: absolute;
+  top: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 40%;
+  height: 24px;
+  padding: 0 8px 0 4px;
+  font: 560 12px var(--ma-font-label);
+  color: var(--ma-accent);
+  background: var(--ma-surface);
+  border: var(--ma-border-width) solid var(--ma-rule);
+  border-radius: 12px;
+  box-shadow: var(--ma-elevation-1);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.ma-orient__marker[data-side='left'] {
+  left: 6px;
+}
+
+.ma-orient__marker[data-side='right'] {
+  right: 6px;
+  flex-direction: row-reverse;
+  padding: 0 4px 0 8px;
+}
+
+.ma-orient__marker:focus-visible {
+  outline: 2px solid var(--ma-focus);
+  outline-offset: 1px;
+}
+
+.ma-orient__marker-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ma-orient__tags {
+  position: absolute;
+  inset: 0;
+}
+
+.ma-orient__tag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 0 4px;
+  font: 500 11px/16px var(--ma-font-label);
+  color: var(--ma-accent);
+  background: color-mix(in srgb, var(--ma-surface) 88%, transparent);
+  border-radius: var(--ma-radius-xs);
+  white-space: nowrap;
+}
+
+[data-reduced-motion='true'] .ma-orient__rail {
+  transition: none;
+}

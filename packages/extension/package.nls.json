@@ -186,5 +186,12 @@
   "walkthrough.export.description": "Export a GIF, a video, an animated SVG for your README or a self-contained HTML player. **Copy Link to Current Step** shares a link that opens this exact step.\n[Export…](command:mermaidAnimator.export)",
   "walkthrough.export.alt": "The export sheet over an animated diagram.",
   "walkthrough.title": "Get started with Mermaid Animator",
-  "walkthrough.description": "Animate, annotate and share your first Mermaid diagram in a few minutes."
+  "walkthrough.description": "Animate, annotate and share your first Mermaid diagram in a few minutes.",
+  "config.display.participantNames": "Keep participants identifiable when their headers are out of view: a band at the top of the sequence view names the visible lifelines, and markers on the left and right edges point to participants of the current step that are off-screen.",
+  "config.display.participantNames.auto": "Show the band and the markers when headers are out of view.",
+  "config.display.participantNames.off": "Never show them.",
+  "config.display.arrowEndNames": "Show the sender and receiver names at the ends of the message playing in the current step.",
+  "config.display.arrowEndNames.off": "No names on arrows.",
+  "config.display.arrowEndNames.auto": "Only for participants whose header is out of view.",
+  "config.display.arrowEndNames.always": "Always, for the current step."
 }

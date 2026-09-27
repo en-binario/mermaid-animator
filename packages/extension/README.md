@@ -28,6 +28,7 @@ Nothing in your diagrams needs to change. Edits appear live, and the panel keeps
 - **Split** (`S`). Both views side by side (stacked on narrow panels) on one timeline, each with its own camera; hovering an element highlights its counterpart in the other view.
 - **Layouts.** `layered` (default, left-to-right or top-to-bottom), a deterministic `force` layout, or `manual` — drag nodes and the positions are remembered for that diagram (*Reset Topology Layout* forgets them).
 - **Minimap.** An overview in the corner whenever the drawing is larger than the view: drag the frame to pan, click to jump there.
+- **Who is who when zoomed in.** Once the participant headers scroll out of view, a slim band at the top of the sequence view names every visible lifeline (click a name to focus it), and participants of the current step that are off to the left or right get a marker on that edge — click it to pan there. Optionally, `mermaidAnimator.display.arrowEndNames` labels the ends of the arrow that is playing with the sender and receiver names.
 
 ## Narrate, explore, present
 
@@ -149,6 +150,8 @@ Steps are referenced by `#<number>`, `@step-id`, or the step's content or struct
 | `mermaidAnimator.topology.edgeStyle` / `.edgeWeight` | `curved` / `count` | `curved`, `orthogonal` or `straight`; width by message count or `uniform`. |
 | `mermaidAnimator.topology.returnMessages` | `merge` | Return lanes beside their request, `separate` edges, or `hide`. |
 | `mermaidAnimator.display.showMinimap` | `auto` | `auto`, `always` or `never`. |
+| `mermaidAnimator.display.participantNames` | `auto` | Name band and off-screen markers when headers are out of view, or `off`. |
+| `mermaidAnimator.display.arrowEndNames` | `off` | Sender and receiver names on the current arrow: `off`, `auto` (only when their header is out of view) or `always`. |
 | `mermaidAnimator.presentation.chapterCards` / `.zenMode` | `true` / `false` | Chapter cards while presenting; also enter Zen Mode. |
 | `mermaidAnimator.annotations.highlight` | `true` | Highlight `%% @…` directive names in the editor. |
 | `mermaidAnimator.files.languages` | `markdown, mdx, mermaid` | Languages scanned for diagrams. |

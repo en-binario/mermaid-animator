@@ -186,5 +186,12 @@
   "walkthrough.export.description": "Exporta un GIF, un vídeo, un SVG animado para tu README o un reproductor HTML autónomo. **Copiar enlace al paso actual** comparte un enlace que abre este mismo paso.\n[Exportar…](command:mermaidAnimator.export)",
   "walkthrough.export.alt": "La hoja de exportación sobre un diagrama animado.",
   "walkthrough.title": "Primeros pasos con Mermaid Animator",
-  "walkthrough.description": "Anima, anota y comparte tu primer diagrama Mermaid en unos minutos."
+  "walkthrough.description": "Anima, anota y comparte tu primer diagrama Mermaid en unos minutos.",
+  "config.display.participantNames": "Mantener identificables los participantes cuando sus encabezados quedan fuera de la vista: una banda en la parte superior de la vista de secuencia nombra las líneas de vida visibles y unos marcadores en los bordes izquierdo y derecho señalan a los participantes del paso actual que quedan fuera.",
+  "config.display.participantNames.auto": "Mostrar la banda y los marcadores cuando los encabezados no se ven.",
+  "config.display.participantNames.off": "No mostrarlos nunca.",
+  "config.display.arrowEndNames": "Mostrar los nombres del emisor y del receptor en los extremos del mensaje del paso actual.",
+  "config.display.arrowEndNames.off": "Sin nombres en las flechas.",
+  "config.display.arrowEndNames.auto": "Solo para los participantes cuyo encabezado no se ve.",
+  "config.display.arrowEndNames.always": "Siempre, en el paso actual."
 }
