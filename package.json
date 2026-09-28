@@ -19,7 +19,9 @@
     "test:watch": "vitest",
     "test:integration": "npm run build && node packages/extension/test/runTests.mjs",
     "package": "node scripts/build.mjs --production && npm run package --workspace mermaid-animator",
-    "check": "npm run lint && npm run typecheck && npm test"
+    "check": "npm run lint && npm run typecheck && npm test",
+    "version:check": "node scripts/version.mjs --check",
+    "version:bump": "node scripts/version.mjs --bump"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

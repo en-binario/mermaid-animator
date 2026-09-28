@@ -33,6 +33,7 @@ rules:
     - 'When behaviour is removed or renamed, give every other spec that mentions it a MODIFIED delta in the same change.'
   tasks:
     - 'For every decision table in the deltas, add one task naming the table and its test (it.each in Vitest, an integration test, or a harness checklist), one case per row id.'
+    - 'When the change has a user-observable effect, end with a task that adds a kind-prefixed entry under ## Unreleased in packages/extension/CHANGELOG.md (docs/versioning.md).'
 
 # Per-operation guidance (optional)
 # Add advisory guidance for how apply and archive work should be conducted.

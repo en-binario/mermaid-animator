@@ -2046,7 +2046,7 @@ Requirements met; unit and integration tests; visual baselines updated and revie
 
 ### 21.5 Continuous integration
 
-GitHub Actions matrix (Windows, macOS, Ubuntu): install → lint → typecheck → unit/property → build → size-limit → integration (xvfb on Linux) → web tests → visual regression (Ubuntu only, pinned fonts) → package VSIX artefact. Tagged releases publish to the Visual Studio Marketplace and Open VSX, generate release notes from Changesets, and attach the SBOM.
+GitHub Actions matrix (Windows, macOS, Ubuntu): install → lint → typecheck → unit/property → build → size-limit → integration (xvfb on Linux) → web tests → visual regression (Ubuntu only, pinned fonts) → package VSIX artefact. Tagged releases publish to the Visual Studio Marketplace and Open VSX, take their release notes from the version's `CHANGELOG.md` section, and attach the SBOM. `npm test` runs the version check (`docs/versioning.md`).
 
 ---
 
@@ -2091,7 +2091,7 @@ mermaid-animator/
 | Video | WebCodecs + a WebM/MP4 muxer (e.g. Mediabunny or its predecessors `webm-muxer` / `mp4-muxer`) | Worker; licence reviewed at adoption |
 | Fonts | Inter, Source Serif 4 (WOFF2 subsets) | |
 | Testing | Vitest, fast-check, Playwright, `@vscode/test-electron`, `@vscode/test-web`, axe-core | |
-| Release | `@vscode/vsce`, `ovsx`, Changesets | |
+| Release | `@vscode/vsce`, `ovsx`, `scripts/version.mjs` | Version level from CHANGELOG entry kinds (`docs/versioning.md`) |
 
 ### 22.3 Third-party licences (to confirm at adoption)
 
@@ -2113,7 +2113,7 @@ A `ThirdPartyNotices.txt` is generated at build time and shipped in the VSIX.
 - `core` has **no** DOM, Node or VS Code imports (enforced by ESLint `no-restricted-imports`).
 - Every pipeline stage exports a pure function plus a memoising wrapper.
 - Public types documented with TSDoc; ADRs in `docs/adr/NNN-title.md`.
-- Conventional Commits; Changesets for versioning.
+- Conventional Commits; Semantic Versioning with the release level taken from kind-prefixed CHANGELOG entries (`docs/versioning.md`).
 
 ---
 

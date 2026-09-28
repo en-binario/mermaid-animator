@@ -28,6 +28,14 @@ Architecture rules enforced by lint: `packages/core` imports nothing from VS Cod
 - [Conventional Commits](https://www.conventionalcommits.org/) style subjects (`feat:`, `fix:`, `docs:`, `test:`, `build:`, `chore:`).
 - One logical change per commit; reference the OpenSpec change id in the body when relevant.
 
+## Versioning
+
+The extension follows Semantic Versioning, and the release level comes from the CHANGELOG. The rules are in [docs/versioning.md](docs/versioning.md).
+
+- Every change with a user-observable effect adds one entry under `## Unreleased` in [packages/extension/CHANGELOG.md](packages/extension/CHANGELOG.md), starting with its kind in bold: `Breaking`, `Removed`, `Added`, `Changed`, `Deprecated`, `Fixed` or `Security` (for example `- **Fixed:** …`). A `Breaking` or `Removed` entry says what users do instead.
+- `npm run version:check` validates the entries, checks that the manifest, the lockfile and the CHANGELOG agree on the version, and prints the pending release. `npm test` runs it too.
+- Never edit the extension's `version` by hand; `npm run version:bump` applies a release.
+
 ## Design
 
 Visual work follows the Ink & Ivory design system (spec §9): colours only from tokens, hairline strokes, no overshoot in the Formal motion profile, and the design QA checklist in §9.11.
