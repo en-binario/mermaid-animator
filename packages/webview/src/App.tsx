@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { stepEnd } from '@mermaid-animator/core';
-import { WEBVIEW_STRINGS, type DiagramSummary } from '@mermaid-animator/protocol';
+import { WEBVIEW_STRINGS, type DiagramSummary, type ThemeMode, type WebviewMessage } from '@mermaid-animator/protocol';
 import type { DiagramController, ViewKind } from './controller';
 import { ZOOM_MAX, ZOOM_MIN, ZOOM_PRESETS } from './camera';
 import { SPEEDS } from './player';
@@ -13,6 +13,7 @@ import { SearchBox } from './SearchBox';
 import { ExportSheet, type SheetActions } from './ExportSheet';
 import type { ExportTheme } from './animated/theme';
 import { Transcript } from './Transcript';
+import { THEME_MENU, themeMenuMessage } from './themeMenu';
 import { BlankScreen, ChapterCard, Hairline, LaserPointer, TitleCard } from './Presentation';
 
 /** `theme` omitted: `export.theme` (spec export-theme). */
@@ -29,6 +30,8 @@ interface AppProps {
   onToggleInspector: () => void;
   /** Opens the extension's settings (spec animator-panel: settings access). */
   onOpenSettings: () => void;
+  /** Sends the toolbar theme menu's `theme/set` (spec visual-theme). */
+  onSetTheme: (message: WebviewMessage) => void;
   reducedMotion: boolean;
   ui: UiState;
 }
@@ -45,6 +48,8 @@ export interface UiState {
   speedMenu: boolean;
   /** The toolbar's zoom presets menu (spec zoom-controls). */
   zoomMenu: boolean;
+  /** The toolbar's theme menu (spec visual-theme). */
+  themeMenu: boolean;
   toast?: string;
   /** Panel is at least 880 px wide: the inspector sits beside the canvas. */
   wide: boolean;
@@ -341,12 +346,11 @@ function Shortcuts({ t, close }: { t: T; close: () => void }) {
 }
 
 /**
- * Toolbar zoom group (spec zoom-controls): zoom out, the current zoom as a percentage that opens
- * the presets, and zoom in. Toolbar and preset zooms are user camera moves; Fit is not.
+ * Toolbar popover menu behaviour shared by the zoom and theme menus: focus the checked item (or the
+ * first) on open, close on a click outside the anchor, arrow/Home/End keys move focus and wrap,
+ * Escape closes, and closing returns focus to the trigger.
  */
-function ZoomGroup({ controller, t, open, setOpen }: { controller: DiagramController; t: T; open: boolean; setOpen: (open: boolean) => void }) {
-  const k = controller.zoomLevel.value;
-  const percent = Math.round(k * 100);
+function useMenu(open: boolean, setOpen: (open: boolean) => void) {
   const anchor = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
@@ -379,6 +383,17 @@ function ZoomGroup({ controller, t, open, setOpen }: { controller: DiagramContro
       e.stopPropagation();
     }
   };
+  return { anchor, trigger, menu, close, onKeyDown };
+}
+
+/**
+ * Toolbar zoom group (spec zoom-controls): zoom out, the current zoom as a percentage that opens
+ * the presets, and zoom in. Toolbar and preset zooms are user camera moves; Fit is not.
+ */
+function ZoomGroup({ controller, t, open, setOpen }: { controller: DiagramController; t: T; open: boolean; setOpen: (open: boolean) => void }) {
+  const k = controller.zoomLevel.value;
+  const percent = Math.round(k * 100);
+  const { anchor, trigger, menu, close, onKeyDown } = useMenu(open, setOpen);
   const choose = (preset: number | 'fit') => {
     if (preset === 'fit') controller.fit();
     else controller.zoomTo(preset);
@@ -422,6 +437,48 @@ function ZoomGroup({ controller, t, open, setOpen }: { controller: DiagramContro
   );
 }
 
+/**
+ * Toolbar theme menu (spec visual-theme): one radio item per `mermaidAnimator.theme.mode` value.
+ * Choosing an unchecked item asks the host to write the setting; the palette follows the host's
+ * `settings/changed`.
+ */
+function ThemeMenu({ mode, t, open, setOpen, onSetTheme }: { mode: ThemeMode; t: T; open: boolean; setOpen: (open: boolean) => void; onSetTheme: (message: WebviewMessage) => void }) {
+  const { anchor, trigger, menu, close, onKeyDown } = useMenu(open, setOpen);
+  const choose = (chosen: ThemeMode) => {
+    const message = themeMenuMessage(mode, chosen);
+    if (message) onSetTheme(message);
+    close();
+  };
+  return (
+    <div class="ma-anchor" ref={anchor}>
+      <button
+        ref={trigger}
+        type="button"
+        class="ma-button"
+        aria-label={t('toolbar.theme')}
+        title={t('toolbar.theme')}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
+        <span class="codicon codicon-symbol-color" aria-hidden="true" />
+      </button>
+      {open && (
+        <div ref={menu} class="ma-popover ma-menu ma-menu--theme" role="menu" aria-label={t('toolbar.theme')} onKeyDown={onKeyDown}>
+          {THEME_MENU.map((item) => {
+            const checked = item.mode === mode;
+            return (
+              <button key={item.mode} type="button" role="menuitemradio" aria-checked={checked} class={`ma-menu__item${checked ? ' ma-menu__item--checked' : ''}`} onClick={() => choose(item.mode)}>
+                {t(item.label)}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ExportMenu({ t, onExport, close }: { t: T; onExport: (a: ExportAction) => void; close: () => void }) {
   const choose = (a: ExportAction) => {
     close();
@@ -450,7 +507,7 @@ function ExportMenu({ t, onExport, close }: { t: T; onExport: (a: ExportAction) 
   );
 }
 
-export function App({ state, controller, mountCanvas, onSelectDiagram, onExport, sheetActions, onTogglePresentation, onToggleInspector, onOpenSettings, reducedMotion, ui }: AppProps) {
+export function App({ state, controller, mountCanvas, onSelectDiagram, onExport, sheetActions, onTogglePresentation, onToggleInspector, onOpenSettings, onSetTheme, reducedMotion, ui }: AppProps) {
   const t = (key: string, ...args: (string | number)[]) => format({ ...WEBVIEW_STRINGS, ...state.strings }, key, ...args);
   const doc = state.document;
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -497,6 +554,7 @@ export function App({ state, controller, mountCanvas, onSelectDiagram, onExport,
           <IconButton icon="export" label={t('toolbar.export')} onClick={() => ui.set({ exportMenu: !ui.exportMenu })} disabled={!controller} />
           {ui.exportMenu && !controller && <ExportMenu t={t} onExport={onExport} close={() => ui.set({ exportMenu: false })} />}
         </div>
+        <ThemeMenu mode={state.settings.themeMode} t={t} open={ui.themeMenu} setOpen={(themeMenu) => ui.set({ themeMenu })} onSetTheme={onSetTheme} />
         <IconButton icon="keyboard" label={t('toolbar.shortcuts')} onClick={() => ui.set({ shortcuts: true })} />
         <IconButton icon="settings-gear" label={t('toolbar.settings')} onClick={onOpenSettings} />
       </header>

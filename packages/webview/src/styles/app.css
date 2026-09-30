@@ -1791,3 +1791,32 @@ body {
 [data-reduced-motion='true'] .ma-orient__rail {
   transition: none;
 }
+
+/*
+ * Monochrome controls (spec visual-theme): every fill is white, so pressed and checked states are
+ * drawn inverted, and hover and menu focus get a black outline instead of a sunken background.
+ * Keyboard focus rings keep --ma-focus (the editor's focus colour).
+ */
+[data-palette='monochrome'] .ma-button:hover:not(:disabled),
+[data-palette='monochrome'] .ma-menu__item:hover,
+[data-palette='monochrome'] .ma-menu__item:focus-visible,
+[data-palette='monochrome'] .ma-segmented__item:hover,
+[data-palette='monochrome'] .ma-inspector__item:hover {
+  outline: 1px solid var(--ma-ink-1);
+  outline-offset: -1px;
+}
+
+[data-palette='monochrome'] .ma-button--pressed,
+[data-palette='monochrome'] .ma-button--pressed:hover:not(:disabled),
+[data-palette='monochrome'] .ma-menu__item--checked,
+[data-palette='monochrome'] .ma-segmented__item--checked,
+[data-palette='monochrome'] .ma-segmented__item--checked:hover,
+[data-palette='monochrome'] .ma-inspector__item[aria-pressed='true'] {
+  background: var(--ma-ink-1);
+  color: var(--ma-canvas);
+}
+
+[data-palette='monochrome'] .ma-menu__item--checked:focus-visible {
+  outline: 2px solid var(--ma-focus);
+  outline-offset: -2px;
+}

@@ -5,9 +5,10 @@
 import type { Point, Rect } from '@mermaid-animator/core';
 import { buildTimeline, positionAt, type Step, type Timeline, type TimelineOptions } from '@mermaid-animator/core';
 import type { WebviewSettings } from '@mermaid-animator/protocol';
-import { MONOCHROME_RAMP, PALETTES, SVG_NS, type PaletteName } from '@mermaid-animator/renderer';
+import { PALETTES, SVG_NS, type PaletteName } from '@mermaid-animator/renderer';
 import { GENERIC_TRANSITION_MS, groupReveal } from './fallbackReveal';
 import { markFormatting, stripMarkers, styleMarkers } from './fallbackMarkup';
+import { monochromeColours } from './fallbackMonochrome';
 import { orderGroups, stepBoundsOf, type GroupInfo } from './fallbackOrder';
 
 import type mermaidDefault from 'mermaid';
@@ -43,12 +44,12 @@ function activePalette(): PaletteName {
 }
 
 /**
- * Mermaid `base` theme variables derived from an Ink & Ivory palette. Monochrome (spec export-theme)
- * adds its own rules: a grey ramp for pie slices, black branches, and for ER diagrams a grey entity
- * header — Mermaid 12 fills the entity box (the name row) with `mainBkg` and the attribute rows
- * with `rowOdd` / `rowEven` (erBox shape).
+ * Mermaid `base` theme variables derived from an Ink & Ivory palette. Monochrome (spec visual-theme)
+ * adds its own rules: white pie slices, ER rows and tertiary fills (Mermaid would otherwise derive
+ * tints from them), and black branches, pie strokes and pie text. Colours the source sets itself
+ * are neutralised after rendering (`monochromeColours`).
  */
-export function themeVariables(palette: PaletteName, source = ''): Record<string, string> {
+export function themeVariables(palette: PaletteName): Record<string, string> {
   const c = PALETTES[palette];
   const vars: Record<string, string> = {
     fontFamily: '"Inter Variable", system-ui, sans-serif',
@@ -102,21 +103,21 @@ export function themeVariables(palette: PaletteName, source = ''): Record<string
   };
   if (palette !== 'monochrome') return vars;
   const ink = c['ink-1'];
-  const ramp = Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`pie${i + 1}`, MONOCHROME_RAMP[i % MONOCHROME_RAMP.length]!]));
+  const pie = Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`pie${i + 1}`, c.surface]));
   const git = Object.fromEntries(Array.from({ length: 8 }, (_, i) => [`git${i}`, ink]));
-  const er: Record<string, string> = /^\s*erDiagram\b/m.test(source)
-    ? { mainBkg: c['surface-sunken'], primaryColor: c['surface-sunken'], rowOdd: c.surface, rowEven: c.surface, attributeBackgroundColorOdd: c.surface, attributeBackgroundColorEven: c.surface }
-    : {};
   return {
     ...vars,
-    ...ramp,
+    ...pie,
     ...git,
     tertiaryColor: c.surface,
     edgeLabelBackground: c.surface,
     pieSectionTextColor: ink,
     pieStrokeColor: ink,
     pieOuterStrokeColor: ink,
-    ...er,
+    rowOdd: c.surface,
+    rowEven: c.surface,
+    attributeBackgroundColorOdd: c.surface,
+    attributeBackgroundColorEven: c.surface,
   };
 }
 
@@ -246,7 +247,7 @@ export class GenericDiagram {
       startOnLoad: false,
       securityLevel: 'strict',
       theme: 'base',
-      themeVariables: themeVariables(palette, source),
+      themeVariables: themeVariables(palette),
       fontFamily: '"Inter Variable", system-ui, sans-serif',
       // SVG text labels are measured without depending on CSS (HTML labels are not).
       htmlLabels: false,
@@ -294,6 +295,8 @@ export class GenericDiagram {
     imported.setAttribute('y', '0');
     this.holder.replaceChildren(imported);
     if (styleMarkers(imported)) fitBoldLabels(imported);
+    // Author colours become black ink on white (spec visual-theme); needs the adopted styles.
+    if (this.palette === 'monochrome') monochromeColours(imported);
     this.bounds = { x: 0, y: 0, w: width, h: height };
     const offset = { x: vb?.x ?? 0, y: vb?.y ?? 0 };
     this.discover(imported, offset);

@@ -13,7 +13,7 @@ import {
   type WebviewMessage,
 } from '@mermaid-animator/protocol';
 import { buildHtml, createNonce } from './html';
-import { affectsWebview, config, currentReduceMotion, currentSettings, currentThemeKind } from './environment';
+import { affectsWebview, config, currentReduceMotion, currentSettings, currentThemeKind, setThemeMode } from './environment';
 import { basename, diagramLabel, diagramsIn } from './diagrams';
 import { webviewStrings } from './strings';
 import type { LayoutStore } from './layouts';
@@ -248,6 +248,10 @@ export class AnimatorPanel implements vscode.Disposable {
         // The host decides what opens: the payload is ignored (spec host-webview-protocol).
         await vscode.commands.executeCommand('mermaidAnimator.openSettings');
         break;
+      case 'theme/set':
+        // Only `theme.mode`, only a validated value; other payload fields are ignored.
+        await setThemeMode(message.payload.mode);
+        break;
     }
   }
 
@@ -259,6 +263,11 @@ export class AnimatorPanel implements vscode.Disposable {
   /** Whether an export progress notification is showing (used by tests). */
   get exporting(): boolean {
     return this.exports.inProgress;
+  }
+
+  /** Test hook: a raw message from the webview, validated and logged like a real one. */
+  receiveRawForTest(raw: unknown): void {
+    this.receive(raw);
   }
 
   /** Test hook: handles a message as if the webview had sent it. */

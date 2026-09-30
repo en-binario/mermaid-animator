@@ -493,12 +493,12 @@
                 "monochrome"
               ],
               "default": "current",
-              "markdownDescription": "Colour theme preselected in the export sheet, and used by *Export as SVG*, *Export as PNG* and *Copy Image*. `monochrome` is a formal style for documents and print: black text and lines, white shapes and background, light grey headers.",
+              "markdownDescription": "Colour theme preselected in the export sheet, and used by *Export as SVG*, *Export as PNG* and *Copy Image*. `monochrome` is a formal style for documents and print: black text and lines, and white shapes and background, including colours the diagram sets itself.",
               "enumDescriptions": [
                 "The panel's palette (animated SVG: GitHub-safe; HTML player: follow the viewer).",
                 "The Ivory (light) palette.",
                 "The Graphite (dark) palette.",
-                "Monochrome: black on white, light grey headers."
+                "Monochrome: black text and lines, white fills."
               ]
             }
           },

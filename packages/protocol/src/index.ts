@@ -6,7 +6,9 @@
 export const PROTOCOL_VERSION = 1;
 
 export type ThemeKind = 'light' | 'dark' | 'highContrast' | 'highContrastLight';
-export type ThemeMode = 'auto' | 'ivory' | 'graphite' | 'highContrast';
+export type ThemeMode = 'auto' | 'ivory' | 'graphite' | 'highContrast' | 'monochrome';
+/** Every `mermaidAnimator.theme.mode` value, in the toolbar theme menu's order (spec visual-theme). */
+export const THEME_MODES: readonly ThemeMode[] = ['auto', 'ivory', 'graphite', 'highContrast', 'monochrome'];
 
 /** Settings the webview needs. Extended by later milestones; unknown keys are ignored. */
 export interface WebviewSettings {
@@ -163,6 +165,8 @@ export type WebviewMessage =
   | { v: 1; type: 'export/cancelled'; payload: Record<string, never> }
   /** Open the Settings UI filtered to this extension (spec animator-panel); the host picks the query. */
   | { v: 1; type: 'settings/open'; payload: Record<string, never> }
+  /** The user chose a theme in the toolbar menu; the host writes `mermaidAnimator.theme.mode` (spec visual-theme). */
+  | { v: 1; type: 'theme/set'; payload: { mode: ThemeMode } }
   | { v: 1; type: 'export/player'; payload: PlayerExportPayload }
   /** Merge a patch into this diagram's sidecar entry (Save Topology Layout, Save as Diagram Defaults). */
   | { v: 1; type: 'sidecar/write'; payload: { patch: SidecarEntry } }
@@ -204,7 +208,7 @@ const shape = (fields: Record<string, Guard>): Guard => (v) => {
 };
 
 const themeKind = oneOf('light', 'dark', 'highContrast', 'highContrastLight');
-const settings = shape({ themeMode: oneOf('auto', 'ivory', 'graphite', 'highContrast') });
+const settings = shape({ themeMode: oneOf(...THEME_MODES) });
 const position = shape({ line: num, character: num });
 const range = shape({ startLine: num, startCol: num, endLine: num, endCol: num });
 const arrayOf = (g: Guard): Guard => (v) => {
@@ -250,6 +254,7 @@ const webviewPayloads: Record<WebviewMessageType, Guard> = {
   'export/progress': shape({ fraction: num, phase: str }),
   'export/cancelled': record,
   'settings/open': record,
+  'theme/set': shape({ mode: oneOf(...THEME_MODES) }),
   'export/player': shape({ suggestedName: str, title: str, data: str, theme: oneOf('light', 'dark', 'auto', 'monochrome') }),
   'sidecar/write': shape({ patch: sidecarEntry }),
   'sidecar/unresolved': shape({ entries: arrayOf(shape({ section: oneOf('captions', 'chapters'), key: str })) }),

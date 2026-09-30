@@ -19,6 +19,7 @@ describe('export palette matrix', () => {
     ['R1', 'current', 'graphite', 'graphite'],
     ['R1', 'current', 'ivory-hc', 'ivory-hc'],
     ['R1', 'current', 'graphite-hc', 'graphite-hc'],
+    ['R1', 'current', 'monochrome', 'monochrome'],
     ['R2', 'ivory', 'graphite', 'ivory'],
     ['R3', 'graphite', 'ivory', 'graphite'],
     ['R4', 'monochrome', 'graphite', 'monochrome'],
@@ -83,6 +84,11 @@ describe('animated job palette', () => {
     ['monochrome', 'monochrome'],
   ] as const)('theme %s renders with the %s palette', (theme, palette) => {
     expect(buildJob(material, { ...options, theme }, []).palette).toBe(palette);
+  });
+
+  it('draws a Current export from a Monochrome panel in Monochrome', () => {
+    expect(exportPalette('current', 'monochrome')).toBe('monochrome');
+    expect(buildJob({ ...material, palette: 'monochrome' }, options, []).palette).toBe('monochrome');
   });
 
   it('keeps the frame size and count whatever the theme', () => {

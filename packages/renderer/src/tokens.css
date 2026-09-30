@@ -155,18 +155,18 @@
   color-scheme: dark;
 }
 
-/* Export-only (spec export-theme): black ink on white, light grey header and grouping fills. */
+/* Monochrome (spec visual-theme): black ink on white, every fill white. Panel and exports. */
 [data-palette='monochrome'] {
   --ma-canvas: #FFFFFF;
   --ma-surface: #FFFFFF;
-  --ma-surface-sunken: #EDEDED;
+  --ma-surface-sunken: #FFFFFF;
   --ma-hairline: #000000;
   --ma-rule: #000000;
   --ma-ink-1: #000000;
   --ma-ink-2: #000000;
   --ma-ink-3: #000000;
   --ma-accent: #000000;
-  --ma-accent-muted: #EDEDED;
+  --ma-accent-muted: #FFFFFF;
   --ma-brass: #000000;
   --ma-sage: #000000;
   --ma-note-fill: #FFFFFF;

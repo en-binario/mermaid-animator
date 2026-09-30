@@ -23,6 +23,8 @@ describe('host messages', () => {
     hostMessage('presentation/state', { on: false }),
     hostMessage('command', { action: 'setView', args: { view: 'split' } }),
     hostMessage('document/load', { uri: 'u', fileName: 'a.md', source: 's', version: 1, origin, layout: { A: { x: 10, y: 20 } } }),
+    hostMessage('init', { settings: { themeMode: 'monochrome' }, themeKind: 'dark', reduceMotion: null, locale: 'en', strings: {} }),
+    hostMessage('settings/changed', { settings: { themeMode: 'monochrome' }, themeKind: 'light', reduceMotion: false }),
   ];
 
   it.each(valid)('accepts $type', (message) => {
@@ -73,6 +75,7 @@ describe('webview messages', () => {
     webviewMessage('presentation/toggle', { on: true }),
     webviewMessage('layout/save', { key: 'checkout', positions: { A: { x: 1, y: 2 } } }),
     webviewMessage('settings/open', {}),
+    webviewMessage('theme/set', { mode: 'monochrome' }),
   ])('accepts $type', (message) => {
     expect(validateWebviewMessage(message).ok).toBe(true);
   });
@@ -89,5 +92,19 @@ describe('webview messages', () => {
     ['bad source ranges', { v: 1, type: 'state/changed', payload: { sourceRanges: [{ startLine: 'x' }] } }],
   ])('rejects %s', (_label, value) => {
     expect(validateWebviewMessage(value).ok).toBe(false);
+  });
+  // Theme change message matrix (spec host-webview-protocol), validation rows.
+  it.each([
+    ['an unknown mode', { mode: 'neon' }],
+    ['no mode', {}],
+  ])('rejects theme/set with %s', (_label, payload) => {
+    expect(validateWebviewMessage({ v: 1, type: 'theme/set', payload })).toEqual({
+      ok: false,
+      error: 'theme/set payload.mode: expected one of auto, ivory, graphite, highContrast, monochrome',
+    });
+  });
+
+  it('accepts theme/set with extra payload fields', () => {
+    expect(validateWebviewMessage({ v: 1, type: 'theme/set', payload: { mode: 'ivory', key: 'workbench.colorTheme' } }).ok).toBe(true);
   });
 });

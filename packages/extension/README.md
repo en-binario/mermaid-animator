@@ -22,6 +22,7 @@ Nothing in your diagrams needs to change. Edits appear live, and the panel keeps
 - Loops repeat with an `n / N` counter in their tab; `par` lanes play together, each message with its own pulse; `alt` / `critical` / `opt` play the branch you choose — in the inspector, with `%% @branch`, or on the canvas when `playback.altBranches` is `ask`.
 - **Camera.** With *Camera follows playback* on (the eye button or `C`), the camera keeps each step in view at a steady zoom: 100 % by default (`camera.playZoom`). It zooms out, never below 75 %, only for a step too wide to fit, and it never leaves most of the view empty: the drawing stays against the edges of the view, or centred when it is smaller. Pan, scroll or zoom whenever you like: following stays on, and if the animation is playing it pauses. Press play (or step) and the camera returns to the current step at the zoom you chose, which it keeps (replay included) until you open another diagram. Only the eye button or `C` turns following off.
 - **Settings.** The gear button at the end of the panel toolbar (or **Mermaid Animator: Open Settings**, also in the Mermaid Diagrams view's title bar) opens the Settings editor filtered to Mermaid Animator.
+- **Theme.** The toolbar's *Theme* button (before the keyboard button) offers *Follow editor theme*, *Ivory*, *Graphite*, *High contrast* and *Monochrome*. The choice is saved to `mermaidAnimator.theme.mode` (in the workspace settings if the workspace sets it, otherwise in your user settings), and every open panel switches at once.
 - **Zoom.** The toolbar's zoom group shows the current zoom: `−` and `+` zoom out and in (like the `-` and `+` keys), and clicking the percentage offers 25 %–400 % and *Fit*. `Ctrl`/`Cmd` + wheel or a pinch zooms about the pointer.
 - **Bold and italic labels.** `<b>…</b>` / `<strong>…</strong>` and `<i>…</i>` / `<em>…</em>` in labels render as bold and italic, as in Mermaid's own preview — in sequence and topology views, flowcharts and every other diagram, and in every export. Wrapping and box sizes account for the formatting. Search, the transcript, captions and screen readers use the text without tags; other HTML stays as written.
 - The current step is highlighted in the source editor, and clicking a statement in the editor moves playback to its step (`sync.cursorToStep`); **Alt + double-click** any element to jump to its line.
@@ -79,7 +80,7 @@ From the editor: **Play / Pause** `Ctrl+Alt+Space`, **Next / Previous Step** `Ct
 
 For GIF and video you choose the range (all steps, current chapter, A–B range, current step), view, camera (fit, cinematic, current), size preset, frame rate (12–60 fps), speed, theme, background, what to burn in (captions, title card, step counter, progress bar), end hold and quality. Frames are rendered and encoded in a background worker with frame-exact timing, and the progress notification has **Cancel**. *Export as GIF… / Video… / Animated SVG… / HTML Player…* open the sheet with that format selected; bind them with `"args": { "start": true }` to export straight away with your defaults.
 
-**Theme.** Every format offers *Current* (the panel's palette), *Ivory*, *Graphite* and *Monochrome*. Monochrome is a formal style for specifications, reports and print: black text and lines, white shapes and background, and light grey only for headers and groups (ER entity headers, subgraphs, sequence boxes and fragment tabs, activation bars). `mermaidAnimator.export.theme` sets the theme the sheet starts with and the one *Export as SVG*, *Export as PNG* and *Copy Image* use. For an animated SVG, the GitHub palette and the light + dark pair come with *Current*; any other theme writes one file in that palette.
+**Theme.** Every format offers *Current* (the panel's palette), *Ivory*, *Graphite* and *Monochrome*. Monochrome is a formal style for specifications, reports and print: black text and lines, and white shapes and background. Colours the diagram sets itself (`style`, `classDef`, `linkStyle`, `rect rgb(…)`, `box` colours, `%%{init}%%` theme variables) become white fills with black lines and text, so groups, `box`es and pie slices are told apart by their borders and labels only, and a `rect` region is no longer visible. Pick *Monochrome* in the toolbar's *Theme* menu to preview it in the panel. `mermaidAnimator.export.theme` sets the theme the sheet starts with and the one *Export as SVG*, *Export as PNG* and *Copy Image* use. For an animated SVG, the GitHub palette and the light + dark pair come with *Current*; any other theme writes one file in that palette.
 
 After exporting from a Markdown file, **Insert below diagram** adds an image reference (or a `<picture>` element for a light/dark pair) after the diagram's closing fence.
 
@@ -128,7 +129,7 @@ Steps are referenced by `#<number>`, `@step-id`, or the step's content or struct
 
 | Setting | Default | Description |
 |---|---|---|
-| `mermaidAnimator.theme.mode` | `auto` | `auto` follows the editor theme; `ivory`, `graphite`, `highContrast` force a palette. |
+| `mermaidAnimator.theme.mode` | `auto` | `auto` follows the editor theme; `ivory`, `graphite`, `highContrast`, `monochrome` force a palette. The toolbar *Theme* button sets it too. |
 | `mermaidAnimator.codeLens.enabled` | `true` | CodeLens above Markdown diagrams. |
 | `mermaidAnimator.liveReload.enabled` / `.debounceMs` | `true` / `250` | Re-render while editing. |
 | `mermaidAnimator.sync.stepToEditor` | `true` | Highlight the current step in the source. |
@@ -174,7 +175,7 @@ Steps are referenced by `#<number>`, `@step-id`, or the step's content or struct
 | `mermaidAnimator.export.includeCaptions` | `true` | Burn captions into GIF and video. |
 | `mermaidAnimator.export.outputDirectory` | `${fileDirname}` | Where the save dialog starts (`${workspaceFolder}`, relative or absolute paths work too). |
 | `mermaidAnimator.export.svgAdaptiveTheme` | `false` | Also embed a `prefers-color-scheme: dark` palette in animated SVGs. |
-| `mermaidAnimator.export.theme` | `current` | Export theme: `current`, `ivory`, `graphite` or `monochrome` (black on white, light grey headers). |
+| `mermaidAnimator.export.theme` | `current` | Export theme: `current`, `ivory`, `graphite` or `monochrome` (black text and lines, white fills). |
 
 ## Accessibility and languages
 

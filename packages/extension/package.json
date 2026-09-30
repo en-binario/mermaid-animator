@@ -572,13 +572,15 @@
             "auto",
             "ivory",
             "graphite",
-            "highContrast"
+            "highContrast",
+            "monochrome"
           ],
           "enumDescriptions": [
             "%config.theme.mode.auto%",
             "%config.theme.mode.ivory%",
             "%config.theme.mode.graphite%",
-            "%config.theme.mode.highContrast%"
+            "%config.theme.mode.highContrast%",
+            "%config.theme.mode.monochrome%"
           ],
           "default": "auto",
           "markdownDescription": "%config.theme.mode%"

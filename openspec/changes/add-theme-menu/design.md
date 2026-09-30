@@ -60,23 +60,29 @@ because the tokens are shared across renderers and exports. Chrome state gets it
 
 ### D3. Author-colour normaliser for Mermaid-rendered diagrams
 
-A new pure-DOM pass `monochromeColours(svg: SVGSVGElement)` in `packages/webview/src/fallbackMonochrome.ts` runs in
+A new pure-DOM pass `monochromeColours(svg)` in `packages/webview/src/fallbackMonochrome.ts` runs in
 `GenericDiagram.mount` after the drawing is attached and styles are adopted, only when `this.palette === 'monochrome'`.
-It therefore applies to the panel rendering and to the export twin (`renderTwin`) alike. For each element, it reads the
-computed `fill`, `stroke` and `color` and writes inline `style` declarations with `!important`. Inline `!important`
-beats Mermaid's stylesheet `!important` from `classDef`. The rules:
+It therefore applies to the panel rendering and to the export twin (`renderTwin`) alike. For each shape or text element
+(`rect`, `circle`, `ellipse`, `line`, `polyline`, `polygon`, `path`, `use`, `text`, `tspan`, `textPath`), it reads the
+computed `fill` and `stroke` and writes inline `style` declarations with `!important`. Inline `!important` beats
+Mermaid's stylesheet `!important` from `classDef`. Containers (`g`, `svg`) are skipped, because every element computes
+a default black fill. The rules:
 
 | Element | `fill` | `stroke` |
 |---|---|---|
-| `text`, `tspan` | `#000000` | unchanged if `none`, else `#000000` |
-| Inside `<marker>`; solid marks matched by `SOLID_MARKS` (state start, fork/join, commit bullet selectors) | `#000000` | `#000000` unless `none` |
-| Every other element whose computed `fill` is not `none` / `transparent` | `#FFFFFF` | `#000000` unless `none` / `transparent` |
+| `text`, `tspan`, `textPath`; anything inside `<marker>` | `#000000` | `#000000` unless `none` |
+| A non-white fill in a group with no label (the nearest `g.node`, `g.cluster`, … or else the nearest `g` has no non-empty text): state start and end points, fork/join bars, commit bullets, also when a `%%{init}%%` branch colour tints them; white fills there (hollow merge commits, the end-state ring) stay white | `#000000` | `#000000` unless `none` |
+| Every other shape whose computed `fill` is not `none` / `transparent` | `#FFFFFF` | `#000000` unless `none` / `transparent` |
+| HTML inside `foreignObject` | `color: #000000`; a painted `background-color` becomes `#FFFFFF` | — |
+
+The solid-mark rule is structural rather than a selector list. Mermaid 12 draws fork/join bars and the end-state dot as
+rough.js paths inside an unclassed `g`, so no stable selector names them. What they share is that the group carries no
+label, whereas every node an author can style has one. An author `style A fill:#000` therefore sits in a labelled
+group and turns white, as `visual-theme` :: *Author colour matrix* :: R7 requires.
 
 `stroke-width` is left untouched, so `linkStyle … stroke-width:4px` survives (`visual-theme` :: *Author colour matrix*
-:: R3). `SOLID_MARKS` is a selector list next to `NODE_SELECTORS`. It is pinned with `scripts/mermaid-probe.mjs` against
-`stateDiagram-v2` (`[*]`, `<<fork>>`) and `gitGraph` fixtures. `color` is set to `#000000` wherever it is not `inherit`.
-The pass runs once per render, not per frame. `serializeSvg` already resolves computed styles into attributes, so every
-export format inherits the result.
+:: R3). The pass runs once per render, not per frame. `serializeSvg` already resolves computed styles into attributes,
+so every export format inherits the result.
 
 *Alternative considered:* stripping `style` / `classDef` / `linkStyle` lines from the source before rendering. It was
 rejected for three reasons: it changes the layout when an author style sets `stroke-width` or `font-size`; it cannot
@@ -126,11 +132,11 @@ panel. The setting has window scope, so there is no workspace-folder value to co
 
 ### D7. Live switch of Mermaid-rendered diagrams
 
-`controller.applySettings` rebuilds and re-renders the generic drawing. Today `GenericDiagram.render` reads the palette
-from `document.documentElement.dataset.palette`, which a separate `effect` in `main.tsx` sets. To avoid a race where the
-rebuild reads the old palette, the controller passes `resolvePalette(settings.themeMode, themeKind)` to `render`
-explicitly. `render` already takes a `palette` parameter. Leaving Monochrome re-renders from scratch, so the
-normaliser's inline styles disappear with the old DOM.
+`controller.applySettings` rebuilds and re-renders the generic drawing, and `GenericDiagram.render` reads the palette
+from `document.documentElement.dataset.palette`. There is no race with the `effect` in `main.tsx` that sets it: `handle`
+assigns `hostState.value` before it calls `applySettings`, and Preact signals run that effect synchronously on the
+assignment, so the rebuild always reads the new palette. No code change is needed. Leaving Monochrome re-renders from
+scratch, so the normaliser's inline styles disappear with the old DOM.
 
 ## Risks / Trade-offs
 
@@ -138,9 +144,9 @@ normaliser's inline styles disappear with the old DOM.
   fills erase] → The user chose this explicitly. `box` groups keep their black border, pie slices keep their black
   separators and slice labels, and a `rect` region's messages stay visible. The trade-off is noted in the README
   Monochrome description.
-- [The normaliser's `SOLID_MARKS` list misses a Mermaid solid mark, which then turns white and disappears] → Marks
-  inside `<marker>` are covered structurally. The *Only palette colours* test runs over the fixture corpus and a
-  `stateDiagram-v2`/`gitGraph` fixture asserts the marks stay black.
+- [A solid mark that Mermaid draws inside a labelled group turns white, or an author-coloured node with an empty
+  label (an unlabelled group) turns black] → Marks inside `<marker>` are always ink. The *Only palette colours*
+  harness check runs over the fixture corpus, and `stateDiagram-v2`/`gitGraph` fixtures confirm the marks stay black.
 - [`getComputedStyle` over every element of a large Mermaid drawing] → It runs once per render, only in Monochrome, on
   the order of the element count. A 2 000-element flowchart is measured during implementation. If the pass takes more
   than 50 ms, restrict it to elements under the node and edge selectors.
@@ -161,8 +167,3 @@ Order: archive `add-monochrome-export-theme` before archiving this change, becau
 deltas need the synced spec. Then edit the `export-theme` Purpose by hand. It still says "with one light grey" and lists
 the panel palette as a non-goal.
 
-## Open Questions
-
-- The exact Mermaid 12 selectors for state start points, fork/join bars and commit bullets (`SOLID_MARKS`). They are
-  pinned with `scripts/mermaid-probe.mjs` during implementation. The outcome is fixed by `visual-theme` ::
-  *Monochrome element colour matrix* :: R7.

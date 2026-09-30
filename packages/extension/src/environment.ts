@@ -88,6 +88,22 @@ export function affectsWebview(event: vscode.ConfigurationChangeEvent): boolean 
   return event.affectsConfiguration('mermaidAnimator') || event.affectsConfiguration('workbench.reduceMotion');
 }
 
+/**
+ * Writes `mermaidAnimator.theme.mode` for the toolbar theme menu (spec visual-theme): to the
+ * workspace settings when they define the key, otherwise to the user settings. Open panels follow
+ * through the configuration listener. A failed write is reported and changes nothing.
+ */
+export async function setThemeMode(mode: ThemeMode): Promise<void> {
+  const configuration = vscode.workspace.getConfiguration('mermaidAnimator');
+  const target = configuration.inspect('theme.mode')?.workspaceValue !== undefined ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
+  try {
+    await configuration.update('theme.mode', mode, target);
+  } catch (error) {
+    const reason = String((error as Error)?.message ?? error);
+    void vscode.window.showErrorMessage(vscode.l10n.t('Could not change the Mermaid Animator theme: {0}', reason));
+  }
+}
+
 export function config<T>(key: string, fallback: T): T {
   return vscode.workspace.getConfiguration('mermaidAnimator').get<T>(key, fallback);
 }

@@ -100,7 +100,7 @@ describe('GitHub-safe palette', () => {
     expect(v['--halo']).toBe('#FFFFFF');
     expect([v['--i1'], v['--i2'], v['--i3'], v['--ac'], v['--rl'], v['--hl']]).toEqual(Array(6).fill('#000000'));
     expect([v['--sf'], v['--nf']]).toEqual(['#FFFFFF', '#FFFFFF']);
-    expect([v['--sk'], v['--am']]).toEqual(['#EDEDED', '#EDEDED']);
+    expect([v['--sk'], v['--am']]).toEqual(['#FFFFFF', '#FFFFFF']);
     const { svg } = compile({ theme: 'monochrome' });
     expect(svg).not.toMatch(/prefers-color-scheme/);
     expect(svg).toMatch(/--i1:#000000/i);
