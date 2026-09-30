@@ -14,17 +14,18 @@ Monochrome palette (black ink on white) for documents, reports and print.
 ### Requirement: Export theme per format
 The export sheet's *Theme* field SHALL offer *Current*, *Ivory*, *Graphite* and *Monochrome* for every image format
 (SVG, PNG, Copy image, GIF, WebM, MP4, Animated SVG and HTML player), and the export SHALL be drawn in the palette the
-chosen theme names, whatever palette the panel shows. *Current* SHALL keep each format's existing behaviour: the panel's
-active palette for stills, GIF and video, including Monochrome when the panel shows it (see `visual-theme` ::
-*Theme mode selection*); the GitHub-safe palette for Animated SVG; and, labelled *Follow the viewer*, Ivory or Graphite
-following the viewer's colour scheme for the HTML player. The theme SHALL change colours only: frame size, frame count,
-step order and timing SHALL be identical for every theme.
+chosen theme names, whatever diagram theme the panel shows. *Current* SHALL keep each format's existing behaviour: for
+stills, GIF and video, the panel's diagram theme, which is any `mermaidAnimator.theme.diagram` value, including a
+Mermaid theme or Monochrome (see `visual-theme` :: *Diagram theme selection*); the GitHub-safe palette for Animated
+SVG; and, labelled *Follow the viewer*, Ivory or Graphite following the viewer's colour scheme for the HTML player. The
+UI theme (`mermaidAnimator.theme.ui`) SHALL have no effect on any export. The theme SHALL change colours only: frame
+size, frame count, step order and timing SHALL be identical for every theme.
 
 #### Scenario: Export palette matrix
 
 | # | Format | Theme | Palette of the written file |
 | :--- | :--- | :--- | :--- |
-| R1 | SVG, PNG, Copy image, GIF, WebM, MP4 | *Current* | **The panel's active palette (Ivory, Graphite, Ivory high contrast, Graphite high contrast or Monochrome)** |
+| R1 | SVG, PNG, Copy image, GIF, WebM, MP4 | *Current* | **The panel's diagram theme (Ivory, Graphite, Ivory high contrast, Graphite high contrast, Monochrome or a Mermaid theme)** |
 | R2 | SVG, PNG, Copy image, GIF, WebM, MP4 | *Ivory* | **Ivory** |
 | R3 | SVG, PNG, Copy image, GIF, WebM, MP4 | *Graphite* | **Graphite** |
 | R4 | SVG, PNG, Copy image, GIF, WebM, MP4 | *Monochrome* | **Monochrome** |
@@ -48,9 +49,14 @@ step order and timing SHALL be identical for every theme.
 - **THEN** the PNG has a `#FFFFFF` background and the panel still shows the Graphite palette
 
 #### Scenario: Current export from a Monochrome panel
-- **GIVEN** `mermaidAnimator.theme.mode` is `monochrome` and the panel shows a sequence diagram
+- **GIVEN** `mermaidAnimator.theme.diagram` is `monochrome` and the panel shows a sequence diagram
 - **WHEN** the user exports a PNG with theme *Current*
 - **THEN** the PNG has a `#FFFFFF` background and every participant box has the fill `#FFFFFF` and the stroke `#000000`
+
+#### Scenario: Current export in a Mermaid theme
+- **GIVEN** `mermaidAnimator.theme.diagram` is `forest`, `theme.ui` is `graphite`, and the panel shows a sequence diagram
+- **WHEN** the user exports a PNG with theme *Current*
+- **THEN** the PNG has a `#FFFFFF` background and every participant box has the fill `#CDE498`; no Graphite colour appears
 
 ### Requirement: Default export theme setting
 The setting `mermaidAnimator.export.theme` (default `current`) SHALL accept `current`, `ivory`, `graphite` and
