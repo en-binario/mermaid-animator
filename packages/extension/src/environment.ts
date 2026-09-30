@@ -67,6 +67,7 @@ export const WEBVIEW_SETTING_KEYS = [
   'export.background',
   'export.includeCaptions',
   'export.svgAdaptiveTheme',
+  'export.theme',
 ] as const;
 
 export function currentSettings(): WebviewSettings {

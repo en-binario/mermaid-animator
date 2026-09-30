@@ -1102,6 +1102,23 @@
           "default": false,
           "markdownDescription": "%config.export.svgAdaptiveTheme%"
         },
+        "mermaidAnimator.export.theme": {
+          "type": "string",
+          "enum": [
+            "current",
+            "ivory",
+            "graphite",
+            "monochrome"
+          ],
+          "default": "current",
+          "markdownDescription": "%config.export.theme%",
+          "enumDescriptions": [
+            "%config.export.theme.current%",
+            "%config.export.theme.ivory%",
+            "%config.export.theme.graphite%",
+            "%config.export.theme.monochrome%"
+          ]
+        },
         "mermaidAnimator.diagramsView.enabled": {
           "type": "boolean",
           "default": true,

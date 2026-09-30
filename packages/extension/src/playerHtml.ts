@@ -24,7 +24,7 @@ export interface PlayerHtmlParts {
   data: string;
   title: string;
   lang: string;
-  theme: 'light' | 'dark' | 'auto';
+  theme: 'light' | 'dark' | 'auto' | 'monochrome';
 }
 
 export async function assemblePlayerHtml(parts: PlayerHtmlParts): Promise<string> {
@@ -43,7 +43,7 @@ export async function assemblePlayerHtml(parts: PlayerHtmlParts): Promise<string
     "base-uri 'none'",
     "form-action 'none'",
   ].join('; ');
-  const color = parts.theme === 'dark' ? 'dark' : parts.theme === 'light' ? 'light' : 'light dark';
+  const color = parts.theme === 'dark' ? 'dark' : parts.theme === 'light' || parts.theme === 'monochrome' ? 'light' : 'light dark';
   return `<!DOCTYPE html>
 <html lang="${escapeHtml(parts.lang)}">
 <head>

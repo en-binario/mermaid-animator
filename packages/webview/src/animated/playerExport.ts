@@ -4,10 +4,12 @@
  * reveal groups tagged. The host wraps it with the player bundle (`export/player`).
  */
 import type { DiagramController } from '../controller';
+import type { GenericDiagram } from '../fallback';
 import { encodePlayerData, slug, type PlayerData } from '../player/data';
 
-export async function buildPlayerData(controller: DiagramController, theme: PlayerData['theme'], view: PlayerData['view']): Promise<string | undefined> {
-  const material = controller.exportMaterial('sequence');
+/** `twin`: a generic drawing rendered in the player's fixed palette (spec export-theme). */
+export async function buildPlayerData(controller: DiagramController, theme: PlayerData['theme'], view: PlayerData['view'], twin?: GenericDiagram): Promise<string | undefined> {
+  const material = controller.exportMaterial('sequence', twin);
   if (!material) return undefined;
   const steps = controller.stepList.value;
   const chapters = material.chapters.map((c) => ({ title: c.title, firstStep: c.firstStep, slug: slug(c.title) }));
@@ -36,7 +38,7 @@ export async function buildPlayerData(controller: DiagramController, theme: Play
     };
     return encodePlayerData(data);
   }
-  const generic = controller.genericDiagram;
+  const generic = twin ?? controller.genericDiagram;
   const inner = generic?.drawingElement;
   if (!generic || !inner) return undefined;
   const groups = generic.revealGroups();

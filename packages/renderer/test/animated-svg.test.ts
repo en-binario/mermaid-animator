@@ -93,6 +93,18 @@ describe('GitHub-safe palette', () => {
     expect(themeVars('ivory')['--cs']).toBe('none');
     expect(themeVars('graphite')['--cs']).toBe('none');
   });
+
+  it('draws the Monochrome palette in black on white, without casing', () => {
+    const v = themeVars('monochrome');
+    expect(v['--cs']).toBe('none');
+    expect(v['--halo']).toBe('#FFFFFF');
+    expect([v['--i1'], v['--i2'], v['--i3'], v['--ac'], v['--rl'], v['--hl']]).toEqual(Array(6).fill('#000000'));
+    expect([v['--sf'], v['--nf']]).toEqual(['#FFFFFF', '#FFFFFF']);
+    expect([v['--sk'], v['--am']]).toEqual(['#EDEDED', '#EDEDED']);
+    const { svg } = compile({ theme: 'monochrome' });
+    expect(svg).not.toMatch(/prefers-color-scheme/);
+    expect(svg).toMatch(/--i1:#000000/i);
+  });
 });
 
 describe('animated SVG (topology)', () => {

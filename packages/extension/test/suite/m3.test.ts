@@ -104,6 +104,18 @@ describe('M3: share', function () {
     assert.ok(html.includes('Sign-in'));
   });
 
+  it('writes a Monochrome HTML player with a light colour scheme', async () => {
+    const { setSaveTarget } = await api();
+    const panel = await animate('flow.mmd');
+    const target = vscode.Uri.joinPath(exportsDir(), 'sign-in-mono.html');
+    setSaveTarget(() => target);
+    (await api()).setNotificationAnswer(() => undefined);
+    const data = readFileSync(path.join(__dirname, '..', 'test', 'fixtures', 'player-data.json'), 'utf8');
+    await panel.receiveForTest({ v: 1, type: 'export/player', payload: { suggestedName: 'sign-in-mono.html', title: 'Sign-in', data, theme: 'monochrome' } });
+    const html = await read(target);
+    assert.ok(html.includes('<meta name="color-scheme" content="light">'), 'a light colour scheme');
+  });
+
   /** Runs a format command with `{ start: true }` and returns the written file. */
   async function exportWith(command: string, name: string, diagram = 'flow.mmd', args: Record<string, unknown> = {}): Promise<{ uri: vscode.Uri; bytes: Uint8Array }> {
     const { setSaveTarget, setNotificationAnswer } = await api();

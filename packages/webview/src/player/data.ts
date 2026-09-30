@@ -6,6 +6,7 @@
  */
 import type { CompiledSequence, SequenceLayout, Timeline, Topology, TopologyGeometry } from '@mermaid-animator/core';
 import type { DisplayOptions } from '@mermaid-animator/renderer';
+import type { PlayerTheme } from '../animated/theme';
 
 export interface PlayerChapter {
   title: string;
@@ -16,8 +17,8 @@ export interface PlayerChapter {
 export interface PlayerData {
   version: 1;
   title: string;
-  /** `light` = Ivory, `dark` = Graphite, `auto` follows the viewer's colour scheme. */
-  theme: 'light' | 'dark' | 'auto';
+  /** `light` = Ivory, `dark` = Graphite, `monochrome` = Monochrome, `auto` follows the viewer's colour scheme. */
+  theme: PlayerTheme;
   display: DisplayOptions;
   timeline: Timeline;
   /** One line per step (labels for the scrubber and announcements). */

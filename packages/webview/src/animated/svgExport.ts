@@ -1,6 +1,6 @@
 /**
  * Animated SVG exports (spec animated-svg-export): chooses the palette (GitHub-safe by default,
- * Ivory/Graphite for the light/dark pair), embeds fonts, names files, and compiles generic
+ * Ivory/Graphite for the light/dark pair, or the export theme's palette), embeds fonts, names files, and compiles generic
  * diagrams by keyframing Mermaid's own groups with the same reveal the panel uses.
  */
 import { stepEnd } from '@mermaid-animator/core';
@@ -11,6 +11,7 @@ import {
 import type { GenericDiagram } from '../fallback';
 import { exportRange, type RangeKind } from './frames';
 import type { ExportMaterial } from './material';
+import { animatedSvgTheme, type ExportTheme } from './theme';
 
 export interface AnimatedSvgRequest {
   range: RangeKind;
@@ -22,6 +23,14 @@ export interface AnimatedSvgRequest {
   pair: boolean;
   /** `export.svgAdaptiveTheme`: add a `prefers-color-scheme: dark` palette to the single file. */
   adaptive: boolean;
+  /** Export theme (spec export-theme): `current` is GitHub-safe; any other theme writes one file in that palette. */
+  theme: ExportTheme;
+}
+
+/** The pair and the adaptive palette belong to the GitHub-safe export (theme `current`) only. */
+export function svgVariant(request: Pick<AnimatedSvgRequest, 'pair' | 'adaptive' | 'theme'>): { themes: AnimatedSvgTheme[]; pair: boolean; adaptive: boolean } {
+  if (request.theme !== 'current') return { themes: [animatedSvgTheme(request.theme)], pair: false, adaptive: false };
+  return request.pair ? { themes: ['ivory', 'graphite'], pair: true, adaptive: false } : { themes: ['github'], pair: false, adaptive: request.adaptive };
 }
 
 /** File names: `<stem>.anim.svg`, or `<stem>.light.anim.svg` + `<stem>.dark.anim.svg` for a pair. */
@@ -43,7 +52,7 @@ async function fontCss(text: string): Promise<string> {
 export async function compileAnimatedSvg(material: ExportMaterial, request: AnimatedSvgRequest, generic?: GenericDiagram): Promise<{ name: string; text: string }[] | undefined> {
   const range = exportRange(request.range, material.timeline, { rest: material.rest, chapters: material.chapters, ab: material.ab });
   const source = material.source();
-  const themes: AnimatedSvgTheme[] = request.pair ? ['ivory', 'graphite'] : ['github'];
+  const { themes, adaptive } = svgVariant(request);
   const measure = createCanvasMeasure();
   const texts: string[] = [];
   if (source.kind === 'external') {
@@ -55,7 +64,7 @@ export async function compileAnimatedSvg(material: ExportMaterial, request: Anim
     for (const theme of themes) {
       const options: AnimatedSvgOptions = {
         start: range.start, end: range.end, speed: request.speed, hold: request.hold, loop: request.loop,
-        theme, adaptive: !request.pair && request.adaptive, display: material.display, fontCss: fonts, measure,
+        theme, adaptive, display: material.display, fontCss: fonts, measure,
       };
       texts.push(
         source.kind === 'sequence'

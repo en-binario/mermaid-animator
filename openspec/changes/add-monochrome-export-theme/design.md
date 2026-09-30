@@ -36,7 +36,7 @@ to render the diagram again.
 
 ### D1. Monochrome is a regular `PaletteName`, never returned by `resolvePalette`
 
-Add `monochrome` to `PaletteName`, `PALETTES`, `tokens.css` and the `HALO` table in `canvas.ts`. `ThemeMode` and
+Add `monochrome` to `PaletteName`, `PALETTES`, `tokens.css` and the pulse-halo `HALO` table in `canvas.ts`. `ThemeMode` and
 `resolvePalette` stay unchanged, so the panel can never select it. Token values:
 
 | Tokens | Value |
@@ -44,7 +44,8 @@ Add `monochrome` to `PaletteName`, `PALETTES`, `tokens.css` and the `HALO` table
 | `canvas`, `surface`, `note-fill` | `#FFFFFF` |
 | `surface-sunken`, `accent-muted` | `#EDEDED` |
 | `hairline`, `rule`, `note-rule`, `ink-1`, `ink-2`, `ink-3`, `accent`, `brass`, `sage`, `crimson`, `viridian` | `#000000` |
-| Halo (`canvas.ts`) and `--halo` (animated SVG) | `#FFFFFF` |
+| Text knockout `--halo` (animated SVG, from `canvas`) | `#FFFFFF` |
+| Pulse halo (`HALO` in `canvas.ts`, `--ma-pulse-halo`) | `rgba(0, 0, 0, 0.18)` |
 
 With these values, `surface-sunken` provides the grey for `box` groups, fragment keyword tabs, subgraphs and topology
 clusters, and `accent-muted` provides it for activation bars and the current-step highlight. This matches the spec's

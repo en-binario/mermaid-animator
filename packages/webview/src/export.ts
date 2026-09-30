@@ -5,7 +5,7 @@
  */
 import interLatin from '@fontsource-variable/inter/files/inter-latin-wght-normal.woff2';
 import interLatinExt from '@fontsource-variable/inter/files/inter-latin-ext-wght-normal.woff2';
-import { SVG_NS } from '@mermaid-animator/renderer';
+import { PALETTES, SVG_NS, type PaletteName } from '@mermaid-animator/renderer';
 
 export interface Drawing {
   svg: SVGSVGElement;
@@ -15,6 +15,8 @@ export interface Drawing {
 
 export interface ExportOptions {
   background: 'theme' | 'transparent';
+  /** Export palette (spec export-theme); omitted, the panel's active palette. */
+  palette?: PaletteName;
 }
 
 const STYLE_PROPERTIES = [
@@ -53,6 +55,8 @@ export function serializeSvg(drawing: Drawing, options: ExportOptions): string {
   const host = document.createElement('div');
   host.setAttribute('aria-hidden', 'true');
   host.className = 'ma-export-host';
+  // The token block of the export palette redefines the --ma-* colours for this subtree only.
+  if (options.palette) host.dataset.palette = options.palette;
   host.appendChild(svg);
   document.body.appendChild(host);
   try {
@@ -95,7 +99,7 @@ export function serializeSvg(drawing: Drawing, options: ExportOptions): string {
     bg.setAttribute('y', String(-pad));
     bg.setAttribute('width', '100%');
     bg.setAttribute('height', '100%');
-    bg.setAttribute('fill', getComputedStyle(document.documentElement).getPropertyValue('--ma-canvas').trim() || '#FAF8F3');
+    bg.setAttribute('fill', options.palette ? PALETTES[options.palette].canvas : getComputedStyle(document.documentElement).getPropertyValue('--ma-canvas').trim() || '#FAF8F3');
     svg.insertBefore(bg, style.nextSibling);
   }
   return `<?xml version="1.0" encoding="UTF-8"?>\n${new XMLSerializer().serializeToString(svg)}`;

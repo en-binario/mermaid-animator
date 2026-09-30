@@ -5,6 +5,7 @@
 import type { Timeline } from '@mermaid-animator/core';
 import { estimateBytes, exportDimensions, type AnimatedOptions } from './exporter';
 import { exportRange, framePlan, type RangeKind } from './frames';
+import { parseExportTheme } from './theme';
 
 export type SheetFormat = 'svg' | 'png' | 'gif' | 'webm' | 'mp4' | 'animated-svg' | 'html' | 'copy';
 
@@ -18,10 +19,11 @@ export function fieldsFor(format: SheetFormat): ReadonlySet<SheetField> {
   if (ANIMATED.includes(format)) ['range', 'view', 'camera', 'size', 'scale', 'fps', 'speed', 'theme', 'background', 'burnIn', 'hold'].forEach((x) => f.add(x as SheetField));
   if (format === 'gif') ['loop', 'dither', 'transparent'].forEach((x) => f.add(x as SheetField));
   if (format === 'webm' || format === 'mp4') f.add('quality');
-  if (format === 'animated-svg') ['range', 'view', 'speed', 'loop', 'hold', 'pair'].forEach((x) => f.add(x as SheetField));
+  if (format === 'animated-svg') ['range', 'view', 'speed', 'theme', 'loop', 'hold', 'pair'].forEach((x) => f.add(x as SheetField));
   if (format === 'html') ['view', 'theme'].forEach((x) => f.add(x as SheetField));
-  if (format === 'png') ['scale', 'background', 'transparent'].forEach((x) => f.add(x as SheetField));
-  if (format === 'svg') ['background', 'transparent'].forEach((x) => f.add(x as SheetField));
+  if (format === 'png') ['scale', 'theme', 'background', 'transparent'].forEach((x) => f.add(x as SheetField));
+  if (format === 'svg') ['theme', 'background', 'transparent'].forEach((x) => f.add(x as SheetField));
+  if (format === 'copy') f.add('theme');
   return f;
 }
 
@@ -39,7 +41,7 @@ export function autoFps(format: SheetFormat): number {
   return format === 'gif' ? 15 : 30;
 }
 
-export function initialSheet(defaults: { format: string; fps?: number; scale: number; background: string; captions: boolean; names?: boolean }, mp4: boolean): SheetState {
+export function initialSheet(defaults: { format: string; fps?: number; scale: number; background: string; captions: boolean; names?: boolean; theme?: string }, mp4: boolean): SheetState {
   const wanted = defaults.format as SheetFormat;
   const sheetFormat: SheetFormat = wanted === 'mp4' && !mp4 ? 'webm' : wanted;
   return {
@@ -53,7 +55,7 @@ export function initialSheet(defaults: { format: string; fps?: number; scale: nu
     scale: defaults.scale,
     fps: defaults.fps ?? autoFps(sheetFormat),
     speed: 1,
-    theme: 'current',
+    theme: parseExportTheme(defaults.theme),
     background: defaults.background,
     burnIn: { captions: defaults.captions, title: false, counter: false, transport: false, names: defaults.names ?? true },
     loop: 0,

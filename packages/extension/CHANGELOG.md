@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Added — Monochrome export theme.** A formal style for documents and print: black text and lines, white shapes and background, and light grey only for headers and groups (ER entity headers, subgraphs, sequence boxes and fragment tabs, activation bars). The export sheet's *Theme* (*Current*, *Ivory*, *Graphite*, *Monochrome*) now applies to every format, including SVG, PNG, Copy image, animated SVG and the HTML player. `mermaidAnimator.export.theme` (default `current`) sets the sheet's initial theme and the theme of *Export as SVG*, *Export as PNG* and *Copy Image*.
+- **Fixed:** the export theme (*Ivory* / *Graphite*) now applies to Mermaid-rendered diagrams (flowcharts, ER, pie and other types) in every export; before, they kept the panel's colours.
 - **Added — overview at step 0.** Before the first step the panel shows the complete diagram, framed to fit; the first step clears it and the step-by-step reveal starts. Applies to sequence, topology and Mermaid-rendered diagrams, and to GIF, video, animated SVG and HTML player exports. Set `mermaidAnimator.playback.initialOverview` to `false` (or `%% @animator overview=false`) for the previous behaviour.
 - **Added — bold and italic labels.** `<b>`, `<strong>`, `<i>` and `<em>` in labels now render as formatting instead of literal tags, in every diagram type and export; tag-only lines no longer appear in flowchart nodes.
 - **Added — settings button.** A gear button in the panel toolbar and the command *Mermaid Animator: Open Settings* (also in the Mermaid Diagrams view) open the Settings editor filtered to this extension.

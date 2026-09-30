@@ -3,7 +3,8 @@
  * The CSS in `tokens.css` must match this table; a unit test enforces it.
  */
 
-export type PaletteName = 'ivory' | 'graphite' | 'ivory-hc' | 'graphite-hc';
+/** `monochrome` is an export-only palette (spec export-theme): `resolvePalette` never returns it. */
+export type PaletteName = 'ivory' | 'graphite' | 'ivory-hc' | 'graphite-hc' | 'monochrome';
 export type ThemeKind = 'light' | 'dark' | 'highContrast' | 'highContrastLight';
 export type ThemeMode = 'auto' | 'ivory' | 'graphite' | 'highContrast';
 
@@ -36,7 +37,16 @@ export const PALETTES: Record<PaletteName, Record<ColorToken, string>> = {
     'ink-1': '#FFFFFF', 'ink-2': '#E6E6E6', 'ink-3': '#C8C8C8', accent: '#F38518', 'accent-muted': '#2B1A05',
     brass: '#FFD166', sage: '#9CDCA0', 'note-fill': '#0F0F0F', 'note-rule': '#6FC3DF', crimson: '#F48771', viridian: '#89D185',
   },
+  // Black ink on white; one light grey for header and grouping fills (sunken surfaces, activations).
+  monochrome: {
+    canvas: '#FFFFFF', surface: '#FFFFFF', 'surface-sunken': '#EDEDED', hairline: '#000000', rule: '#000000',
+    'ink-1': '#000000', 'ink-2': '#000000', 'ink-3': '#000000', accent: '#000000', 'accent-muted': '#EDEDED',
+    brass: '#000000', sage: '#000000', 'note-fill': '#FFFFFF', 'note-rule': '#000000', crimson: '#000000', viridian: '#000000',
+  },
 };
+
+/** Pie slice fills of the Monochrome palette, in slice order and repeating. */
+export const MONOCHROME_RAMP: readonly string[] = ['#FFFFFF', '#EDEDED', '#CCCCCC', '#A6A6A6'];
 
 export function isHighContrast(palette: PaletteName): boolean {
   return palette === 'ivory-hc' || palette === 'graphite-hc';

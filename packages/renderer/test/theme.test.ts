@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { contrastRatio, PALETTES, resolvePalette, TEXT_TOKENS, type PaletteName, type ThemeKind, type ThemeMode } from '../src/theme';
+import { contrastRatio, MONOCHROME_RAMP, PALETTES, resolvePalette, TEXT_TOKENS, type PaletteName, type ThemeKind, type ThemeMode } from '../src/theme';
 
 const css = readFileSync(new URL('../src/tokens.css', import.meta.url), 'utf8');
 
@@ -33,6 +33,17 @@ describe('colour tokens', () => {
   });
 });
 
+describe('Monochrome palette', () => {
+  it.each(['#FFFFFF', '#EDEDED', '#CCCCCC', '#A6A6A6'])('black text reaches 4.5:1 on %s', (fill) => {
+    expect(contrastRatio('#000000', fill)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('uses only black, white and the header grey', () => {
+    expect(new Set(Object.values(PALETTES.monochrome))).toEqual(new Set(['#000000', '#FFFFFF', '#EDEDED']));
+    expect(MONOCHROME_RAMP).toEqual(['#FFFFFF', '#EDEDED', '#CCCCCC', '#A6A6A6']);
+  });
+});
+
 describe('resolvePalette', () => {
   const cases: [ThemeMode, ThemeKind, PaletteName][] = [
     ['auto', 'light', 'ivory'],
@@ -50,5 +61,11 @@ describe('resolvePalette', () => {
   ];
   it.each(cases)('mode %s with %s theme → %s', (mode, kind, expected) => {
     expect(resolvePalette(mode, kind)).toBe(expected);
+  });
+
+  it('never selects the export-only Monochrome palette for the panel', () => {
+    const modes: ThemeMode[] = ['auto', 'ivory', 'graphite', 'highContrast'];
+    const kinds: ThemeKind[] = ['light', 'dark', 'highContrast', 'highContrastLight'];
+    for (const m of modes) for (const k of kinds) expect(resolvePalette(m, k)).not.toBe('monochrome');
   });
 });

@@ -141,8 +141,8 @@ export interface PlayerExportPayload {
   title: string;
   /** JSON document read by the player bundle. */
   data: string;
-  /** `light`, `dark` or `auto` (follow the viewer's colour scheme). */
-  theme: 'light' | 'dark' | 'auto';
+  /** `light`, `dark`, `auto` (follow the viewer's colour scheme) or `monochrome` (spec export-theme). */
+  theme: 'light' | 'dark' | 'auto' | 'monochrome';
 }
 
 export type WebviewMessage =
@@ -250,7 +250,7 @@ const webviewPayloads: Record<WebviewMessageType, Guard> = {
   'export/progress': shape({ fraction: num, phase: str }),
   'export/cancelled': record,
   'settings/open': record,
-  'export/player': shape({ suggestedName: str, title: str, data: str, theme: oneOf('light', 'dark', 'auto') }),
+  'export/player': shape({ suggestedName: str, title: str, data: str, theme: oneOf('light', 'dark', 'auto', 'monochrome') }),
   'sidecar/write': shape({ patch: sidecarEntry }),
   'sidecar/unresolved': shape({ entries: arrayOf(shape({ section: oneOf('captions', 'chapters'), key: str })) }),
   'clipboard/fallback': shape({ reason: str }),

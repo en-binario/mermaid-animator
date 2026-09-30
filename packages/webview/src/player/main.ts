@@ -14,6 +14,7 @@ import { prepareScene, prepareTopologyScene, sceneAt, SequenceSvgRenderer, SVG_N
 import { groupReveal } from '../fallbackReveal';
 import { Player, SPEEDS } from '../player';
 import { decodePlayerData, stepFromHash, type PlayerData } from './data';
+import { playerPalette } from '../animated/theme';
 
 function base64Bytes(url: string): ArrayBuffer {
   const bin = atob(url.slice(url.indexOf(',') + 1));
@@ -101,10 +102,11 @@ async function start(): Promise<void> {
   const root = document.getElementById('ma-player') ?? document.body;
   const media = window.matchMedia('(prefers-color-scheme: dark)');
   const applyTheme = () => {
-    document.documentElement.dataset.palette = data.theme === 'dark' || (data.theme === 'auto' && media.matches) ? 'graphite' : 'ivory';
+    document.documentElement.dataset.palette = playerPalette(data.theme, media.matches);
   };
   applyTheme();
-  media.addEventListener('change', applyTheme);
+  // Only `auto` follows the viewer's colour scheme (spec export-theme).
+  if (data.theme === 'auto') media.addEventListener('change', applyTheme);
   if (data.generic) {
     const extra = (data as PlayerData & { genericCss?: string }).genericCss;
     if (extra) {

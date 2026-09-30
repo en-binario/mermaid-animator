@@ -11,10 +11,12 @@ import { CaptionStrip, ChoiceChips } from './Captions';
 import { Inspector, type InspectorSection } from './Inspector';
 import { SearchBox } from './SearchBox';
 import { ExportSheet, type SheetActions } from './ExportSheet';
+import type { ExportTheme } from './animated/theme';
 import { Transcript } from './Transcript';
 import { BlankScreen, ChapterCard, Hairline, LaserPointer, TitleCard } from './Presentation';
 
-export type ExportAction = { kind: 'svg' } | { kind: 'png'; scale: number; transparent: boolean } | { kind: 'copy' };
+/** `theme` omitted: `export.theme` (spec export-theme). */
+export type ExportAction = ({ kind: 'svg' } | { kind: 'png'; scale: number; transparent: boolean } | { kind: 'copy' }) & { theme?: ExportTheme };
 
 interface AppProps {
   state: HostState;

@@ -5,7 +5,7 @@
 import type { Point, Rect } from '@mermaid-animator/core';
 import { buildTimeline, positionAt, type Step, type Timeline, type TimelineOptions } from '@mermaid-animator/core';
 import type { WebviewSettings } from '@mermaid-animator/protocol';
-import { SVG_NS } from '@mermaid-animator/renderer';
+import { MONOCHROME_RAMP, PALETTES, SVG_NS, type PaletteName } from '@mermaid-animator/renderer';
 import { GENERIC_TRANSITION_MS, groupReveal } from './fallbackReveal';
 import { markFormatting, stripMarkers, styleMarkers } from './fallbackMarkup';
 import { orderGroups, stepBoundsOf, type GroupInfo } from './fallbackOrder';
@@ -24,64 +24,99 @@ function extractCss(svgText: string): string {
 
 let renderCount = 0;
 
+/** Mermaid's configuration is global, so every initialize + render pair runs in turn. */
+let queue: Promise<unknown> = Promise.resolve();
+function serially<T>(task: () => Promise<T>): Promise<T> {
+  const run = queue.then(task, task);
+  queue = run.catch(() => undefined);
+  return run;
+}
+
 function loadMermaid(): Promise<MermaidApi> {
   mermaidPromise ??= import('mermaid').then((m) => m.default);
   return mermaidPromise;
 }
 
-const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(`--ma-${name}`).trim();
+/** The palette the panel shows (its `data-palette`). */
+function activePalette(): PaletteName {
+  return (document.documentElement.dataset.palette ?? 'ivory') as PaletteName;
+}
 
-/** Mermaid `base` theme variables derived from the active Ink & Ivory palette. */
-function themeVariables(): Record<string, string> {
-  return {
+/**
+ * Mermaid `base` theme variables derived from an Ink & Ivory palette. Monochrome (spec export-theme)
+ * adds its own rules: a grey ramp for pie slices, black branches, and for ER diagrams a grey entity
+ * header — Mermaid 12 fills the entity box (the name row) with `mainBkg` and the attribute rows
+ * with `rowOdd` / `rowEven` (erBox shape).
+ */
+export function themeVariables(palette: PaletteName, source = ''): Record<string, string> {
+  const c = PALETTES[palette];
+  const vars: Record<string, string> = {
     fontFamily: '"Inter Variable", system-ui, sans-serif',
     fontSize: '13px',
-    background: token('canvas'),
-    primaryColor: token('surface'),
-    primaryBorderColor: token('rule'),
-    primaryTextColor: token('ink-1'),
-    secondaryColor: token('surface-sunken'),
-    secondaryBorderColor: token('rule'),
-    secondaryTextColor: token('ink-1'),
-    tertiaryColor: token('accent-muted'),
-    tertiaryBorderColor: token('rule'),
-    tertiaryTextColor: token('ink-1'),
-    lineColor: token('ink-2'),
-    textColor: token('ink-1'),
-    mainBkg: token('surface'),
-    nodeBorder: token('rule'),
-    clusterBkg: token('surface-sunken'),
-    clusterBorder: token('hairline'),
-    edgeLabelBackground: token('canvas'),
-    noteBkgColor: token('note-fill'),
-    noteBorderColor: token('note-rule'),
-    noteTextColor: token('ink-1'),
-    actorBkg: token('surface'),
-    actorBorder: token('rule'),
-    actorTextColor: token('ink-1'),
-    signalColor: token('ink-2'),
-    signalTextColor: token('ink-1'),
-    labelBoxBkgColor: token('surface-sunken'),
-    labelBoxBorderColor: token('hairline'),
-    labelTextColor: token('ink-1'),
-    loopTextColor: token('ink-2'),
-    activationBkgColor: token('accent-muted'),
-    activationBorderColor: token('accent'),
-    git0: token('accent'),
-    git1: token('brass'),
-    git2: token('sage'),
-    git3: token('viridian'),
-    pie1: token('accent'),
-    pie2: token('brass'),
-    pie3: token('sage'),
-    pie4: token('ink-3'),
-    pieSectionTextColor: token('surface'),
-    pieTitleTextColor: token('ink-1'),
-    pieLegendTextColor: token('ink-1'),
-    pieStrokeColor: token('canvas'),
+    background: c.canvas,
+    primaryColor: c.surface,
+    primaryBorderColor: c.rule,
+    primaryTextColor: c['ink-1'],
+    secondaryColor: c['surface-sunken'],
+    secondaryBorderColor: c.rule,
+    secondaryTextColor: c['ink-1'],
+    tertiaryColor: c['accent-muted'],
+    tertiaryBorderColor: c.rule,
+    tertiaryTextColor: c['ink-1'],
+    lineColor: c['ink-2'],
+    textColor: c['ink-1'],
+    mainBkg: c.surface,
+    nodeBorder: c.rule,
+    clusterBkg: c['surface-sunken'],
+    clusterBorder: c.hairline,
+    edgeLabelBackground: c.canvas,
+    noteBkgColor: c['note-fill'],
+    noteBorderColor: c['note-rule'],
+    noteTextColor: c['ink-1'],
+    actorBkg: c.surface,
+    actorBorder: c.rule,
+    actorTextColor: c['ink-1'],
+    signalColor: c['ink-2'],
+    signalTextColor: c['ink-1'],
+    labelBoxBkgColor: c['surface-sunken'],
+    labelBoxBorderColor: c.hairline,
+    labelTextColor: c['ink-1'],
+    loopTextColor: c['ink-2'],
+    activationBkgColor: c['accent-muted'],
+    activationBorderColor: c.accent,
+    git0: c.accent,
+    git1: c.brass,
+    git2: c.sage,
+    git3: c.viridian,
+    pie1: c.accent,
+    pie2: c.brass,
+    pie3: c.sage,
+    pie4: c['ink-3'],
+    pieSectionTextColor: c.surface,
+    pieTitleTextColor: c['ink-1'],
+    pieLegendTextColor: c['ink-1'],
+    pieStrokeColor: c.canvas,
     pieStrokeWidth: '1.5px',
-    pieOuterStrokeColor: token('rule'),
+    pieOuterStrokeColor: c.rule,
     pieOuterStrokeWidth: '1px',
+  };
+  if (palette !== 'monochrome') return vars;
+  const ink = c['ink-1'];
+  const ramp = Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`pie${i + 1}`, MONOCHROME_RAMP[i % MONOCHROME_RAMP.length]!]));
+  const git = Object.fromEntries(Array.from({ length: 8 }, (_, i) => [`git${i}`, ink]));
+  const er: Record<string, string> = /^\s*erDiagram\b/m.test(source)
+    ? { mainBkg: c['surface-sunken'], primaryColor: c['surface-sunken'], rowOdd: c.surface, rowEven: c.surface, attributeBackgroundColorOdd: c.surface, attributeBackgroundColorEven: c.surface }
+    : {};
+  return {
+    ...vars,
+    ...ramp,
+    ...git,
+    tertiaryColor: c.surface,
+    edgeLabelBackground: c.surface,
+    pieSectionTextColor: ink,
+    pieStrokeColor: ink,
+    pieOuterStrokeColor: ink,
+    ...er,
   };
 }
 
@@ -128,6 +163,12 @@ export class GenericDiagram {
   private sheet: CSSStyleSheet | undefined;
   timeline: Timeline = { starts: [], transitions: [], settles: [], dwells: [], holds: [], duration: 0 };
   bounds: Rect = { x: 0, y: 0, w: 100, h: 100 };
+  /** The palette this drawing was rendered in. */
+  palette: PaletteName = 'ivory';
+  /** The last render's inputs, for export twins. */
+  private last: { source: string; settings: WebviewSettings; timing: TimelineOptions } | undefined;
+  /** The off-screen <svg> an export twin owns. */
+  private root: SVGSVGElement | undefined;
 
   constructor(parent: SVGGElement) {
     this.holder = document.createElementNS(SVG_NS, 'g');
@@ -138,8 +179,10 @@ export class GenericDiagram {
   static async canRender(source: string): Promise<boolean> {
     try {
       const mermaid = await loadMermaid();
-      mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
-      await mermaid.parse(source);
+      await serially(async () => {
+        mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
+        await mermaid.parse(source);
+      });
       return true;
     } catch {
       return false;
@@ -154,44 +197,86 @@ export class GenericDiagram {
     return this.groups.map((g) => g.label);
   }
 
-  async render(source: string, _settings: WebviewSettings, timing: TimelineOptions = {}): Promise<{ ok: true } | { ok: false; error: string }> {
+  async render(source: string, settings: WebviewSettings, timing: TimelineOptions = {}, palette: PaletteName = activePalette()): Promise<{ ok: true } | { ok: false; error: string }> {
+    this.last = { source, settings, timing };
+    this.palette = palette;
     let svgText: string;
     try {
-      const mermaid = await loadMermaid();
-      mermaid.initialize({
-        startOnLoad: false,
-        securityLevel: 'strict',
-        theme: 'base',
-        themeVariables: themeVariables(),
-        fontFamily: '"Inter Variable", system-ui, sans-serif',
-        // SVG text labels are measured without depending on CSS (HTML labels are not).
-        htmlLabels: false,
-        flowchart: { htmlLabels: false },
-      });
-      // Mermaid's own <style> element is blocked by our CSP while it measures the diagram. Render once
-      // to obtain the CSS, adopt it as a constructed stylesheet, then render again with the same id so
-      // the measuring pass sees the real styles.
-      const id = `ma-generic-${++renderCount}`;
-      const renderTwice = async (text: string) => {
-        const first = (await mermaid.render(id, text)).svg;
-        this.adoptStyles(extractCss(first));
-        return (await mermaid.render(id, text)).svg;
-      };
-      // Inline formatting (spec label-formatting): render with word markers in place of the tags,
-      // or, if Mermaid rejects them, the original source (the tags then show as text).
-      const marked = markFormatting(source);
-      if (marked === source) svgText = await renderTwice(source);
-      else {
-        try {
-          svgText = await renderTwice(marked);
-        } catch (error) {
-          console.debug('Mermaid Animator: formatting markers rejected, rendering the original source', error);
-          svgText = await renderTwice(source);
-        }
-      }
+      // `initialize` is global: renders (panel and export twins) run one at a time.
+      svgText = await serially(() => this.mermaidSvg(source, palette));
     } catch (error) {
       return { ok: false, error: String((error as Error)?.message ?? error).split('\n').slice(0, 3).join(' ') };
     }
+    return this.mount(svgText, timing);
+  }
+
+  /**
+   * An off-screen copy of this drawing rendered in `palette`, for exports in another theme (spec
+   * export-theme). It has its own render id and stylesheet; destroy it when the export ends.
+   */
+  async renderTwin(palette: PaletteName): Promise<GenericDiagram> {
+    if (!this.last) throw new Error('Nothing is rendered.');
+    const root = document.createElementNS(SVG_NS, 'svg');
+    root.setAttribute('aria-hidden', 'true');
+    // Off-screen but laid out: group discovery needs real geometry.
+    Object.assign(root.style, { position: 'fixed', left: '-100000px', top: '0', overflow: 'visible' });
+    root.setAttribute('width', String(Math.ceil(this.bounds.w)));
+    root.setAttribute('height', String(Math.ceil(this.bounds.h)));
+    const g = document.createElementNS(SVG_NS, 'g');
+    root.appendChild(g);
+    document.body.appendChild(root);
+    const twin = new GenericDiagram(g);
+    twin.root = root;
+    const result = await twin.render(this.last.source, this.last.settings, this.last.timing, palette);
+    if (!result.ok) {
+      twin.destroy();
+      throw new Error(result.error);
+    }
+    if (twin.stepCount !== this.stepCount) {
+      twin.destroy();
+      throw new Error(`The ${palette} rendering has ${twin.stepCount} steps instead of ${this.stepCount}.`);
+    }
+    return twin;
+  }
+
+  private async mermaidSvg(source: string, palette: PaletteName): Promise<string> {
+    let svgText: string;
+    const mermaid = await loadMermaid();
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      theme: 'base',
+      themeVariables: themeVariables(palette, source),
+      fontFamily: '"Inter Variable", system-ui, sans-serif',
+      // SVG text labels are measured without depending on CSS (HTML labels are not).
+      htmlLabels: false,
+      flowchart: { htmlLabels: false },
+    });
+    // Mermaid's own <style> element is blocked by our CSP while it measures the diagram. Render once
+    // to obtain the CSS, adopt it as a constructed stylesheet, then render again with the same id so
+    // the measuring pass sees the real styles.
+    const id = `ma-generic-${++renderCount}`;
+    const renderTwice = async (text: string) => {
+      const first = (await mermaid.render(id, text)).svg;
+      this.adoptStyles(extractCss(first));
+      return (await mermaid.render(id, text)).svg;
+    };
+    // Inline formatting (spec label-formatting): render with word markers in place of the tags,
+    // or, if Mermaid rejects them, the original source (the tags then show as text).
+    const marked = markFormatting(source);
+    if (marked === source) svgText = await renderTwice(source);
+    else {
+      try {
+        svgText = await renderTwice(marked);
+      } catch (error) {
+        console.debug('Mermaid Animator: formatting markers rejected, rendering the original source', error);
+        svgText = await renderTwice(source);
+      }
+    }
+    return svgText;
+  }
+
+  private mount(svgText: string, timing: TimelineOptions): { ok: true } {
     const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
     const svg = doc.documentElement as unknown as SVGSVGElement;
     // Mermaid's <style> elements would be blocked by the CSP: apply them as a constructed stylesheet.
@@ -400,6 +485,7 @@ export class GenericDiagram {
 
   destroy(): void {
     this.holder.remove();
+    this.root?.remove();
     if (this.sheet) document.adoptedStyleSheets = document.adoptedStyleSheets.filter((s) => s !== this.sheet);
   }
 }

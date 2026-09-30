@@ -483,6 +483,23 @@
               "type": "boolean",
               "default": false,
               "markdownDescription": "Also embed a `prefers-color-scheme: dark` palette in animated SVGs. Off by default because GitHub does not apply the viewer's theme to images predictably; use *Export for GitHub (light + dark pair)* instead."
+            },
+            "export.theme": {
+              "type": "string",
+              "enum": [
+                "current",
+                "ivory",
+                "graphite",
+                "monochrome"
+              ],
+              "default": "current",
+              "markdownDescription": "Colour theme preselected in the export sheet, and used by *Export as SVG*, *Export as PNG* and *Copy Image*. `monochrome` is a formal style for documents and print: black text and lines, white shapes and background, light grey headers.",
+              "enumDescriptions": [
+                "The panel's palette (animated SVG: GitHub-safe; HTML player: follow the viewer).",
+                "The Ivory (light) palette.",
+                "The Graphite (dark) palette.",
+                "Monochrome: black on white, light grey headers."
+              ]
             }
           },
           "additionalProperties": true

@@ -7,6 +7,7 @@ import { resolvePalette } from '@mermaid-animator/renderer';
 import { PROTOCOL_VERSION, WEBVIEW_STRINGS, webviewMessage, type CommandAction, type ExportFormat, type HostMessage } from '@mermaid-animator/protocol';
 import { buildJob, runJob, type AnimatedOptions, type ExportHandle } from './animated/exporter';
 import type { AnimatedSvgRequest } from './animated/svgExport';
+import { exportPalette, playerPalette, type PlayerTheme } from './animated/theme';
 import { App, type ExportAction, type UiState } from './App';
 import type { InspectorSection } from './Inspector';
 import { DiagramController } from './controller';
@@ -173,8 +174,19 @@ let animatedHandle: ExportHandle | undefined;
 async function runAnimated(options: AnimatedOptions): Promise<{ bytes: Uint8Array; mime: string; frames: number } | undefined> {
   const c = controller.value;
   if (!c || animatedHandle) return undefined;
-  const material = c.exportMaterial(options.view);
-  if (!material) return undefined;
+  let twin: Awaited<ReturnType<DiagramController['exportTwin']>>;
+  try {
+    twin = await c.exportTwin(exportPalette(options.theme, c.activePalette));
+  } catch (error) {
+    toast(t('export.failed', String((error as Error)?.message ?? error)));
+    host.log('error', `Animated export failed: ${String(error)}`);
+    return undefined;
+  }
+  const material = c.exportMaterial(options.view, twin);
+  if (!material) {
+    twin?.destroy();
+    return undefined;
+  }
   const { EMBEDDED_FONTS, dataUrlBytes } = await import('./export');
   const fonts = EMBEDDED_FONTS.map((f) => ({ family: f.family, data: dataUrlBytes(f.url), unicodeRange: f.unicodeRange }));
   const job = buildJob(material, options, fonts);
@@ -205,6 +217,7 @@ async function runAnimated(options: AnimatedOptions): Promise<{ bytes: Uint8Arra
     host.log('error', `Animated export failed: ${String(error)}`);
     return undefined;
   } finally {
+    twin?.destroy();
     animatedHandle = undefined;
     animatedProgress.value = undefined;
   }
@@ -214,19 +227,23 @@ async function runAnimated(options: AnimatedOptions): Promise<{ bytes: Uint8Arra
 async function runAnimatedSvg(request: AnimatedSvgRequest): Promise<number[] | undefined> {
   const c = controller.value;
   if (!c) return undefined;
-  const material = c.exportMaterial(request.view);
-  if (!material) return undefined;
+  let twin: Awaited<ReturnType<DiagramController['exportTwin']>>;
   try {
-    const { compileAnimatedSvg, animatedSvgNames } = await import('./animated/svgExport');
-    const files = await compileAnimatedSvg(material, request, c.genericDiagram);
+    const { compileAnimatedSvg, animatedSvgNames, svgVariant } = await import('./animated/svgExport');
+    // A fixed theme draws a generic diagram from a rendering in that palette (spec export-theme).
+    if (request.theme !== 'current') twin = await c.exportTwin(exportPalette(request.theme, c.activePalette));
+    const material = c.exportMaterial(request.view, twin);
+    if (!material) return undefined;
+    const files = await compileAnimatedSvg(material, request, twin ?? c.genericDiagram);
     if (!files) return undefined;
-    const names = animatedSvgNames(fileStem(), request.pair);
+    const pair = svgVariant(request).pair;
+    const names = animatedSvgNames(fileStem(), pair);
     const encoder = new TextEncoder();
     const sizes: number[] = [];
     files.forEach((file, i) => {
       const bytes = encoder.encode(file.text);
       sizes.push(bytes.length);
-      sendFile('svg', names[i]!, bytes, request.pair ? (i === 0 ? 'light' : 'dark') : undefined);
+      sendFile('svg', names[i]!, bytes, pair ? (i === 0 ? 'light' : 'dark') : undefined);
     });
     c.requestFrame();
     return sizes;
@@ -234,18 +251,31 @@ async function runAnimatedSvg(request: AnimatedSvgRequest): Promise<number[] | u
     toast(t('export.failed', String((error as Error)?.message ?? error)));
     host.log('error', `Animated SVG export failed: ${String(error)}`);
     return undefined;
+  } finally {
+    twin?.destroy();
   }
 }
 
 /** HTML player (spec html-player): the webview builds the data; the host inlines the player bundle. */
-async function runPlayer(theme: 'light' | 'dark' | 'auto', view: 'sequence' | 'topology' | 'split'): Promise<string | undefined> {
+async function runPlayer(theme: PlayerTheme, view: 'sequence' | 'topology' | 'split'): Promise<string | undefined> {
   const c = controller.value;
   if (!c) return undefined;
-  const { buildPlayerData } = await import('./animated/playerExport');
-  const data = await buildPlayerData(c, theme, view);
-  if (!data) return undefined;
-  host.post(webviewMessage('export/player', { suggestedName: suggestedName('html'), title: c.title.value || fileStem(), data, theme }));
-  return data;
+  let twin: Awaited<ReturnType<DiagramController['exportTwin']>>;
+  try {
+    const { buildPlayerData } = await import('./animated/playerExport');
+    // A fixed theme embeds a generic drawing rendered in that palette; `auto` keeps the panel's.
+    if (theme !== 'auto') twin = await c.exportTwin(playerPalette(theme, false));
+    const data = await buildPlayerData(c, theme, view, twin);
+    if (!data) return undefined;
+    host.post(webviewMessage('export/player', { suggestedName: suggestedName('html'), title: c.title.value || fileStem(), data, theme }));
+    return data;
+  } catch (error) {
+    toast(t('export.failed', String((error as Error)?.message ?? error)));
+    host.log('error', `Player export failed: ${String(error)}`);
+    return undefined;
+  } finally {
+    twin?.destroy();
+  }
 }
 
 function cancelAnimated(): void {
@@ -255,13 +285,17 @@ function cancelAnimated(): void {
 async function runExport(action: ExportAction): Promise<void> {
   const c = controller.value;
   if (!c) return;
+  let twin: Awaited<ReturnType<DiagramController['exportTwin']>>;
   try {
     const { serializeSvg, rasterize, exportSize, copyPng } = await import('./export');
-    const drawing = c.exportDrawing(1.08);
+    // The sheet's theme, or `export.theme` for the direct commands (spec export-theme).
+    const palette = exportPalette(action.theme ?? c.effective.value.exportDefaults.theme, c.activePalette);
+    twin = await c.exportTwin(palette);
+    const drawing = c.exportDrawing(1.08, twin);
     if (!drawing) return;
     const size = exportSize(drawing);
     const transparent = action.kind === 'png' && action.transparent;
-    const svg = serializeSvg(drawing, { background: transparent ? 'transparent' : 'theme' });
+    const svg = serializeSvg(drawing, { background: transparent ? 'transparent' : 'theme', palette });
     if (action.kind === 'svg') {
       sendFile('svg', suggestedName('svg'), new TextEncoder().encode(svg));
     } else if (action.kind === 'png') {
@@ -278,6 +312,8 @@ async function runExport(action: ExportAction): Promise<void> {
   } catch (error) {
     toast(t('export.failed', String((error as Error)?.message ?? error)));
     host.log('error', `Export failed: ${String(error)}`);
+  } finally {
+    twin?.destroy();
   }
 }
 
@@ -534,7 +570,7 @@ function AppRoot() {
         animated: (o) => runAnimated(o),
         animatedSvg: (r) => runAnimatedSvg(r),
         player: (theme, view) => runPlayer(theme, view),
-        still: (kind, o) => runExport(kind === 'png' ? { kind: 'png', scale: o.scale, transparent: o.transparent } : kind === 'svg' ? { kind: 'svg' } : { kind: 'copy' }),
+        still: (kind, o) => runExport(kind === 'png' ? { kind: 'png', scale: o.scale, transparent: o.transparent, theme: o.theme } : kind === 'svg' ? { kind: 'svg', theme: o.theme } : { kind: 'copy', theme: o.theme }),
         cancel: () => cancelAnimated(),
         progress: animatedProgress.value,
       }}

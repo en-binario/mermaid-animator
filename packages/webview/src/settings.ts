@@ -2,6 +2,7 @@ import { valueText, type AnnotationValue } from '@mermaid-animator/core';
 import type { WebviewSettings } from '@mermaid-animator/protocol';
 import type { DisplayOptions } from '@mermaid-animator/renderer';
 import type { CameraMode } from './camera';
+import { parseExportTheme, type ExportTheme } from './animated/theme';
 
 /** Effective animator settings for one diagram (spec §11.8: settings < `@animator`). */
 export interface AnimatorSettings {
@@ -47,6 +48,8 @@ export interface AnimatorSettings {
     background: 'theme' | 'transparent' | string;
     captions: boolean;
     svgAdaptiveTheme: boolean;
+    /** `export.theme` (spec export-theme): the sheet's initial theme and the direct commands' theme. */
+    theme: ExportTheme;
   };
 }
 
@@ -82,7 +85,7 @@ export const DEFAULT_SETTINGS: AnimatorSettings = {
   showMinimap: 'auto',
   participantNames: 'auto',
   arrowEndNames: 'auto',
-  exportDefaults: { format: 'animated-svg', scale: 2, background: 'theme', captions: true, svgAdaptiveTheme: false },
+  exportDefaults: { format: 'animated-svg', scale: 2, background: 'theme', captions: true, svgAdaptiveTheme: false, theme: 'current' },
 };
 
 const pick = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T => (typeof value === 'string' && (allowed as readonly string[]).includes(value) ? (value as T) : fallback);
@@ -148,6 +151,7 @@ export function resolveSettings(host: WebviewSettings, annotations: Record<strin
       background: typeof host['export.background'] === 'string' && (/^(theme|transparent)$/.test(host['export.background'] as string) || /^#[0-9a-f]{6}$/i.test(host['export.background'] as string)) ? (host['export.background'] as string) : d.exportDefaults.background,
       captions: bool(host['export.includeCaptions'], d.exportDefaults.captions),
       svgAdaptiveTheme: bool(host['export.svgAdaptiveTheme'], d.exportDefaults.svgAdaptiveTheme),
+      theme: parseExportTheme(host['export.theme']),
     },
   };
 }

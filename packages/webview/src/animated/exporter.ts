@@ -8,6 +8,7 @@ import { exportWorkerUrl } from '../workers/embedded';
 import { cameraAt, exportRange, fitFrame, framePlan, frameTime, type ExportCamera, type RangeKind } from './frames';
 import type { AnimatedFormat, BurnIn, ExportJob, SceneSource, WorkerRequest, WorkerResponse } from './job';
 import type { ExportMaterial } from './material';
+import { exportPalette, type ExportTheme } from './theme';
 
 export type SizePreset = 'hd' | 'fhd' | 'square' | 'portrait' | 'fit' | 'custom';
 export type CameraChoice = 'fit' | 'cinematic' | 'current';
@@ -22,7 +23,7 @@ export interface AnimatedOptions {
   scale: number;
   fps: number;
   speed: number;
-  theme: 'current' | 'ivory' | 'graphite';
+  theme: ExportTheme;
   background: 'theme' | 'transparent' | string;
   burnIn: BurnIn;
   loop: number;
@@ -85,7 +86,7 @@ export function buildJob(material: ExportMaterial, options: AnimatedOptions, fon
   const range = exportRange(options.range, material.timeline, { rest: material.rest, chapters: material.chapters, ab: material.ab });
   const plan = framePlan(range, options.fps, options.speed, options.hold);
   const source: SceneSource = material.source();
-  const palette = options.theme === 'ivory' ? 'ivory' : options.theme === 'graphite' ? 'graphite' : material.palette;
+  const palette = exportPalette(options.theme, material.palette);
   return {
     format: options.format,
     width,

@@ -16,7 +16,7 @@ import { sceneAt, type DisplayOptions, type Scene, type SceneModel } from './sce
 import { PALETTES, type ColorToken } from './theme';
 import { topologySceneAt, type TopologyScene, type TopologySceneModel } from './topologyScene';
 
-export type AnimatedSvgTheme = 'github' | 'ivory' | 'graphite';
+export type AnimatedSvgTheme = 'github' | 'ivory' | 'graphite' | 'monochrome';
 
 /**
  * GitHub-safe palette (transparent background, works on #ffffff and #0d1117): dark ink with a

@@ -29,6 +29,15 @@ describe('HTML player assembly', () => {
     expect(html).not.toMatch(/(src|href)\s*=\s*["']?https?:/i);
   });
 
+  it.each([
+    ['auto', 'light dark'],
+    ['light', 'light'],
+    ['dark', 'dark'],
+    ['monochrome', 'light'],
+  ] as const)('declares the colour scheme of the %s theme', async (theme, scheme) => {
+    expect(await assemblePlayerHtml({ ...parts, theme })).toContain(`<meta name="color-scheme" content="${scheme}">`);
+  });
+
   it('escapes JSON so it cannot break out of a script element', () => {
     expect(scriptSafeJson('{"a":"</script><!--"}')).toBe('{"a":"\\u003c/script\\u003e\\u003c!--"}');
   });

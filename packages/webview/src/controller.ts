@@ -1346,11 +1346,29 @@ export class DiagramController {
     if (this.banner.value?.range) this.host.post(webviewMessage('source/reveal', { range: this.banner.value.range }));
   }
 
-  /** What exports need for one view (M3): drawing source, bounds, camera, narrative and position. */
-  exportMaterial(view: 'sequence' | 'topology'): ExportMaterial | undefined {
+  /** The palette the panel shows. */
+  get activePalette(): PaletteName {
+    return (document.documentElement.dataset.palette ?? 'ivory') as PaletteName;
+  }
+
+  /**
+   * For a generic drawing exported in another palette than the panel's (spec export-theme): an
+   * off-screen rendering in that palette, with the same groups and steps. Undefined when the panel's
+   * own drawing serves; the caller destroys the twin when the export ends.
+   */
+  async exportTwin(palette: PaletteName): Promise<GenericDiagram | undefined> {
+    if (!this.generic || palette === this.generic.palette) return undefined;
+    return this.generic.renderTwin(palette);
+  }
+
+  /**
+   * What exports need for one view (M3): drawing source, bounds, camera, narrative and position.
+   * `twin` replaces the panel's generic drawing (an export twin).
+   */
+  exportMaterial(view: 'sequence' | 'topology', twin?: GenericDiagram): ExportMaterial | undefined {
     const timeline = this.timeline();
     const steps = this.steps();
-    const palette = (document.documentElement.dataset.palette ?? 'ivory') as PaletteName;
+    const palette = twin?.palette ?? this.activePalette;
     const display = effectiveDisplay(this.settings.display, false);
     const count = this.stepCount();
     const common = {
@@ -1396,7 +1414,7 @@ export class DiagramController {
         source: () => ({ kind: 'topology', topology, geometry, labels: topo.labels, compiled, timeline, weight: topo.edgeWeight }),
       };
     }
-    const generic = this.generic;
+    const generic = twin ?? this.generic;
     if (!generic) return undefined;
     const bounds = generic.bounds;
     return {
@@ -1437,8 +1455,9 @@ export class DiagramController {
   }
 
   /** Re-lays out with extra width for exported SVGs (spec §14.4) and returns a detached drawing. */
-  exportDrawing(widthFactor: number): { svg: SVGSVGElement; width: number; height: number } | undefined {
-    if (this.generic) return this.generic.exportDrawing(this.player.time);
+  exportDrawing(widthFactor: number, twin?: GenericDiagram): { svg: SVGSVGElement; width: number; height: number } | undefined {
+    const generic = twin ?? this.generic;
+    if (generic) return generic.exportDrawing(this.player.time);
     if (!this.sequence) return undefined;
     const { compiled } = this.sequence;
     const seq = compiled.sequence!;

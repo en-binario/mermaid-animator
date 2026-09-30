@@ -9,14 +9,15 @@ import type { DiagramController } from './controller';
 import type { AnimatedOptions } from './animated/exporter';
 import { autoFps, estimate, fieldsFor, formatBytes, initialSheet, mp4Supported, type SheetField, type SheetFormat, type SheetState } from './animated/sheet';
 import type { AnimatedSvgRequest } from './animated/svgExport';
+import { playerTheme, type ExportTheme, type PlayerTheme } from './animated/theme';
 
 type T = (k: string, ...a: (string | number)[]) => string;
 
 export interface SheetActions {
   animated(options: AnimatedOptions): Promise<unknown>;
   animatedSvg(request: AnimatedSvgRequest): Promise<number[] | undefined>;
-  player(theme: 'light' | 'dark' | 'auto', view: 'sequence' | 'topology' | 'split'): Promise<unknown>;
-  still(kind: 'svg' | 'png' | 'copy', options: { scale: number; transparent: boolean }): Promise<unknown>;
+  player(theme: PlayerTheme, view: 'sequence' | 'topology' | 'split'): Promise<unknown>;
+  still(kind: 'svg' | 'png' | 'copy', options: { scale: number; transparent: boolean; theme: ExportTheme }): Promise<unknown>;
   cancel(): void;
   progress: { fraction: number; phase: string } | undefined;
 }
@@ -45,6 +46,8 @@ export function ExportSheet({ controller, t, close, actions, svgAdaptive, format
   const native = controller.canSwitch.value;
   const fields = fieldsFor(state.sheetFormat);
   const on = (f: SheetField) => fields.has(f);
+  // The light + dark pair is the GitHub-safe export's alternative: Current theme only (spec animated-svg-export).
+  const pairOn = on('pair') && state.theme === 'current';
   const set = (patch: Partial<SheetState>) => setState((s) => ({ ...s, ...patch }));
 
   // Ready once the H.264 check has settled (it may switch the initial format to MP4).
@@ -68,12 +71,12 @@ export function ExportSheet({ controller, t, close, actions, svgAdaptive, format
     if (state.sheetFormat !== 'animated-svg' || !material) return;
     const timer = setTimeout(async () => {
       const { compileAnimatedSvg } = await import('./animated/svgExport');
-      const files = await compileAnimatedSvg(material, { range: state.range, view: state.view === 'split' ? 'sequence' : state.view, speed: state.speed, hold: state.hold, loop: state.loop, pair: state.pair, adaptive: svgAdaptive }, controller.genericDiagram);
+      const files = await compileAnimatedSvg(material, { range: state.range, view: state.view === 'split' ? 'sequence' : state.view, speed: state.speed, hold: state.hold, loop: state.loop, pair: state.pair, adaptive: svgAdaptive, theme: state.theme }, controller.genericDiagram);
       setSvgBytes(files ? Math.max(...files.map((f) => new TextEncoder().encode(f.text).length)) : undefined);
       controller.requestFrame();
     }, 300);
     return () => clearTimeout(timer);
-  }, [state.sheetFormat, state.range, state.view, state.speed, state.hold, state.loop, state.pair]);
+  }, [state.sheetFormat, state.range, state.view, state.speed, state.hold, state.loop, state.pair, state.theme]);
 
   // Live preview of the chosen range and options (scene sources), looping.
   useEffect(() => {
@@ -112,9 +115,9 @@ export function ExportSheet({ controller, t, close, actions, svgAdaptive, format
     setBusy(true);
     try {
       const view = state.view;
-      if (state.sheetFormat === 'animated-svg') await actions.animatedSvg({ range: state.range, view: view === 'split' ? 'sequence' : view, speed: state.speed, hold: state.hold, loop: state.loop, pair: state.pair, adaptive: svgAdaptive });
-      else if (state.sheetFormat === 'html') await actions.player(state.theme === 'ivory' ? 'light' : state.theme === 'graphite' ? 'dark' : 'auto', native ? view : 'sequence');
-      else if (state.sheetFormat === 'svg' || state.sheetFormat === 'png' || state.sheetFormat === 'copy') await actions.still(state.sheetFormat, { scale: state.scale, transparent: state.background === 'transparent' });
+      if (state.sheetFormat === 'animated-svg') await actions.animatedSvg({ range: state.range, view: view === 'split' ? 'sequence' : view, speed: state.speed, hold: state.hold, loop: state.loop, pair: state.pair, adaptive: svgAdaptive, theme: state.theme });
+      else if (state.sheetFormat === 'html') await actions.player(playerTheme(state.theme), native ? view : 'sequence');
+      else if (state.sheetFormat === 'svg' || state.sheetFormat === 'png' || state.sheetFormat === 'copy') await actions.still(state.sheetFormat, { scale: state.scale, transparent: state.background === 'transparent', theme: state.theme });
       else await actions.animated({ ...state, view: view === 'split' ? 'sequence' : view });
       close();
     } finally {
@@ -211,6 +214,7 @@ export function ExportSheet({ controller, t, close, actions, svgAdaptive, format
             <option value="current">{state.sheetFormat === 'html' ? t('sheet.theme.auto') : t('sheet.theme.current')}</option>
             <option value="ivory">Ivory</option>
             <option value="graphite">Graphite</option>
+            <option value="monochrome">{t('sheet.theme.monochrome')}</option>
           </select>
         </Field>
         <Field label={t('sheet.background')} disabled={!on('background')}>
@@ -252,8 +256,8 @@ export function ExportSheet({ controller, t, close, actions, svgAdaptive, format
           <input type="checkbox" disabled={!on('dither')} checked={state.dither} onChange={(e) => set({ dither: (e.target as HTMLInputElement).checked })} />
           {t('sheet.dither')}
         </label>
-        <label class={`ma-inspector__check${on('pair') ? '' : ' ma-field--disabled'}`}>
-          <input type="checkbox" disabled={!on('pair')} checked={state.pair} onChange={(e) => set({ pair: (e.target as HTMLInputElement).checked })} />
+        <label class={`ma-inspector__check${pairOn ? '' : ' ma-field--disabled'}`}>
+          <input type="checkbox" disabled={!pairOn} checked={state.pair && pairOn} onChange={(e) => set({ pair: (e.target as HTMLInputElement).checked })} />
           {t('sheet.pair')}
         </label>
         <p class="ma-export-estimate" role="status">

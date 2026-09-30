@@ -29,6 +29,7 @@ const HALO: Record<PaletteName, string> = {
   graphite: 'rgba(157, 188, 227, 0.22)',
   'ivory-hc': 'rgba(15, 74, 133, 0.3)',
   'graphite-hc': 'rgba(243, 133, 24, 0.3)',
+  monochrome: 'rgba(0, 0, 0, 0.18)',
 };
 
 export function canvasPalette(name: PaletteName): CanvasPalette {

@@ -79,6 +79,8 @@ From the editor: **Play / Pause** `Ctrl+Alt+Space`, **Next / Previous Step** `Ct
 
 For GIF and video you choose the range (all steps, current chapter, A–B range, current step), view, camera (fit, cinematic, current), size preset, frame rate (12–60 fps), speed, theme, background, what to burn in (captions, title card, step counter, progress bar), end hold and quality. Frames are rendered and encoded in a background worker with frame-exact timing, and the progress notification has **Cancel**. *Export as GIF… / Video… / Animated SVG… / HTML Player…* open the sheet with that format selected; bind them with `"args": { "start": true }` to export straight away with your defaults.
 
+**Theme.** Every format offers *Current* (the panel's palette), *Ivory*, *Graphite* and *Monochrome*. Monochrome is a formal style for specifications, reports and print: black text and lines, white shapes and background, and light grey only for headers and groups (ER entity headers, subgraphs, sequence boxes and fragment tabs, activation bars). `mermaidAnimator.export.theme` sets the theme the sheet starts with and the one *Export as SVG*, *Export as PNG* and *Copy Image* use. For an animated SVG, the GitHub palette and the light + dark pair come with *Current*; any other theme writes one file in that palette.
+
 After exporting from a Markdown file, **Insert below diagram** adds an image reference (or a `<picture>` element for a light/dark pair) after the diagram's closing fence.
 
 **Animated SVG notes.** Motion is sampled at 30 Hz into merged keyframes, so a long flow can pass 1 MB — the sheet warns and suggests a GIF. By default the file has a transparent background and a palette meant to read on both GitHub's light and dark backgrounds; because no single colour reaches 4.5:1 contrast on both `#ffffff` and `#0d1117`, lines and text carry a thin contrasting halo. For the best result on GitHub use the light + dark pair.
@@ -172,6 +174,7 @@ Steps are referenced by `#<number>`, `@step-id`, or the step's content or struct
 | `mermaidAnimator.export.includeCaptions` | `true` | Burn captions into GIF and video. |
 | `mermaidAnimator.export.outputDirectory` | `${fileDirname}` | Where the save dialog starts (`${workspaceFolder}`, relative or absolute paths work too). |
 | `mermaidAnimator.export.svgAdaptiveTheme` | `false` | Also embed a `prefers-color-scheme: dark` palette in animated SVGs. |
+| `mermaidAnimator.export.theme` | `current` | Export theme: `current`, `ivory`, `graphite` or `monochrome` (black on white, light grey headers). |
 
 ## Accessibility and languages
 

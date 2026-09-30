@@ -173,6 +173,7 @@ export const WEBVIEW_STRINGS = {
   'sheet.theme': 'Theme',
   'sheet.theme.current': 'Current',
   'sheet.theme.auto': 'Follow the viewer',
+  'sheet.theme.monochrome': 'Monochrome',
   'sheet.background': 'Background',
   'sheet.background.theme': 'Theme',
   'sheet.background.transparent': 'Transparent',
