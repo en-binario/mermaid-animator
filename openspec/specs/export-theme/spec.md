@@ -15,15 +15,16 @@ Monochrome palette (black ink on white) for documents, reports and print.
 The export sheet's *Theme* field SHALL offer *Current*, *Ivory*, *Graphite* and *Monochrome* for every image format
 (SVG, PNG, Copy image, GIF, WebM, MP4, Animated SVG and HTML player), and the export SHALL be drawn in the palette the
 chosen theme names, whatever palette the panel shows. *Current* SHALL keep each format's existing behaviour: the panel's
-active palette for stills, GIF and video; the GitHub-safe palette for Animated SVG; and, labelled *Follow the viewer*,
-Ivory or Graphite following the viewer's colour scheme for the HTML player. The theme SHALL change colours only: frame
-size, frame count, step order and timing SHALL be identical for every theme.
+active palette for stills, GIF and video, including Monochrome when the panel shows it (see `visual-theme` ::
+*Theme mode selection*); the GitHub-safe palette for Animated SVG; and, labelled *Follow the viewer*, Ivory or Graphite
+following the viewer's colour scheme for the HTML player. The theme SHALL change colours only: frame size, frame count,
+step order and timing SHALL be identical for every theme.
 
 #### Scenario: Export palette matrix
 
 | # | Format | Theme | Palette of the written file |
 | :--- | :--- | :--- | :--- |
-| R1 | SVG, PNG, Copy image, GIF, WebM, MP4 | *Current* | **The panel's active palette (Ivory, Graphite, Ivory high contrast or Graphite high contrast)** |
+| R1 | SVG, PNG, Copy image, GIF, WebM, MP4 | *Current* | **The panel's active palette (Ivory, Graphite, Ivory high contrast, Graphite high contrast or Monochrome)** |
 | R2 | SVG, PNG, Copy image, GIF, WebM, MP4 | *Ivory* | **Ivory** |
 | R3 | SVG, PNG, Copy image, GIF, WebM, MP4 | *Graphite* | **Graphite** |
 | R4 | SVG, PNG, Copy image, GIF, WebM, MP4 | *Monochrome* | **Monochrome** |
@@ -45,6 +46,11 @@ size, frame count, step order and timing SHALL be identical for every theme.
 - **GIVEN** the panel shows the Graphite palette
 - **WHEN** the user exports a PNG with theme *Monochrome*
 - **THEN** the PNG has a `#FFFFFF` background and the panel still shows the Graphite palette
+
+#### Scenario: Current export from a Monochrome panel
+- **GIVEN** `mermaidAnimator.theme.mode` is `monochrome` and the panel shows a sequence diagram
+- **WHEN** the user exports a PNG with theme *Current*
+- **THEN** the PNG has a `#FFFFFF` background and every participant box has the fill `#FFFFFF` and the stroke `#000000`
 
 ### Requirement: Default export theme setting
 The setting `mermaidAnimator.export.theme` (default `current`) SHALL accept `current`, `ivory`, `graphite` and
@@ -77,55 +83,19 @@ the accepted list SHALL be treated as `current`.
 - **WHEN** the user runs *Export as SVG*
 - **THEN** the SVG is drawn in the Monochrome palette
 
-### Requirement: Monochrome palette
-The Monochrome palette SHALL draw all text, lines, arrowheads, borders and dividers in black, and the canvas and every
-component fill in white. It SHALL use one light grey only for header and grouping fills: ER entity headers, sequence
-`box` groups, fragment keyword tabs, activation bars, flowchart subgraphs, topology clusters and the current-step
-highlight. Pie slices SHALL use a fixed grey ramp. No other colour SHALL appear in a Monochrome export; de-emphasised
-elements (muted or unplayed) SHALL differ from emphasised ones only by opacity and stroke width. Monochrome text and
-lines SHALL carry no casing; a text knockout, where one is drawn, is `#FFFFFF`.
-
-**Constraints:**
-- Ink: `#000000`
-- Canvas and component fill: `#FFFFFF`
-- Header and grouping fill: `#EDEDED`
-- Pie slice fills, in slice order and repeating: `#FFFFFF`, `#EDEDED`, `#CCCCCC`, `#A6A6A6`
-- Contrast: every text colour reaches at least 4.5:1 against the fill under it (the lowest is `#000000` on `#A6A6A6`, 8.6:1)
-- Background *Theme* is `#FFFFFF`
-
-#### Scenario: Monochrome element colour matrix
-
-| # | Element | Fill | Stroke | Text |
-| :--- | :--- | :--- | :--- | :--- |
-| R1 | Canvas with background *Theme* | **`#FFFFFF`** | ***N/A*** | ***N/A*** |
-| R2 | Sequence participant box, flowchart node, state, class box, topology node, ER attribute row | **`#FFFFFF`** | **`#000000`** | **`#000000`** |
-| R3 | ER entity header, sequence `box` group, fragment keyword tab, flowchart subgraph, topology cluster | **`#EDEDED`** | **`#000000`** | **`#000000`** |
-| R4 | Activation bar, current-step highlight | **`#EDEDED`** | **`#000000`** | ***N/A*** |
-| R5 | Message line, edge, relationship line, lifeline | ***N/A*** | **`#000000`** | **`#000000`** |
-| R6 | Arrowhead | **`#000000`** | **`#000000`** | ***N/A*** |
-| R7 | Note, edge-label background, topology edge badge | **`#FFFFFF`** | **`#000000`** | **`#000000`** |
-| R8 | Pie slice *k* (1-based) | **Ramp entry ((*k* − 1) mod 4) + 1** | **`#000000`** | **`#000000`** |
-| R9 | Burnt-in caption, title card, step counter, transport | **`#FFFFFF`** | **`#000000`** | **`#000000`** |
-
-#### Scenario: Only palette colours
-- **WHEN** a Monochrome SVG export of a flowchart is inspected
-- **THEN** every `fill` and `stroke` value is `#000000`, `#FFFFFF`, `#EDEDED`, `none` or `transparent`
-
-#### Scenario: Monochrome text contrast
-- **WHEN** the contrast of `#000000` is computed against `#FFFFFF`, `#EDEDED`, `#CCCCCC` and `#A6A6A6`
-- **THEN** every ratio is at least 4.5:1
-
 ### Requirement: Export theme for Mermaid-rendered diagrams
 For diagrams shown by the generic engine, an export whose theme is not the panel's active palette SHALL be drawn from a
 separate rendering of the diagram in the export theme, so that *Ivory*, *Graphite* and *Monochrome* take effect for
-them as for native diagrams. The panel's own rendering SHALL be left unchanged. The export rendering SHALL have the same
-groups, step order and drawing size as the panel's rendering. When that rendering fails, nothing SHALL be written and
-the panel SHALL show the notice *Export failed: <Mermaid's message>* (`export.failed`).
+them as for native diagrams. An export whose theme is the panel's active palette SHALL use the panel's rendering. The
+panel's own rendering SHALL be left unchanged. The export rendering SHALL have the same groups, step order and drawing
+size as the panel's rendering. A Monochrome export rendering SHALL replace the colours the diagram source sets, as
+`visual-theme` :: *Monochrome palette* states. When that rendering fails, nothing SHALL be written and the panel SHALL
+show the notice *Export failed: <Mermaid's message>* (`export.failed`).
 
 #### Scenario: ER diagram in Monochrome
 - **GIVEN** an `erDiagram` with the entity `CUSTOMER` having the attributes `string name` and `int id`
 - **WHEN** it is exported as SVG with theme *Monochrome*
-- **THEN** the row holding `CUSTOMER` has the fill `#EDEDED`, both attribute rows have the fill `#FFFFFF`, and every text is `#000000`
+- **THEN** the row holding `CUSTOMER` and both attribute rows have the fill `#FFFFFF` and the stroke `#000000`, and every text is `#000000`
 
 #### Scenario: Ivory export of a flowchart from a Graphite panel
 - **GIVEN** the panel shows a flowchart in the Graphite palette
@@ -142,3 +112,9 @@ the panel SHALL show the notice *Export failed: <Mermaid's message>* (`export.fa
 - **GIVEN** Mermaid throws `Parse error on line 3` while rendering the diagram in the export theme
 - **WHEN** the user exports it as SVG with theme *Monochrome*
 - **THEN** no file is written and the panel shows *Export failed: Parse error on line 3*
+
+#### Scenario: Author colours in a Monochrome export
+- **GIVEN** the panel shows, in the Graphite palette, a flowchart with the line `style A fill:#f9f,stroke:#333,color:#c00`
+- **WHEN** it is exported as SVG with theme *Monochrome*
+- **THEN** node `A` in the SVG has the fill `#FFFFFF`, the stroke `#000000` and the text `#000000`
+- **AND** node `A` in the panel still has the fill `#f9f`
