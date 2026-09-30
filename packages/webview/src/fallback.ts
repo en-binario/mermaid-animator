@@ -9,9 +9,11 @@ import { PALETTES, SVG_NS, type PaletteName } from '@mermaid-animator/renderer';
 import { GENERIC_TRANSITION_MS, groupReveal } from './fallbackReveal';
 import { markFormatting, stripMarkers, styleMarkers } from './fallbackMarkup';
 import { monochromeColours } from './fallbackMonochrome';
+import { diagramPalette } from './palette';
 import { orderGroups, stepBoundsOf, type GroupInfo } from './fallbackOrder';
 
 import type mermaidDefault from 'mermaid';
+import type { MermaidConfig } from 'mermaid';
 
 type MermaidApi = typeof mermaidDefault;
 
@@ -38,9 +40,9 @@ function loadMermaid(): Promise<MermaidApi> {
   return mermaidPromise;
 }
 
-/** The palette the panel shows (its `data-palette`). */
+/** The palette the drawing shows (the diagram theme). */
 function activePalette(): PaletteName {
-  return (document.documentElement.dataset.palette ?? 'ivory') as PaletteName;
+  return diagramPalette.value;
 }
 
 /**
@@ -49,6 +51,12 @@ function activePalette(): PaletteName {
  * tints from them), and black branches, pie strokes and pie text. Colours the source sets itself
  * are neutralised after rendering (`monochromeColours`).
  */
+/** Mermaid `initialize` theme options for a palette. */
+export function mermaidTheme(palette: PaletteName): { theme: MermaidConfig['theme']; themeVariables: Record<string, string> } {
+  if (palette.startsWith('mermaid-')) return { theme: palette.slice('mermaid-'.length) as MermaidConfig['theme'], themeVariables: { fontFamily: '"Inter Variable", system-ui, sans-serif', fontSize: '13px' } };
+  return { theme: 'base', themeVariables: themeVariables(palette) };
+}
+
 export function themeVariables(palette: PaletteName): Record<string, string> {
   const c = PALETTES[palette];
   const vars: Record<string, string> = {
@@ -246,8 +254,9 @@ export class GenericDiagram {
     mermaid.initialize({
       startOnLoad: false,
       securityLevel: 'strict',
-      theme: 'base',
-      themeVariables: themeVariables(palette),
+      // A Mermaid theme renders as itself, with only our font (spec visual-theme); Ink & Ivory and
+      // Monochrome use `base` with their own variables. A diagram's own theme directive still wins.
+      ...mermaidTheme(palette),
       fontFamily: '"Inter Variable", system-ui, sans-serif',
       // SVG text labels are measured without depending on CSS (HTML labels are not).
       htmlLabels: false,

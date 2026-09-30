@@ -46,6 +46,7 @@ See proposal.md for the motivation. Current state:
   - `resolveUiTheme(value: unknown): UiTheme`: the value if valid, otherwise `vscode`.
 - `environment.ts` `currentSettings()` passes `diagram` only when `inspect('theme.diagram')` has a user, workspace or
   folder value. That way, an unset `theme.diagram` does not hide `theme.mode` behind its default.
+- `packages/renderer` does not depend on the protocol package, so `renderer/src/theme.ts` declares structurally identical `MermaidTheme`, `DiagramTheme` and `UiTheme` unions, as it already does for `ThemeKind`.
 - `WebviewSettings.themeMode` is replaced by `diagramTheme` and `uiTheme`, and the `settings` guard validates both.
   Host and webview ship together, so no compatibility is needed.
 
@@ -94,18 +95,21 @@ touched and the palette blocks would be duplicated. Two attribute scopes over on
   - `mermaidPalette(vars)`, which applies the mapping in `visual-theme` :: *Mermaid theme palettes* (the Constraints
     list): the accent contrast pick, the note fallback, and the light/dark borrowing of `brass`, `sage`, `crimson` and
     `viridian` from Ivory or Graphite.
-- `scripts/mermaid-themes.mjs` loads Mermaid through `scripts/mermaid-jsdom.mjs`, calls `initialize({ theme })` for
+- The Ink & Ivory and Monochrome table moves from `theme.ts` to `renderer/src/palettes.ts`, so the generator can read Ivory and Graphite without importing the table it generates.
+- `scripts/mermaid-themes.mjs` (esbuild-bundles the two modules) loads Mermaid through `scripts/mermaid-jsdom.mjs`, calls `initialize({ theme })` for
   each of the 11 themes, reads `mermaidAPI.getConfig().themeVariables` and writes two files:
   - `renderer/src/mermaidPalettes.generated.ts`, a `Record<MermaidTheme, Record<ColorToken, string>>` with a header
     naming the Mermaid version;
-  - `renderer/src/mermaidPalettes.generated.css`, with `[data-palette='mermaid-<name>']` blocks, imported next to
-    `tokens.css`.
-- `PaletteName` gains `mermaid-<name>`, `PALETTES` spreads the generated table, and `isHighContrast` is unchanged.
+  - a marked, generated region at the end of `renderer/src/tokens.css` with `[data-palette='mermaid-<name>']` blocks
+    (tokens, `--ma-pulse-halo` from the accent at 22 %, `color-scheme`). `tokens.css` is already imported by the webview
+    and the player, and read by the parity test, so no new export is needed.
+  - `node scripts/mermaid-themes.mjs --check` reports stale files without writing.
+- `PaletteName` gains `mermaid-<name>`, `PALETTES` spreads the generated table, and `isHighContrast` is unchanged. `canvas.ts` derives the pulse halo of a Mermaid palette from its accent.
 - The canvas renderer, the animated SVG (`themeVars`), `serializeSvg` (host `data-palette`) and the player CSS all pick
   up the Mermaid palettes through the existing `PALETTES` / `data-palette` paths, so there is no per-format code.
 - `theme.test.ts` keeps its contrast loops for the Ink & Ivory and Monochrome palettes only. It asserts CSS/TS parity
   for every palette, including the generated ones.
-- A sync test next to `packages/core/test/conformance.test.ts` loads Mermaid under jsdom, recomputes the table, and
+- A sync test, `packages/renderer/test/mermaid-palette-sync.test.ts`, loads Mermaid the same way `packages/core/test/conformance.test.ts` does. It under jsdom, recomputes the table, and
   compares it with the generated one. A Mermaid bump therefore fails the test until `node scripts/mermaid-themes.mjs`
   runs again.
 

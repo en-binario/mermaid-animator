@@ -93,7 +93,7 @@ describe('animator panel (M0)', () => {
     const changed = nextPost(panel, (m) => m.type === 'settings/changed');
     await vscode.workspace.getConfiguration('mermaidAnimator').update('theme.mode', 'graphite', vscode.ConfigurationTarget.Global);
     const message = await changed;
-    assert.ok(message.type === 'settings/changed' && message.payload.settings.themeMode === 'graphite');
+    assert.ok(message.type === 'settings/changed' && message.payload.settings.diagramTheme === 'graphite');
     await vscode.workspace.getConfiguration('mermaidAnimator').update('theme.mode', undefined, vscode.ConfigurationTarget.Global);
   });
 });

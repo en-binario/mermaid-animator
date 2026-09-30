@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { approximateMeasure, compileDiagram, layoutSequence } from '@mermaid-animator/core';
 import type { WebviewSettings } from '@mermaid-animator/protocol';
-import { DEFAULT_DISPLAY, themeVars, type AnimatedSvgTheme, type PaletteName } from '@mermaid-animator/renderer';
+import { DEFAULT_DISPLAY, PALETTES, themeVars, type AnimatedSvgTheme, type PaletteName } from '@mermaid-animator/renderer';
 import { buildJob, type AnimatedOptions } from '../src/animated/exporter';
 import type { ExportMaterial } from '../src/animated/material';
 import { fieldsFor, initialSheet } from '../src/animated/sheet';
@@ -20,6 +20,7 @@ describe('export palette matrix', () => {
     ['R1', 'current', 'ivory-hc', 'ivory-hc'],
     ['R1', 'current', 'graphite-hc', 'graphite-hc'],
     ['R1', 'current', 'monochrome', 'monochrome'],
+    ['R1', 'current', 'mermaid-forest', 'mermaid-forest'],
     ['R2', 'ivory', 'graphite', 'ivory'],
     ['R3', 'graphite', 'ivory', 'graphite'],
     ['R4', 'monochrome', 'graphite', 'monochrome'],
@@ -91,6 +92,13 @@ describe('animated job palette', () => {
     expect(buildJob({ ...material, palette: 'monochrome' }, options, []).palette).toBe('monochrome');
   });
 
+  it('draws a Current export in the Mermaid theme the panel shows, whatever the UI theme', () => {
+    expect(exportPalette('current', 'mermaid-forest')).toBe('mermaid-forest');
+    const job = buildJob({ ...material, palette: 'mermaid-forest' }, options, []);
+    expect(job.palette).toBe('mermaid-forest');
+    expect([PALETTES[job.palette].canvas, PALETTES[job.palette].surface]).toEqual(['#FFFFFF', '#CDE498']);
+  });
+
   it('keeps the frame size and count whatever the theme', () => {
     const current = buildJob(material, options, []);
     const mono = buildJob(material, { ...options, theme: 'monochrome' }, []);
@@ -116,7 +124,7 @@ describe('theme field enablement matrix', () => {
 describe('default export theme matrix', () => {
   const sheetDefaults = { format: 'png', scale: 2, background: 'theme', captions: true };
   // What the sheet preselects and what the direct commands draw, from the effective `export.theme`.
-  const resolved = (value: unknown) => resolveSettings({ themeMode: 'auto', 'export.theme': value } as WebviewSettings).exportDefaults.theme;
+  const resolved = (value: unknown) => resolveSettings({ diagramTheme: 'auto', uiTheme: 'vscode', 'export.theme': value } as WebviewSettings).exportDefaults.theme;
 
   it.each([
     ['R1', 'sepia', 'current'],
@@ -139,7 +147,7 @@ describe('default export theme matrix', () => {
   });
 
   it('defaults to current when the setting is absent', () => {
-    expect(resolveSettings({ themeMode: 'auto' }).exportDefaults.theme).toBe('current');
+    expect(resolveSettings({ diagramTheme: 'auto', uiTheme: 'vscode' }).exportDefaults.theme).toBe('current');
   });
 
   it('lets the sheet choice override the setting', () => {
@@ -148,7 +156,7 @@ describe('default export theme matrix', () => {
   });
 
   it('lets a sidecar override the VS Code setting', () => {
-    const host = { themeMode: 'auto', 'export.theme': 'current' } as WebviewSettings;
+    const host = { diagramTheme: 'auto', uiTheme: 'vscode', 'export.theme': 'current' } as WebviewSettings;
     const merged = withSidecarSettings(host, { settings: { 'export.theme': 'monochrome' } });
     expect(exportPalette(resolveSettings(merged).exportDefaults.theme, 'ivory')).toBe('monochrome');
   });

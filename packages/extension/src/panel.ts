@@ -13,7 +13,7 @@ import {
   type WebviewMessage,
 } from '@mermaid-animator/protocol';
 import { buildHtml, createNonce } from './html';
-import { affectsWebview, config, currentReduceMotion, currentSettings, currentThemeKind, setThemeMode } from './environment';
+import { affectsWebview, config, currentReduceMotion, currentSettings, currentThemeKind, setDiagramTheme } from './environment';
 import { basename, diagramLabel, diagramsIn } from './diagrams';
 import { webviewStrings } from './strings';
 import type { LayoutStore } from './layouts';
@@ -249,8 +249,8 @@ export class AnimatorPanel implements vscode.Disposable {
         await vscode.commands.executeCommand('mermaidAnimator.openSettings');
         break;
       case 'theme/set':
-        // Only `theme.mode`, only a validated value; other payload fields are ignored.
-        await setThemeMode(message.payload.mode);
+        // Only `theme.diagram`, only a validated value; other payload fields are ignored.
+        await setDiagramTheme(message.payload.theme);
         break;
     }
   }

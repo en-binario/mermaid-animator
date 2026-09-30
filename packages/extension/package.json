@@ -566,6 +566,82 @@
     "configuration": {
       "title": "Mermaid Animator",
       "properties": {
+        "mermaidAnimator.theme.ui": {
+          "type": "string",
+          "enum": [
+            "vscode",
+            "ivory",
+            "graphite",
+            "highContrast"
+          ],
+          "enumDescriptions": [
+            "%config.theme.ui.vscode%",
+            "%config.theme.ui.ivory%",
+            "%config.theme.ui.graphite%",
+            "%config.theme.ui.highContrast%"
+          ],
+          "default": "vscode",
+          "markdownDescription": "%config.theme.ui%"
+        },
+        "mermaidAnimator.theme.diagram": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "ivory",
+            "graphite",
+            "highContrast",
+            "default",
+            "neutral",
+            "dark",
+            "forest",
+            "base",
+            "neo",
+            "neo-dark",
+            "redux",
+            "redux-dark",
+            "redux-color",
+            "redux-dark-color",
+            "monochrome"
+          ],
+          "enumItemLabels": [
+            "Follow editor theme",
+            "Ivory",
+            "Graphite",
+            "High contrast",
+            "Mermaid: Default",
+            "Mermaid: Neutral",
+            "Mermaid: Dark",
+            "Mermaid: Forest",
+            "Mermaid: Base",
+            "Mermaid: Neo",
+            "Mermaid: Neo dark",
+            "Mermaid: Redux",
+            "Mermaid: Redux dark",
+            "Mermaid: Redux color",
+            "Mermaid: Redux dark color",
+            "Monochrome"
+          ],
+          "enumDescriptions": [
+            "%config.theme.diagram.auto%",
+            "%config.theme.diagram.ivory%",
+            "%config.theme.diagram.graphite%",
+            "%config.theme.diagram.highContrast%",
+            "%config.theme.diagram.mermaid%",
+            "%config.theme.diagram.mermaid%",
+            "%config.theme.diagram.mermaid%",
+            "%config.theme.diagram.mermaid%",
+            "%config.theme.diagram.mermaid%",
+            "%config.theme.diagram.mermaid%",
+            "%config.theme.diagram.mermaid%",
+            "%config.theme.diagram.mermaid%",
+            "%config.theme.diagram.mermaid%",
+            "%config.theme.diagram.mermaid%",
+            "%config.theme.diagram.mermaid%",
+            "%config.theme.diagram.monochrome%"
+          ],
+          "default": "auto",
+          "markdownDescription": "%config.theme.diagram%"
+        },
         "mermaidAnimator.theme.mode": {
           "type": "string",
           "enum": [
@@ -583,7 +659,8 @@
             "%config.theme.mode.monochrome%"
           ],
           "default": "auto",
-          "markdownDescription": "%config.theme.mode%"
+          "markdownDescription": "%config.theme.mode%",
+          "markdownDeprecationMessage": "%config.theme.mode.deprecated%"
         },
         "mermaidAnimator.codeLens.enabled": {
           "type": "boolean",

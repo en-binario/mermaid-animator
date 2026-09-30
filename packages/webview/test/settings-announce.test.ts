@@ -7,7 +7,7 @@ import { format } from '../src/state';
 
 describe('resolveSettings', () => {
   it('uses defaults for missing or invalid values', () => {
-    expect(resolveSettings({ themeMode: 'auto', 'playback.speed': 'fast', 'camera.mode': 'orbit' })).toEqual(DEFAULT_SETTINGS);
+    expect(resolveSettings({ diagramTheme: 'auto', uiTheme: 'vscode', 'playback.speed': 'fast', 'camera.mode': 'orbit' })).toEqual(DEFAULT_SETTINGS);
   });
 
   it.each([
@@ -19,12 +19,12 @@ describe('resolveSettings', () => {
     ['replaces a non-number play zoom with 100 %', { 'camera.playZoom': 'large' }, 'playZoom', 1],
     ['replaces a non-number presentation zoom with 150 %', { 'camera.presentationZoom': 'large' }, 'presentationZoom', 1.5],
   ] as const)('%s', (_name, host, key, expected) => {
-    expect(resolveSettings({ themeMode: 'auto', ...host })[key]).toBeCloseTo(expected);
+    expect(resolveSettings({ diagramTheme: 'auto', uiTheme: 'vscode', ...host })[key]).toBeCloseTo(expected);
   });
 
   it('reads VS Code settings and lets @animator annotations override them', () => {
     const d = compileDiagram('%% @animator speed=1.5 future=ghosted camera=follow autoplay=true\nsequenceDiagram\nA->>B: x');
-    const s = resolveSettings({ themeMode: 'auto', 'playback.speed': 0.5, 'display.futureSteps': 'visible', 'display.pastSteps': 'muted' }, d.settings);
+    const s = resolveSettings({ diagramTheme: 'auto', uiTheme: 'vscode', 'playback.speed': 0.5, 'display.futureSteps': 'visible', 'display.pastSteps': 'muted' }, d.settings);
     expect(s.speed).toBe(1.5);
     expect(s.autoplay).toBe(true);
     expect(s.display.futureSteps).toBe('ghosted');
@@ -34,35 +34,35 @@ describe('resolveSettings', () => {
 
   it('resolves the M2a settings with annotation overrides', () => {
     const d = compileDiagram('%% @animator branches=ask parallel=sequential camera=cinematic iterations=3\nsequenceDiagram\nA->>B: x');
-    const s = resolveSettings({ themeMode: 'auto', 'playback.altBranches': 'all', 'playback.compressRepeats': false, 'display.showCaptions': false }, d.settings);
+    const s = resolveSettings({ diagramTheme: 'auto', uiTheme: 'vscode', 'playback.altBranches': 'all', 'playback.compressRepeats': false, 'display.showCaptions': false }, d.settings);
     expect(s).toMatchObject({ altBranches: 'ask', parallel: 'sequential', camera: 'cinematic', loopIterations: 3, compressRepeats: false, showCaptions: false, showInspector: true });
-    expect(resolveSettings({ themeMode: 'auto' }).parallel).toBe('concurrent');
+    expect(resolveSettings({ diagramTheme: 'auto', uiTheme: 'vscode' }).parallel).toBe('concurrent');
   });
 
   it('resolves the M2b view and topology settings with annotation overrides', () => {
     const d = compileDiagram('%% @animator view=topology layout=force direction=TB returns=hide\nsequenceDiagram\nA->>B: x');
-    const s = resolveSettings({ themeMode: 'auto', 'view.default': 'split', 'topology.edgeStyle': 'orthogonal', 'topology.edgeWeight': 'uniform', 'display.showMinimap': 'never' }, d.settings);
+    const s = resolveSettings({ diagramTheme: 'auto', uiTheme: 'vscode', 'view.default': 'split', 'topology.edgeStyle': 'orthogonal', 'topology.edgeWeight': 'uniform', 'display.showMinimap': 'never' }, d.settings);
     expect(s).toMatchObject({ view: 'topology', topologyLayout: 'force', direction: 'TB', returnMessages: 'hide', edgeStyle: 'orthogonal', edgeWeight: 'uniform', showMinimap: 'never' });
-    expect(resolveSettings({ themeMode: 'auto' })).toMatchObject({ view: 'sequence', topologyLayout: 'layered', direction: 'LR', edgeStyle: 'curved', returnMessages: 'merge', edgeWeight: 'count', showMinimap: 'auto' });
+    expect(resolveSettings({ diagramTheme: 'auto', uiTheme: 'vscode' })).toMatchObject({ view: 'sequence', topologyLayout: 'layered', direction: 'LR', edgeStyle: 'curved', returnMessages: 'merge', edgeWeight: 'count', showMinimap: 'auto' });
   });
 
   it('resolves the participant-orientation settings', () => {
-    expect(resolveSettings({ themeMode: 'auto' })).toMatchObject({ participantNames: 'auto', arrowEndNames: 'auto' });
-    expect(resolveSettings({ themeMode: 'auto', 'display.participantNames': 'off', 'display.arrowEndNames': 'always' })).toMatchObject({ participantNames: 'off', arrowEndNames: 'always' });
-    expect(resolveSettings({ themeMode: 'auto', 'display.participantNames': 'sometimes', 'display.arrowEndNames': 7 })).toMatchObject({ participantNames: 'auto', arrowEndNames: 'auto' });
+    expect(resolveSettings({ diagramTheme: 'auto', uiTheme: 'vscode' })).toMatchObject({ participantNames: 'auto', arrowEndNames: 'auto' });
+    expect(resolveSettings({ diagramTheme: 'auto', uiTheme: 'vscode', 'display.participantNames': 'off', 'display.arrowEndNames': 'always' })).toMatchObject({ participantNames: 'off', arrowEndNames: 'always' });
+    expect(resolveSettings({ diagramTheme: 'auto', uiTheme: 'vscode', 'display.participantNames': 'sometimes', 'display.arrowEndNames': 7 })).toMatchObject({ participantNames: 'auto', arrowEndNames: 'auto' });
   });
 
   it('resolves the initial overview from the setting, with the annotation taking precedence', () => {
-    expect(resolveSettings({ themeMode: 'auto' }).display.overview).toBe(true);
-    expect(resolveSettings({ themeMode: 'auto', 'playback.initialOverview': false }).display.overview).toBe(false);
+    expect(resolveSettings({ diagramTheme: 'auto', uiTheme: 'vscode' }).display.overview).toBe(true);
+    expect(resolveSettings({ diagramTheme: 'auto', uiTheme: 'vscode', 'playback.initialOverview': false }).display.overview).toBe(false);
     const off = compileDiagram('%% @animator overview=false\nsequenceDiagram\nA->>B: x');
-    expect(resolveSettings({ themeMode: 'auto', 'playback.initialOverview': true }, off.settings).display.overview).toBe(false);
+    expect(resolveSettings({ diagramTheme: 'auto', uiTheme: 'vscode', 'playback.initialOverview': true }, off.settings).display.overview).toBe(false);
     const on = compileDiagram('%% @animator overview=true\nsequenceDiagram\nA->>B: x');
-    expect(resolveSettings({ themeMode: 'auto', 'playback.initialOverview': false }, on.settings).display.overview).toBe(true);
+    expect(resolveSettings({ diagramTheme: 'auto', uiTheme: 'vscode', 'playback.initialOverview': false }, on.settings).display.overview).toBe(true);
   });
 
   it('clamps speed to 0.25–4', () => {
-    expect(resolveSettings({ themeMode: 'auto', 'playback.speed': 10 }).speed).toBe(4);
+    expect(resolveSettings({ diagramTheme: 'auto', uiTheme: 'vscode', 'playback.speed': 10 }).speed).toBe(4);
   });
 });
 

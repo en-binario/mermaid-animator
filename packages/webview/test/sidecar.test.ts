@@ -39,7 +39,7 @@ describe('sidecar entries', () => {
   });
 
   it('applies sidecar settings above host settings and below annotations', () => {
-    const host = { themeMode: 'auto' as const, 'playback.speed': 1, 'view.default': 'sequence' };
+    const host = { diagramTheme: 'auto' as const, uiTheme: 'vscode' as const, 'playback.speed': 1, 'view.default': 'sequence' };
     const merged = withSidecarSettings(host, { settings: { 'playback.speed': 1.25, 'view.default': 'split' } });
     const annotations = compileDiagram('sequenceDiagram\n%% @animator view=topology\nA->>B: x').settings;
     const effective = resolveSettings(merged, annotations);

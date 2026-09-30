@@ -33,9 +33,30 @@
     window.postMessage({ v: 1, type, payload }, '*');
   }
 
+  // A sample of the colours VS Code sets on <html> (Dark Modern), for the `vscode` UI theme.
+  const DARK_MODERN = {
+    'editor-background': '#1F1F1F', foreground: '#CCCCCC', descriptionForeground: '#9D9D9D', disabledForeground: '#CCCCCC80',
+    'panel-border': '#2B2B2B', 'widget-border': '#313131', focusBorder: '#0078D4', 'widget-shadow': '#0000005C',
+    'inputOption-activeBackground': '#2489DB82', 'inputOption-activeForeground': '#FFFFFF', 'inputOption-activeBorder': '#2488DB',
+    'toolbar-hoverBackground': '#5A5D5E50', 'list-hoverBackground': '#2A2D2E',
+    'menu-background': '#1F1F1F', 'menu-foreground': '#CCCCCC', 'menu-selectionBackground': '#0078D4', 'menu-border': '#454545',
+    'editorWidget-background': '#202020', 'editorWidget-border': '#313131', errorForeground: '#F85149',
+    'editorWarning-foreground': '#CCA700', 'charts-green': '#89D185', 'testing-iconPassed': '#73C991',
+    contrastBorder: '#6FC3DF', contrastActiveBorder: '#F38518',
+  };
+
+  function applyVscodeSample() {
+    const style = document.documentElement.style;
+    for (const [name, value] of Object.entries(DARK_MODERN)) {
+      if (byId('vscodeVars').checked) style.setProperty(`--vscode-${name}`, value);
+      else style.removeProperty(`--vscode-${name}`);
+    }
+    document.body.classList.toggle('vscode-high-contrast', byId('vscodeHc').checked);
+  }
+
   function settingsPayload() {
     return {
-      settings: Object.assign({ themeMode: byId('themeMode').value }, window.harnessSettings || {}),
+      settings: Object.assign({ diagramTheme: byId('diagramTheme').value, uiTheme: byId('uiTheme').value }, window.harnessSettings || {}),
       themeKind: byId('themeKind').value,
       reduceMotion: byId('reduceMotion').checked ? true : null,
     };
@@ -81,12 +102,16 @@
     const select = byId('fixture');
     for (const name of Object.keys(fixtures)) select.add(new Option(name, name));
     if (params.get('theme')) byId('themeKind').value = params.get('theme');
-    if (params.get('mode')) byId('themeMode').value = params.get('mode');
+    if (params.get('diagram')) byId('diagramTheme').value = params.get('diagram');
+    if (params.get('ui')) byId('uiTheme').value = params.get('ui');
+    if (params.get('vars') === '1') byId('vscodeVars').checked = true;
     if (params.get('fixture') && fixtures[params.get('fixture')]) select.value = params.get('fixture');
     if (params.get('locale')) byId('locale').value = params.get('locale');
     if (params.get('reduce') === '1') byId('reduceMotion').checked = true;
     if (params.get('chrome') === '0') document.body.classList.add('harness-hidden');
-    for (const id of ['themeKind', 'themeMode', 'reduceMotion']) byId(id).addEventListener('change', () => send('settings/changed', settingsPayload()));
+    for (const id of ['themeKind', 'uiTheme', 'diagramTheme', 'reduceMotion']) byId(id).addEventListener('change', () => send('settings/changed', settingsPayload()));
+    for (const id of ['vscodeVars', 'vscodeHc']) byId(id).addEventListener('change', applyVscodeSample);
+    applyVscodeSample();
     select.addEventListener('change', () => sendDocument('document/load'));
     byId('reload').addEventListener('click', () => sendDocument('document/update'));
   })();

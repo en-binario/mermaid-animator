@@ -6,8 +6,8 @@ const origin = { line: 0, character: 0 };
 
 describe('reduce', () => {
   it('applies init', () => {
-    const next = reduce(initialHostState, hostMessage('init', { settings: { themeMode: 'ivory' }, themeKind: 'light', reduceMotion: true, locale: 'es', strings: { a: 'b' } }));
-    expect(next).toMatchObject({ initialized: true, settings: { themeMode: 'ivory' }, themeKind: 'light', reduceMotionPreference: true, locale: 'es', strings: { a: 'b' } });
+    const next = reduce(initialHostState, hostMessage('init', { settings: { diagramTheme: 'ivory', uiTheme: 'vscode' }, themeKind: 'light', reduceMotion: true, locale: 'es', strings: { a: 'b' } }));
+    expect(next).toMatchObject({ initialized: true, settings: { diagramTheme: 'ivory', uiTheme: 'vscode' }, themeKind: 'light', reduceMotionPreference: true, locale: 'es', strings: { a: 'b' } });
   });
 
   it('loads and updates a document, ignoring stale versions', () => {
@@ -24,8 +24,8 @@ describe('reduce', () => {
 
   it('applies settings changes without dropping the document', () => {
     const loaded = reduce(initialHostState, hostMessage('document/load', { uri: 'u', fileName: 'a.mmd', source: 's', version: 1, origin }));
-    const next = reduce(loaded, hostMessage('settings/changed', { settings: { themeMode: 'graphite' }, themeKind: 'light', reduceMotion: false }));
-    expect(next.settings.themeMode).toBe('graphite');
+    const next = reduce(loaded, hostMessage('settings/changed', { settings: { diagramTheme: 'graphite', uiTheme: 'vscode' }, themeKind: 'light', reduceMotion: false }));
+    expect(next.settings.diagramTheme).toBe('graphite');
     expect(next.document?.source).toBe('s');
   });
 });

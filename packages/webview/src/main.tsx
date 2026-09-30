@@ -3,8 +3,9 @@ import '@mermaid-animator/renderer/diagram.css';
 import './styles/app.css';
 import { render } from 'preact';
 import { effect, signal } from '@preact/signals';
-import { resolvePalette } from '@mermaid-animator/renderer';
-import { PROTOCOL_VERSION, WEBVIEW_STRINGS, webviewMessage, type CommandAction, type ExportFormat, type HostMessage } from '@mermaid-animator/protocol';
+import { resolvePalette, uiPalette } from '@mermaid-animator/renderer';
+import { diagramPalette } from './palette';
+import { PROTOCOL_VERSION, resolveDiagramTheme, resolveUiTheme, WEBVIEW_STRINGS, webviewMessage, type CommandAction, type ExportFormat, type HostMessage } from '@mermaid-animator/protocol';
 import { buildJob, runJob, type AnimatedOptions, type ExportHandle } from './animated/exporter';
 import type { AnimatedSvgRequest } from './animated/svgExport';
 import { exportPalette, playerPalette, type PlayerTheme } from './animated/theme';
@@ -135,7 +136,10 @@ function toast(text: string): void {
 effect(() => {
   const state = hostState.value;
   const root = document.documentElement;
-  root.dataset.palette = resolvePalette(state.settings.themeMode, state.themeKind);
+  // Two scopes (spec visual-theme): the controls follow the UI theme on the root; the drawing's
+  // palette goes to `.ma-views` through `diagramPalette` (set before any rebuild reads it).
+  root.dataset.ui = uiPalette(resolveUiTheme(state.settings.uiTheme), state.themeKind);
+  diagramPalette.value = resolvePalette(resolveDiagramTheme(state.settings.diagramTheme), state.themeKind);
   root.dataset.reducedMotion = String(resolveReduceMotion(state.reduceMotionPreference, osPrefersReduced.value));
   if (state.locale) root.lang = state.locale;
 });

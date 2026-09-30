@@ -1,11 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { contrastRatio, PALETTES, resolvePalette, TEXT_TOKENS, type PaletteName, type ThemeKind, type ThemeMode } from '../src/theme';
+import { contrastRatio, GUARANTEED_PALETTES, PALETTES, resolvePalette, TEXT_TOKENS, type DiagramTheme, type PaletteName, type ThemeKind } from '../src/theme';
 
 const css = readFileSync(new URL('../src/tokens.css', import.meta.url), 'utf8');
 
 describe('colour tokens', () => {
-  for (const [name, palette] of Object.entries(PALETTES)) {
+  // The 4.5:1 guarantee covers Ink & Ivory and Monochrome; Mermaid palettes keep Mermaid's colours.
+  for (const name of GUARANTEED_PALETTES) {
+    const palette = PALETTES[name];
     it.each(TEXT_TOKENS)(`${name}: %s reaches 4.5:1 on canvas`, (token) => {
       expect(contrastRatio(palette[token], palette.canvas)).toBeGreaterThanOrEqual(4.5);
     });
@@ -15,9 +17,12 @@ describe('colour tokens', () => {
       expect(contrastRatio(palette['ink-1'], palette.surface)).toBeGreaterThanOrEqual(4.5);
       expect(contrastRatio(palette.accent, palette['accent-muted'])).toBeGreaterThanOrEqual(4.5);
     });
+  }
 
+  for (const [name, palette] of Object.entries(PALETTES)) {
     it(`${name}: tokens.css matches the TypeScript table`, () => {
-      const block = new RegExp(`\\[data-palette='${name}'\\]\\s*\\{([^}]*)\\}`).exec(css)?.[1];
+      // A block may be shared with the UI scope: `[data-palette='x'], [data-ui='x'] { … }`.
+      const block = new RegExp(`\\[data-palette='${name}'\\][^{]*\\{([^}]*)\\}`).exec(css)?.[1];
       expect(block, `missing CSS block for ${name}`).toBeDefined();
       for (const [token, hex] of Object.entries(palette)) {
         const match = new RegExp(`--ma-${token}:\\s*(#[0-9A-Fa-f]{6});`).exec(block as string);
@@ -50,7 +55,7 @@ describe('Monochrome palette', () => {
 describe('resolvePalette', () => {
   const ALL: ThemeKind[] = ['light', 'dark', 'highContrast', 'highContrastLight'];
   // Theme mode matrix (spec visual-theme): mode × editor theme kinds → panel palette.
-  const rows: [string, ThemeMode, ThemeKind[], PaletteName][] = [
+  const rows: [string, DiagramTheme, ThemeKind[], PaletteName][] = [
     ['follows a light editor theme with Ivory', 'auto', ['light'], 'ivory'],
     ['follows a dark editor theme with Graphite', 'auto', ['dark'], 'graphite'],
     ['follows a high-contrast-light editor theme with Ivory high contrast', 'auto', ['highContrastLight'], 'ivory-hc'],
@@ -66,7 +71,7 @@ describe('resolvePalette', () => {
   });
 
   it('selects Monochrome only for the monochrome mode', () => {
-    const modes: ThemeMode[] = ['auto', 'ivory', 'graphite', 'highContrast'];
+    const modes: DiagramTheme[] = ['auto', 'ivory', 'graphite', 'highContrast'];
     for (const m of modes) for (const k of ALL) expect(resolvePalette(m, k)).not.toBe('monochrome');
   });
 });

@@ -24,7 +24,8 @@ export interface CanvasPalette {
   stroke: { hairline: number; structural: number; active: number };
 }
 
-const HALO: Record<PaletteName, string> = {
+/** Pulse halos of the Ink & Ivory palettes; Mermaid palettes use their accent at 22 % (as in tokens.css). */
+const HALO: Partial<Record<PaletteName, string>> = {
   ivory: 'rgba(31, 59, 97, 0.22)',
   graphite: 'rgba(157, 188, 227, 0.22)',
   'ivory-hc': 'rgba(15, 74, 133, 0.3)',
@@ -32,9 +33,14 @@ const HALO: Record<PaletteName, string> = {
   monochrome: 'rgba(0, 0, 0, 0.18)',
 };
 
+function accentHalo(accent: string): string {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(accent.slice(i, i + 2), 16));
+  return `rgba(${r}, ${g}, ${b}, 0.22)`;
+}
+
 export function canvasPalette(name: PaletteName): CanvasPalette {
   const hc = isHighContrast(name);
-  return { name, c: PALETTES[name], halo: HALO[name], hc, stroke: hc ? { hairline: 2, structural: 2, active: 2 } : { hairline: 1, structural: 1.25, active: 2 } };
+  return { name, c: PALETTES[name], halo: HALO[name] ?? accentHalo(PALETTES[name].accent), hc, stroke: hc ? { hairline: 2, structural: 2, active: 2 } : { hairline: 1, structural: 1.25, active: 2 } };
 }
 
 export interface CanvasRenderOptions {

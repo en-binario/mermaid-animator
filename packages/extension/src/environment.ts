@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { ThemeKind, ThemeMode, WebviewSettings } from '@mermaid-animator/protocol';
+import { resolveDiagramTheme, resolveUiTheme, type DiagramTheme, type ThemeKind, type WebviewSettings } from '@mermaid-animator/protocol';
 
 export function currentThemeKind(): ThemeKind {
   switch (vscode.window.activeColorTheme.kind) {
@@ -70,9 +70,19 @@ export const WEBVIEW_SETTING_KEYS = [
   'export.theme',
 ] as const;
 
+/** A setting's value when some scope sets it; `undefined` when only its default applies. */
+function explicit(config: vscode.WorkspaceConfiguration, key: string): unknown {
+  const info = config.inspect(key);
+  return info?.workspaceFolderValue ?? info?.workspaceValue ?? info?.globalValue;
+}
+
 export function currentSettings(): WebviewSettings {
   const config = vscode.workspace.getConfiguration('mermaidAnimator');
-  const settings: WebviewSettings = { themeMode: config.get<ThemeMode>('theme.mode', 'auto') };
+  // Two themes (spec visual-theme): an unset `theme.diagram` must not hide the deprecated `theme.mode`.
+  const settings: WebviewSettings = {
+    diagramTheme: resolveDiagramTheme(explicit(config, 'theme.diagram'), explicit(config, 'theme.mode')),
+    uiTheme: resolveUiTheme(config.get('theme.ui')),
+  };
   for (const key of WEBVIEW_SETTING_KEYS) {
     const value = config.get(key);
     if (value !== undefined) settings[key] = value;
@@ -89,18 +99,19 @@ export function affectsWebview(event: vscode.ConfigurationChangeEvent): boolean 
 }
 
 /**
- * Writes `mermaidAnimator.theme.mode` for the toolbar theme menu (spec visual-theme): to the
- * workspace settings when they define the key, otherwise to the user settings. Open panels follow
- * through the configuration listener. A failed write is reported and changes nothing.
+ * Writes `mermaidAnimator.theme.diagram` for the toolbar diagram theme menu (spec visual-theme): to
+ * the workspace settings when they define `theme.diagram` or the deprecated `theme.mode`, otherwise
+ * to the user settings. `theme.mode` and `theme.ui` are never written. Open panels follow through
+ * the configuration listener. A failed write is reported and changes nothing.
  */
-export async function setThemeMode(mode: ThemeMode): Promise<void> {
+export async function setDiagramTheme(theme: DiagramTheme): Promise<void> {
   const configuration = vscode.workspace.getConfiguration('mermaidAnimator');
-  const target = configuration.inspect('theme.mode')?.workspaceValue !== undefined ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
+  const workspace = ['theme.diagram', 'theme.mode'].some((key) => configuration.inspect(key)?.workspaceValue !== undefined);
   try {
-    await configuration.update('theme.mode', mode, target);
+    await configuration.update('theme.diagram', theme, workspace ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global);
   } catch (error) {
     const reason = String((error as Error)?.message ?? error);
-    void vscode.window.showErrorMessage(vscode.l10n.t('Could not change the Mermaid Animator theme: {0}', reason));
+    void vscode.window.showErrorMessage(vscode.l10n.t('Could not change the Mermaid Animator diagram theme: {0}', reason));
   }
 }
 

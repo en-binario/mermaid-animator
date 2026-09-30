@@ -2,7 +2,7 @@
  * Drives one diagram in the webview: compile → layout → scene → renderer, the playback clock,
  * the camera, live reload with position preservation, and state reporting to the host.
  */
-import { signal } from '@preact/signals';
+import { effect, signal } from '@preact/signals';
 import {
   compileDiagram, layoutSequence, offsetRange, resolvePosition, stepEnd, unionRects,
   type BranchChoice, type CompiledDiagram, type Diagnostic, type FragmentInfo, type Rect, type SequenceLayout, type Step,
@@ -18,6 +18,7 @@ import { buildSearchIndex, type SearchEntry } from './search';
 import { parseInline } from './narrative';
 import type { ExportMaterial } from './animated/material';
 import type { PaletteName } from '@mermaid-animator/renderer';
+import { diagramPalette } from './palette';
 import { Player, type PlayerSnapshot } from './player';
 import { resolveSettings, type AnimatorSettings } from './settings';
 import type { Host } from './host';
@@ -103,7 +104,7 @@ export class DiagramController {
   /** Steps holding search matches, for scrubber marks. */
   readonly matchSteps = signal<number[]>([]);
   /** Effective settings, for components (captions, inspector, chapter cards). */
-  readonly effective = signal<AnimatorSettings>(resolveSettings({ themeMode: 'auto' }));
+  readonly effective = signal<AnimatorSettings>(resolveSettings({ diagramTheme: 'auto', uiTheme: 'vscode' }));
   /** A chapter card to show while presenting (spec presentation-mode). */
   readonly chapterCard = signal<{ n: number; title: string } | undefined>(undefined);
   /** Current view (spec view-switching). */
@@ -119,8 +120,8 @@ export class DiagramController {
   private readonly player: Player;
   private sequence?: { compiled: CompiledDiagram; layout: SequenceLayout; scene: SceneModel; renderer: SequenceSvgRenderer };
   private generic?: GenericDiagram;
-  private settings: AnimatorSettings = resolveSettings({ themeMode: 'auto' });
-  private hostSettings: WebviewSettings = { themeMode: 'auto' };
+  private settings: AnimatorSettings = resolveSettings({ diagramTheme: 'auto', uiTheme: 'vscode' });
+  private hostSettings: WebviewSettings = { diagramTheme: 'auto', uiTheme: 'vscode' };
   /** The diagram's sidecar entry (M3), and whether workspace state holds this user's own manual layout. */
   private sidecar: SidecarEntry | undefined;
   private ownLayout = false;
@@ -176,6 +177,10 @@ export class DiagramController {
     this.views = document.createElement('div');
     this.views.className = 'ma-views';
     this.views.dataset.view = 'sequence';
+    // The drawing's scope (spec visual-theme): its palette and canvas follow the diagram theme.
+    effect(() => {
+      this.views.dataset.palette = diagramPalette.value;
+    });
     container.appendChild(this.views);
     this.seqSlotEl = document.createElement('div');
     this.seqSlotEl.className = 'ma-slot ma-slot--sequence';
@@ -1346,9 +1351,9 @@ export class DiagramController {
     if (this.banner.value?.range) this.host.post(webviewMessage('source/reveal', { range: this.banner.value.range }));
   }
 
-  /** The palette the panel shows. */
+  /** The palette the drawing shows (the diagram theme). */
   get activePalette(): PaletteName {
-    return (document.documentElement.dataset.palette ?? 'ivory') as PaletteName;
+    return diagramPalette.value;
   }
 
   /**

@@ -21,15 +21,36 @@
           <option value="highContrastLight">highContrastLight</option>
         </select>
       </label>
-      <label>Mode
-        <select id="themeMode">
+      <label>UI theme
+        <select id="uiTheme">
+          <option value="vscode">vscode</option>
+          <option value="ivory">ivory</option>
+          <option value="graphite">graphite</option>
+          <option value="highContrast">highContrast</option>
+        </select>
+      </label>
+      <label>Diagram theme
+        <select id="diagramTheme">
           <option value="auto">auto</option>
           <option value="ivory">ivory</option>
           <option value="graphite">graphite</option>
           <option value="highContrast">highContrast</option>
+          <option value="default">default</option>
+          <option value="neutral">neutral</option>
+          <option value="dark">dark</option>
+          <option value="forest">forest</option>
+          <option value="base">base</option>
+          <option value="neo">neo</option>
+          <option value="neo-dark">neo-dark</option>
+          <option value="redux">redux</option>
+          <option value="redux-dark">redux-dark</option>
+          <option value="redux-color">redux-color</option>
+          <option value="redux-dark-color">redux-dark-color</option>
           <option value="monochrome">monochrome</option>
         </select>
       </label>
+      <label><input type="checkbox" id="vscodeVars"> vscode vars (Dark Modern)</label>
+      <label><input type="checkbox" id="vscodeHc"> body.vscode-high-contrast</label>
       <label><input type="checkbox" id="reduceMotion"> reduce motion</label>
       <label>Fixture <select id="fixture"></select></label>
       <label>Locale

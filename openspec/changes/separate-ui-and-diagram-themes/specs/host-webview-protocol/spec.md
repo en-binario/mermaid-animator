@@ -17,8 +17,8 @@ as `diagramTheme` and the UI theme as `uiTheme`, resolved by the host (with `the
 
 | # | `theme.diagram` before | webview → host `theme/set` payload | `theme.diagram` after | host → webview `settings/changed` to each open panel | Output channel |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| R1 | Not set | `{ "theme": "sepia" }` | **Not set** | **Not sent** | **`Ignored invalid webview message: theme/set payload.theme: expected one of auto, ivory, graphite, highContrast, monochrome, default, neutral, dark, forest, base, neo, neo-dark, redux, redux-dark, redux-color, redux-dark-color`** |
-| R2 | Not set | `{ "mode": "monochrome" }` (the old payload) | **Not set** | **Not sent** | **`Ignored invalid webview message: theme/set payload.theme: expected one of auto, ivory, graphite, highContrast, monochrome, default, neutral, dark, forest, base, neo, neo-dark, redux, redux-dark, redux-color, redux-dark-color`** |
+| R1 | Not set | `{ "theme": "sepia" }` | **Not set** | **Not sent** | **`Ignored invalid webview message: theme/set payload.theme: expected one of auto, ivory, graphite, highContrast, default, neutral, dark, forest, base, neo, neo-dark, redux, redux-dark, redux-color, redux-dark-color, monochrome`** |
+| R2 | Not set | `{ "mode": "monochrome" }` (the old payload) | **Not set** | **Not sent** | **`Ignored invalid webview message: theme/set payload.theme: expected one of auto, ivory, graphite, highContrast, default, neutral, dark, forest, base, neo, neo-dark, redux, redux-dark, redux-color, redux-dark-color, monochrome`** |
 | R3 | Not set | `{ "theme": "forest" }` | **`forest`** | **Sent, with `diagramTheme: "forest"`** | **Nothing logged** |
 | R4 | `auto` | `{ "theme": "monochrome", "ui": "graphite" }` | **`monochrome`** | **Sent, with `diagramTheme: "monochrome"` and `uiTheme` unchanged** | **Nothing logged; `theme.ui` unchanged** |
 

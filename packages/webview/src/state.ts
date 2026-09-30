@@ -16,7 +16,7 @@ export interface HostState {
 
 export const initialHostState: HostState = {
   initialized: false,
-  settings: { themeMode: 'auto' },
+  settings: { diagramTheme: 'auto', uiTheme: 'vscode' },
   themeKind: 'dark',
   reduceMotionPreference: null,
   locale: 'en',

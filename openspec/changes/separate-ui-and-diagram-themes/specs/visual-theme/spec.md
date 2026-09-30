@@ -211,9 +211,9 @@ In high-contrast variants, borders SHALL be at least 2 px, dimming SHALL NOT rel
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | R1 | `vscode` | `auto` | High contrast (dark) | **2 px, `contrastBorder`** | **Graphite high contrast: dimmed lines dotted (`stroke-dasharray: 1 3`) at full opacity** |
 | R2 | `vscode` | `forest` | High contrast (dark) | **2 px, `contrastBorder`** | **Mermaid `forest`: opacity only** |
-| R3 | `graphite` | `auto` | High contrast (dark) | **1 px, Graphite `rule`** | **Graphite high contrast: dimmed lines dotted (`stroke-dasharray: 1 3`) at full opacity** |
+| R3 | `graphite` | `auto` | High contrast (dark) | **1 px, transparent (no visible border, as outside high contrast today)** | **Graphite high contrast: dimmed lines dotted (`stroke-dasharray: 1 3`) at full opacity** |
 | R4 | `highContrast` | `ivory` | Light | **2 px, Ivory high contrast `rule`** | **Ivory: opacity only** |
-| R5 | `vscode` | `auto` | Dark | **1 px, `panel.border`** | **Graphite: opacity only** |
+| R5 | `vscode` | `auto` | Dark | **1 px, transparent (no visible border, as outside high contrast today)** | **Graphite: opacity only** |
 
 ## REMOVED Requirements
 

@@ -1,6 +1,7 @@
+import { Fragment } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { stepEnd } from '@mermaid-animator/core';
-import { WEBVIEW_STRINGS, type DiagramSummary, type ThemeMode, type WebviewMessage } from '@mermaid-animator/protocol';
+import { resolveDiagramTheme, WEBVIEW_STRINGS, type DiagramSummary, type DiagramTheme, type WebviewMessage } from '@mermaid-animator/protocol';
 import type { DiagramController, ViewKind } from './controller';
 import { ZOOM_MAX, ZOOM_MIN, ZOOM_PRESETS } from './camera';
 import { SPEEDS } from './player';
@@ -13,7 +14,7 @@ import { SearchBox } from './SearchBox';
 import { ExportSheet, type SheetActions } from './ExportSheet';
 import type { ExportTheme } from './animated/theme';
 import { Transcript } from './Transcript';
-import { THEME_MENU, themeMenuMessage } from './themeMenu';
+import { DIAGRAM_THEME_MENU, themeMenuMessage } from './themeMenu';
 import { BlankScreen, ChapterCard, Hairline, LaserPointer, TitleCard } from './Presentation';
 
 /** `theme` omitted: `export.theme` (spec export-theme). */
@@ -438,14 +439,14 @@ function ZoomGroup({ controller, t, open, setOpen }: { controller: DiagramContro
 }
 
 /**
- * Toolbar theme menu (spec visual-theme): one radio item per `mermaidAnimator.theme.mode` value.
- * Choosing an unchecked item asks the host to write the setting; the palette follows the host's
- * `settings/changed`.
+ * Toolbar diagram theme menu (spec visual-theme): one radio item per `mermaidAnimator.theme.diagram`
+ * value, in three groups separated by rules. Choosing an unchecked item asks the host to write the
+ * setting; the drawing follows the host's `settings/changed`, and the controls never change.
  */
-function ThemeMenu({ mode, t, open, setOpen, onSetTheme }: { mode: ThemeMode; t: T; open: boolean; setOpen: (open: boolean) => void; onSetTheme: (message: WebviewMessage) => void }) {
+function ThemeMenu({ theme, t, open, setOpen, onSetTheme }: { theme: DiagramTheme; t: T; open: boolean; setOpen: (open: boolean) => void; onSetTheme: (message: WebviewMessage) => void }) {
   const { anchor, trigger, menu, close, onKeyDown } = useMenu(open, setOpen);
-  const choose = (chosen: ThemeMode) => {
-    const message = themeMenuMessage(mode, chosen);
+  const choose = (chosen: DiagramTheme) => {
+    const message = themeMenuMessage(theme, chosen);
     if (message) onSetTheme(message);
     close();
   };
@@ -455,8 +456,8 @@ function ThemeMenu({ mode, t, open, setOpen, onSetTheme }: { mode: ThemeMode; t:
         ref={trigger}
         type="button"
         class="ma-button"
-        aria-label={t('toolbar.theme')}
-        title={t('toolbar.theme')}
+        aria-label={t('toolbar.diagramTheme')}
+        title={t('toolbar.diagramTheme')}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
@@ -464,15 +465,25 @@ function ThemeMenu({ mode, t, open, setOpen, onSetTheme }: { mode: ThemeMode; t:
         <span class="codicon codicon-symbol-color" aria-hidden="true" />
       </button>
       {open && (
-        <div ref={menu} class="ma-popover ma-menu ma-menu--theme" role="menu" aria-label={t('toolbar.theme')} onKeyDown={onKeyDown}>
-          {THEME_MENU.map((item) => {
-            const checked = item.mode === mode;
-            return (
-              <button key={item.mode} type="button" role="menuitemradio" aria-checked={checked} class={`ma-menu__item${checked ? ' ma-menu__item--checked' : ''}`} onClick={() => choose(item.mode)}>
-                {t(item.label)}
-              </button>
-            );
-          })}
+        <div ref={menu} class="ma-popover ma-menu ma-menu--theme" role="menu" aria-label={t('toolbar.diagramTheme')} onKeyDown={onKeyDown}>
+          {DIAGRAM_THEME_MENU.map((group, g) => (
+            <Fragment key={group.heading}>
+              {g > 0 && <div class="ma-menu__rule" />}
+              <div role="group" aria-label={t(group.heading)}>
+                <div class="ma-menu__heading" aria-hidden="true">
+                  {t(group.heading)}
+                </div>
+                {group.items.map((item) => {
+                  const checked = item.theme === theme;
+                  return (
+                    <button key={item.theme} type="button" role="menuitemradio" aria-checked={checked} class={`ma-menu__item${checked ? ' ma-menu__item--checked' : ''}`} onClick={() => choose(item.theme)}>
+                      {t(item.label)}
+                    </button>
+                  );
+                })}
+              </div>
+            </Fragment>
+          ))}
         </div>
       )}
     </div>
@@ -554,7 +565,7 @@ export function App({ state, controller, mountCanvas, onSelectDiagram, onExport,
           <IconButton icon="export" label={t('toolbar.export')} onClick={() => ui.set({ exportMenu: !ui.exportMenu })} disabled={!controller} />
           {ui.exportMenu && !controller && <ExportMenu t={t} onExport={onExport} close={() => ui.set({ exportMenu: false })} />}
         </div>
-        <ThemeMenu mode={state.settings.themeMode} t={t} open={ui.themeMenu} setOpen={(themeMenu) => ui.set({ themeMenu })} onSetTheme={onSetTheme} />
+        <ThemeMenu theme={resolveDiagramTheme(state.settings.diagramTheme)} t={t} open={ui.themeMenu} setOpen={(themeMenu) => ui.set({ themeMenu })} onSetTheme={onSetTheme} />
         <IconButton icon="keyboard" label={t('toolbar.shortcuts')} onClick={() => ui.set({ shortcuts: true })} />
         <IconButton icon="settings-gear" label={t('toolbar.settings')} onClick={onOpenSettings} />
       </header>

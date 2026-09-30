@@ -202,7 +202,9 @@ body {
   font-weight: 560;
 }
 
-[data-palette$='-hc'] .ma-button {
+[data-ui$='-hc'] .ma-button,
+[data-ui='vscode'] body.vscode-high-contrast .ma-button,
+[data-ui='vscode'] body.vscode-high-contrast-light .ma-button {
   border-color: var(--ma-rule);
 }
 
@@ -342,6 +344,20 @@ body {
   background: var(--ma-hairline);
 }
 
+/* Diagram theme menu (spec visual-theme): three headed groups; scrolls in a short panel. */
+.ma-menu--theme {
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
+}
+
+.ma-menu__heading {
+  padding: 2px var(--ma-space-3);
+  color: var(--ma-ink-3);
+  font-size: var(--ma-type-caption);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 /* Canvas overlays */
 .ma-canvas .ma-svg {
   position: absolute;
@@ -445,7 +461,7 @@ body {
   box-shadow: var(--ma-elevation-1);
 }
 
-[data-palette="graphite"] .ma-tooltip {
+[data-ui='graphite'] .ma-tooltip {
   background: var(--ma-surface-sunken);
 }
 
@@ -1231,7 +1247,9 @@ body {
   transform-origin: left center;
 }
 
-[data-palette$='-hc'] .ma-scrubber__range {
+[data-ui$='-hc'] .ma-scrubber__range,
+[data-ui='vscode'] body.vscode-high-contrast .ma-scrubber__range,
+[data-ui='vscode'] body.vscode-high-contrast-light .ma-scrubber__range {
   opacity: 1;
   background: transparent;
   outline: 1px solid var(--ma-accent);
@@ -1793,30 +1811,76 @@ body {
 }
 
 /*
- * Monochrome controls (spec visual-theme): every fill is white, so pressed and checked states are
- * drawn inverted, and hover and menu focus get a black outline instead of a sunken background.
- * Keyboard focus rings keep --ma-focus (the editor's focus colour).
+ * UI theme `vscode` (spec visual-theme: UI theme selection): the controls take the editor's theme
+ * colours. Each token falls back to a second VS Code colour, then to Ivory. The drawing is not
+ * affected: `.ma-views` redefines every token from its own `data-palette`.
  */
-[data-palette='monochrome'] .ma-button:hover:not(:disabled),
-[data-palette='monochrome'] .ma-menu__item:hover,
-[data-palette='monochrome'] .ma-menu__item:focus-visible,
-[data-palette='monochrome'] .ma-segmented__item:hover,
-[data-palette='monochrome'] .ma-inspector__item:hover {
-  outline: 1px solid var(--ma-ink-1);
-  outline-offset: -1px;
+[data-ui='vscode'] {
+  --ma-canvas: var(--vscode-editor-background, #FAF8F3);
+  --ma-surface: var(--vscode-editor-background, #FFFFFF);
+  --ma-surface-sunken: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground, #F2EFE8));
+  --ma-hairline: var(--vscode-panel-border, var(--vscode-widget-border, #E2DDD2));
+  --ma-rule: var(--vscode-panel-border, var(--vscode-widget-border, #C9C2B4));
+  --ma-ink-1: var(--vscode-foreground, #1B1E23);
+  --ma-ink-2: var(--vscode-descriptionForeground, #4F555E);
+  --ma-ink-3: var(--vscode-disabledForeground, #6B7078);
+  --ma-accent: var(--vscode-focusBorder, #1F3B61);
+  --ma-accent-muted: var(--vscode-inputOption-activeBackground, #DCE4EE);
+  --ma-brass: var(--vscode-editorWarning-foreground, #8C6A3A);
+  --ma-sage: var(--vscode-charts-green, #4E6E60);
+  --ma-note-fill: var(--vscode-editorWidget-background, #F5EEDC);
+  --ma-note-rule: var(--vscode-editorWidget-border, #CDB98C);
+  --ma-crimson: var(--vscode-errorForeground, #9E2B2B);
+  --ma-viridian: var(--vscode-testing-iconPassed, #2E6B4F);
+  --ma-elevation-1: 0 2px 8px var(--vscode-widget-shadow, rgb(27 30 35 / 12%));
 }
 
-[data-palette='monochrome'] .ma-button--pressed,
-[data-palette='monochrome'] .ma-button--pressed:hover:not(:disabled),
-[data-palette='monochrome'] .ma-menu__item--checked,
-[data-palette='monochrome'] .ma-segmented__item--checked,
-[data-palette='monochrome'] .ma-segmented__item--checked:hover,
-[data-palette='monochrome'] .ma-inspector__item[aria-pressed='true'] {
-  background: var(--ma-ink-1);
-  color: var(--ma-canvas);
+[data-ui='vscode'] body.vscode-high-contrast,
+[data-ui='vscode'] body.vscode-high-contrast-light {
+  --ma-border-width: 2px;
+  --ma-hairline: var(--vscode-contrastBorder, #6FC3DF);
+  --ma-rule: var(--vscode-contrastBorder, #6FC3DF);
+  --ma-focus: var(--vscode-contrastActiveBorder, #F38518);
+  --ma-elevation-1: none;
 }
 
-[data-palette='monochrome'] .ma-menu__item--checked:focus-visible {
-  outline: 2px solid var(--ma-focus);
-  outline-offset: -2px;
+/* Pressed toggles and checked items look like VS Code's own toggles (inputOption.active*). */
+[data-ui='vscode'] .ma-button--pressed,
+[data-ui='vscode'] .ma-button--pressed:hover:not(:disabled),
+[data-ui='vscode'] .ma-segmented__item--checked,
+[data-ui='vscode'] .ma-segmented__item--checked:hover {
+  background: var(--vscode-inputOption-activeBackground, #DCE4EE);
+  color: var(--vscode-inputOption-activeForeground, #1F3B61);
+  border-color: var(--vscode-inputOption-activeBorder, transparent);
+}
+
+[data-ui='vscode'] .ma-button:hover:not(:disabled) {
+  background: var(--vscode-toolbar-hoverBackground, #F2EFE8);
+}
+
+/* Menus and popovers use the editor's menu colours. */
+[data-ui='vscode'] .ma-popover {
+  background: var(--vscode-menu-background, var(--vscode-editorWidget-background, #FFFFFF));
+  color: var(--vscode-menu-foreground, var(--vscode-foreground, #1B1E23));
+  border-color: var(--vscode-menu-border, var(--vscode-widget-border, #C9C2B4));
+}
+
+[data-ui='vscode'] .ma-menu__item {
+  color: var(--vscode-menu-foreground, var(--vscode-foreground, #1B1E23));
+}
+
+[data-ui='vscode'] .ma-menu__item:hover,
+[data-ui='vscode'] .ma-menu__item:focus-visible {
+  background: var(--vscode-menu-selectionBackground, #DCE4EE);
+  color: var(--vscode-menu-selectionForeground, var(--vscode-foreground, #1B1E23));
+}
+
+[data-ui='vscode'] .ma-menu__item--checked {
+  color: var(--vscode-menu-foreground, var(--vscode-foreground, #1B1E23));
+  box-shadow: inset 2px 0 0 var(--vscode-focusBorder, #1F3B61);
+}
+
+/* The drawing's own canvas (spec visual-theme: diagram theme); overlays in .ma-canvas keep the UI colours. */
+.ma-views {
+  background: var(--ma-canvas);
 }

@@ -45,7 +45,7 @@ export function LaserPointer({ reducedMotion }: { reducedMotion: boolean }) {
     if (!el || !ctx) return;
     const points: { x: number; y: number }[] = [];
     let frame = 0;
-    const brass = getComputedStyle(document.documentElement).getPropertyValue('--ma-brass').trim() || '#8C6A3A';
+    const brass = getComputedStyle(document.querySelector('.ma-views') ?? document.documentElement).getPropertyValue('--ma-brass').trim() || '#8C6A3A';
     const resize = () => {
       const rect = el.getBoundingClientRect();
       const ratio = window.devicePixelRatio || 1;

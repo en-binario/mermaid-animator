@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { hostMessage, PROTOCOL_VERSION, validateHostMessage, validateWebviewMessage, webviewMessage } from '../src/index';
 
-const settings = { themeMode: 'auto' as const };
+const settings = { diagramTheme: 'auto' as const, uiTheme: 'vscode' as const };
 const origin = { line: 0, character: 0 };
 
 describe('host messages', () => {
@@ -23,8 +23,8 @@ describe('host messages', () => {
     hostMessage('presentation/state', { on: false }),
     hostMessage('command', { action: 'setView', args: { view: 'split' } }),
     hostMessage('document/load', { uri: 'u', fileName: 'a.md', source: 's', version: 1, origin, layout: { A: { x: 10, y: 20 } } }),
-    hostMessage('init', { settings: { themeMode: 'monochrome' }, themeKind: 'dark', reduceMotion: null, locale: 'en', strings: {} }),
-    hostMessage('settings/changed', { settings: { themeMode: 'monochrome' }, themeKind: 'light', reduceMotion: false }),
+    hostMessage('init', { settings: { diagramTheme: 'monochrome', uiTheme: 'vscode' }, themeKind: 'dark', reduceMotion: null, locale: 'en', strings: {} }),
+    hostMessage('settings/changed', { settings: { diagramTheme: 'monochrome', uiTheme: 'vscode' }, themeKind: 'light', reduceMotion: false }),
   ];
 
   it.each(valid)('accepts $type', (message) => {
@@ -43,7 +43,7 @@ describe('host messages', () => {
     ['unknown type', { v: 1, type: 'nope', payload: {} }],
     ['missing payload', { v: 1, type: 'document/load' }],
     ['bad field type', { v: 1, type: 'document/update', payload: { source: 1, version: 2, origin } }],
-    ['bad enum', { v: 1, type: 'settings/changed', payload: { settings: { themeMode: 'neon' }, themeKind: 'dark', reduceMotion: null } }],
+    ['bad enum', { v: 1, type: 'settings/changed', payload: { settings: { diagramTheme: 'neon', uiTheme: 'vscode' }, themeKind: 'dark', reduceMotion: null } }],
     ['bad theme kind', { v: 1, type: 'settings/changed', payload: { settings, themeKind: 'sepia', reduceMotion: null } }],
     ['non-string id', { v: 1, id: 3, type: 'document/update', payload: { source: '', version: 1, origin } }],
     ['unknown command', { v: 1, type: 'command', payload: { action: 'explode' } }],
@@ -56,7 +56,7 @@ describe('host messages', () => {
   });
 
   it('keeps extra settings keys for forward compatibility', () => {
-    const message = hostMessage('settings/changed', { settings: { themeMode: 'ivory', future: 1 }, themeKind: 'dark', reduceMotion: false });
+    const message = hostMessage('settings/changed', { settings: { diagramTheme: 'ivory', uiTheme: 'vscode', future: 1 }, themeKind: 'dark', reduceMotion: false });
     expect(validateHostMessage(message).ok).toBe(true);
   });
 });
@@ -75,7 +75,7 @@ describe('webview messages', () => {
     webviewMessage('presentation/toggle', { on: true }),
     webviewMessage('layout/save', { key: 'checkout', positions: { A: { x: 1, y: 2 } } }),
     webviewMessage('settings/open', {}),
-    webviewMessage('theme/set', { mode: 'monochrome' }),
+    webviewMessage('theme/set', { theme: 'forest' }),
   ])('accepts $type', (message) => {
     expect(validateWebviewMessage(message).ok).toBe(true);
   });
@@ -93,18 +93,19 @@ describe('webview messages', () => {
   ])('rejects %s', (_label, value) => {
     expect(validateWebviewMessage(value).ok).toBe(false);
   });
-  // Theme change message matrix (spec host-webview-protocol), validation rows.
+  // Diagram theme change message matrix (spec host-webview-protocol), validation rows.
   it.each([
-    ['an unknown mode', { mode: 'neon' }],
-    ['no mode', {}],
+    ['an unknown theme', { theme: 'sepia' }],
+    ['the old mode payload', { mode: 'monochrome' }],
   ])('rejects theme/set with %s', (_label, payload) => {
     expect(validateWebviewMessage({ v: 1, type: 'theme/set', payload })).toEqual({
       ok: false,
-      error: 'theme/set payload.mode: expected one of auto, ivory, graphite, highContrast, monochrome',
+      error:
+        'theme/set payload.theme: expected one of auto, ivory, graphite, highContrast, default, neutral, dark, forest, base, neo, neo-dark, redux, redux-dark, redux-color, redux-dark-color, monochrome',
     });
   });
 
   it('accepts theme/set with extra payload fields', () => {
-    expect(validateWebviewMessage({ v: 1, type: 'theme/set', payload: { mode: 'ivory', key: 'workbench.colorTheme' } }).ok).toBe(true);
+    expect(validateWebviewMessage({ v: 1, type: 'theme/set', payload: { theme: 'monochrome', ui: 'graphite' } }).ok).toBe(true);
   });
 });

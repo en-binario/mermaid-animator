@@ -6,13 +6,36 @@
 export const PROTOCOL_VERSION = 1;
 
 export type ThemeKind = 'light' | 'dark' | 'highContrast' | 'highContrastLight';
-export type ThemeMode = 'auto' | 'ivory' | 'graphite' | 'highContrast' | 'monochrome';
-/** Every `mermaidAnimator.theme.mode` value, in the toolbar theme menu's order (spec visual-theme). */
-export const THEME_MODES: readonly ThemeMode[] = ['auto', 'ivory', 'graphite', 'highContrast', 'monochrome'];
+/** The Mermaid 12 themes (spec visual-theme: diagram theme selection). */
+export type MermaidTheme = 'default' | 'neutral' | 'dark' | 'forest' | 'base' | 'neo' | 'neo-dark' | 'redux' | 'redux-dark' | 'redux-color' | 'redux-dark-color';
+export const MERMAID_THEMES: readonly MermaidTheme[] = ['default', 'neutral', 'dark', 'forest', 'base', 'neo', 'neo-dark', 'redux', 'redux-dark', 'redux-color', 'redux-dark-color'];
+/** `mermaidAnimator.theme.diagram`: Ink & Ivory, the Mermaid themes and Monochrome. */
+export type DiagramTheme = 'auto' | 'ivory' | 'graphite' | 'highContrast' | MermaidTheme | 'monochrome';
+/** Every diagram theme, in the toolbar menu's order. */
+export const DIAGRAM_THEMES: readonly DiagramTheme[] = ['auto', 'ivory', 'graphite', 'highContrast', ...MERMAID_THEMES, 'monochrome'];
+/** `mermaidAnimator.theme.ui`: the colours of the panel's controls. */
+export type UiTheme = 'vscode' | 'ivory' | 'graphite' | 'highContrast';
+export const UI_THEMES: readonly UiTheme[] = ['vscode', 'ivory', 'graphite', 'highContrast'];
+
+/**
+ * The effective diagram theme: `theme.diagram` when a settings scope sets a valid value, else the
+ * deprecated `theme.mode`, else `auto` (spec visual-theme). Pass `undefined` for an unset key.
+ */
+export function resolveDiagramTheme(diagram: unknown, mode?: unknown): DiagramTheme {
+  if (diagram !== undefined) return (DIAGRAM_THEMES as readonly unknown[]).includes(diagram) ? (diagram as DiagramTheme) : 'auto';
+  return (DIAGRAM_THEMES as readonly unknown[]).includes(mode) ? (mode as DiagramTheme) : 'auto';
+}
+
+/** The effective UI theme: a valid `theme.ui` value, else `vscode`. */
+export function resolveUiTheme(value: unknown): UiTheme {
+  return (UI_THEMES as readonly unknown[]).includes(value) ? (value as UiTheme) : 'vscode';
+}
 
 /** Settings the webview needs. Extended by later milestones; unknown keys are ignored. */
 export interface WebviewSettings {
-  themeMode: ThemeMode;
+  /** Resolved by the host: `theme.diagram`, or the deprecated `theme.mode` when it is unset. */
+  diagramTheme: DiagramTheme;
+  uiTheme: UiTheme;
   [key: string]: unknown;
 }
 
@@ -165,8 +188,8 @@ export type WebviewMessage =
   | { v: 1; type: 'export/cancelled'; payload: Record<string, never> }
   /** Open the Settings UI filtered to this extension (spec animator-panel); the host picks the query. */
   | { v: 1; type: 'settings/open'; payload: Record<string, never> }
-  /** The user chose a theme in the toolbar menu; the host writes `mermaidAnimator.theme.mode` (spec visual-theme). */
-  | { v: 1; type: 'theme/set'; payload: { mode: ThemeMode } }
+  /** The user chose a diagram theme in the toolbar menu; the host writes `mermaidAnimator.theme.diagram` (spec visual-theme). */
+  | { v: 1; type: 'theme/set'; payload: { theme: DiagramTheme } }
   | { v: 1; type: 'export/player'; payload: PlayerExportPayload }
   /** Merge a patch into this diagram's sidecar entry (Save Topology Layout, Save as Diagram Defaults). */
   | { v: 1; type: 'sidecar/write'; payload: { patch: SidecarEntry } }
@@ -208,7 +231,7 @@ const shape = (fields: Record<string, Guard>): Guard => (v) => {
 };
 
 const themeKind = oneOf('light', 'dark', 'highContrast', 'highContrastLight');
-const settings = shape({ themeMode: oneOf(...THEME_MODES) });
+const settings = shape({ diagramTheme: oneOf(...DIAGRAM_THEMES), uiTheme: oneOf(...UI_THEMES) });
 const position = shape({ line: num, character: num });
 const range = shape({ startLine: num, startCol: num, endLine: num, endCol: num });
 const arrayOf = (g: Guard): Guard => (v) => {
@@ -254,7 +277,7 @@ const webviewPayloads: Record<WebviewMessageType, Guard> = {
   'export/progress': shape({ fraction: num, phase: str }),
   'export/cancelled': record,
   'settings/open': record,
-  'theme/set': shape({ mode: oneOf(...THEME_MODES) }),
+  'theme/set': shape({ theme: oneOf(...DIAGRAM_THEMES) }),
   'export/player': shape({ suggestedName: str, title: str, data: str, theme: oneOf('light', 'dark', 'auto', 'monochrome') }),
   'sidecar/write': shape({ patch: sidecarEntry }),
   'sidecar/unresolved': shape({ entries: arrayOf(shape({ section: oneOf('captions', 'chapters'), key: str })) }),

@@ -69,10 +69,10 @@ describe('Settings access', () => {
   });
 });
 
-describe('Theme menu (theme/set)', () => {
+describe('Diagram theme menu (theme/set) and the two themes', () => {
   const section = () => vscode.workspace.getConfiguration('mermaidAnimator');
-  const themeMode = () => section().inspect<string>('theme.mode');
-  const themeOf = (m: HostMessage) => (m.payload as { settings: { themeMode: string } }).settings.themeMode;
+  const inspect = (key: string) => section().inspect<string>(key);
+  const settingsOf = (m: HostMessage) => (m.payload as { settings: { diagramTheme: string; uiTheme: string } }).settings;
 
   async function openPanel(name: string): Promise<AnimatorPanel> {
     const { panels } = await api();
@@ -92,58 +92,66 @@ describe('Theme menu (theme/set)', () => {
   }
 
   async function reset(): Promise<void> {
-    await section().update('theme.mode', undefined, vscode.ConfigurationTarget.Global);
-    await section().update('theme.mode', undefined, vscode.ConfigurationTarget.Workspace);
+    for (const key of ['theme.diagram', 'theme.mode', 'theme.ui']) {
+      await section().update(key, undefined, vscode.ConfigurationTarget.Global);
+      await section().update(key, undefined, vscode.ConfigurationTarget.Workspace);
+    }
   }
 
+  beforeEach(reset);
   afterEach(async () => {
     await reset();
     await closeAll();
   });
 
-  // Theme menu choice matrix (spec visual-theme), host side: where the chosen value is written.
-  for (const [item, before, mode] of [
-    ['Follow editor theme', 'graphite', 'auto'],
-    ['Ivory', 'graphite', 'ivory'],
-    ['Graphite', 'ivory', 'graphite'],
-    ['High contrast', 'graphite', 'highContrast'],
-    ['Monochrome', 'graphite', 'monochrome'],
+  it('carries both themes, resolving an unset theme.diagram from theme.mode', async () => {
+    await section().update('theme.mode', 'graphite', vscode.ConfigurationTarget.Global);
+    const panel = await openPanel('flow.mmd');
+    const init = nextPost(panel, (m) => m.type === 'init');
+    await panel.receiveForTest({ v: 1, type: 'ready', payload: { protocol: 1 } });
+    assert.deepEqual(
+      { diagramTheme: settingsOf(await init).diagramTheme, uiTheme: settingsOf(await init).uiTheme },
+      { diagramTheme: 'graphite', uiTheme: 'vscode' },
+    );
+  });
+
+  // Diagram theme menu choice matrix (spec visual-theme), host side: where the chosen value is written.
+  for (const [row, workspaceKey, before, theme, target] of [
+    ['R2', undefined, 'auto', 'forest', 'user'],
+    ['R3', undefined, 'forest', 'monochrome', 'user'],
+    ['R4', undefined, 'forest', 'auto', 'user'],
+    ['R5', 'theme.diagram', 'ivory', 'dark', 'workspace'],
+    ['R6', 'theme.mode', 'ivory', 'neutral', 'workspace'],
   ] as const) {
-    it(`writes ${mode} to the user settings when ${item} is chosen`, async () => {
-      await section().update('theme.mode', before, vscode.ConfigurationTarget.Global);
+    it(`writes ${theme} to the ${target} settings${workspaceKey ? ` when the workspace defines ${workspaceKey}` : ''} (${row})`, async () => {
+      if (workspaceKey) await section().update(workspaceKey, before, vscode.ConfigurationTarget.Workspace);
+      else await section().update('theme.diagram', before, vscode.ConfigurationTarget.Global);
       const panel = await openPanel('flow.mmd');
-      const changed = nextPost(panel, (m) => m.type === 'settings/changed' && themeOf(m) === mode);
-      await panel.receiveForTest({ v: 1, type: 'theme/set', payload: { mode } });
+      const changed = nextPost(panel, (m) => m.type === 'settings/changed' && settingsOf(m).diagramTheme === theme);
+      await panel.receiveForTest({ v: 1, type: 'theme/set', payload: { theme } });
       await changed;
-      assert.equal(themeMode()?.globalValue, mode);
-      assert.equal(themeMode()?.workspaceValue, undefined);
+      const written = inspect('theme.diagram');
+      assert.equal(target === 'workspace' ? written?.workspaceValue : written?.globalValue, theme);
+      if (target === 'workspace') assert.equal(written?.globalValue, undefined);
+      if (workspaceKey === 'theme.mode') assert.equal(inspect('theme.mode')?.workspaceValue, before, 'theme.mode is never written');
     });
   }
-
-  it('writes to the workspace settings when the workspace defines the theme mode', async () => {
-    await section().update('theme.mode', 'ivory', vscode.ConfigurationTarget.Workspace);
-    const panel = await openPanel('flow.mmd');
-    const changed = nextPost(panel, (m) => m.type === 'settings/changed' && themeOf(m) === 'monochrome');
-    await panel.receiveForTest({ v: 1, type: 'theme/set', payload: { mode: 'monochrome' } });
-    await changed;
-    assert.equal(themeMode()?.workspaceValue, 'monochrome');
-    assert.equal(themeMode()?.globalValue, undefined);
-  });
 
   it('switches every open panel', async () => {
     const first = await openPanel('flow.mmd');
     const second = await openPanel('completions.mmd');
-    const both = [first, second].map((p) => nextPost(p, (m) => m.type === 'settings/changed' && themeOf(m) === 'monochrome'));
-    await second.receiveForTest({ v: 1, type: 'theme/set', payload: { mode: 'monochrome' } });
-    await Promise.all(both);
+    const both = [first, second].map((p) => nextPost(p, (m) => m.type === 'settings/changed' && settingsOf(m).diagramTheme === 'forest'));
+    await second.receiveForTest({ v: 1, type: 'theme/set', payload: { theme: 'forest' } });
+    for (const message of await Promise.all(both)) assert.equal(settingsOf(message).uiTheme, 'vscode');
   });
 
-  // Theme change message matrix (spec host-webview-protocol).
-  for (const [label, payload] of [
-    ['an unknown mode', { mode: 'neon' }],
-    ['no mode', {}],
+  // Diagram theme change message matrix (spec host-webview-protocol).
+  const REJECTED = 'Ignored invalid webview message: theme/set payload.theme: expected one of auto, ivory, graphite, highContrast, default, neutral, dark, forest, base, neo, neo-dark, redux, redux-dark, redux-color, redux-dark-color, monochrome';
+  for (const [row, payload] of [
+    ['R1', { theme: 'sepia' }],
+    ['R2', { mode: 'monochrome' }],
   ] as const) {
-    it(`ignores and logs theme/set with ${label}`, async () => {
+    it(`ignores and logs an invalid theme/set (${row})`, async () => {
       const panel = await openPanel('flow.mmd');
       const output = (panel as unknown as { output: vscode.LogOutputChannel }).output;
       const warnings: string[] = [];
@@ -153,33 +161,48 @@ describe('Theme menu (theme/set)', () => {
         const quiet = silent(panel, (m) => m.type === 'settings/changed');
         panel.receiveRawForTest({ v: 1, type: 'theme/set', payload });
         assert.ok(await quiet, 'no settings/changed');
-        assert.deepEqual(warnings, ['Ignored invalid webview message: theme/set payload.mode: expected one of auto, ivory, graphite, highContrast, monochrome']);
-        assert.equal(themeMode()?.globalValue, undefined);
+        assert.deepEqual(warnings, [REJECTED]);
+        assert.equal(inspect('theme.diagram')?.globalValue, undefined);
       } finally {
         output.warn = warn;
       }
     });
   }
 
-  it('writes monochrome and sends it to the panel', async () => {
+  it('writes forest and sends it to the panel (R3)', async () => {
     const panel = await openPanel('flow.mmd');
     const changed = nextPost(panel, (m) => m.type === 'settings/changed');
-    await panel.receiveForTest({ v: 1, type: 'theme/set', payload: { mode: 'monochrome' } });
-    assert.equal(themeOf(await changed), 'monochrome');
-    assert.equal(themeMode()?.globalValue, 'monochrome');
+    await panel.receiveForTest({ v: 1, type: 'theme/set', payload: { theme: 'forest' } });
+    assert.equal(settingsOf(await changed).diagramTheme, 'forest');
+    assert.equal(inspect('theme.diagram')?.globalValue, 'forest');
   });
 
-  it('ignores other payload fields and writes no other setting', async () => {
-    const colorTheme = vscode.workspace.getConfiguration('workbench').inspect('colorTheme');
+  it('ignores other payload fields and never writes theme.ui (R4)', async () => {
+    await section().update('theme.diagram', 'auto', vscode.ConfigurationTarget.Global);
+    const panel = await openPanel('flow.mmd');
+    const changed = nextPost(panel, (m) => m.type === 'settings/changed' && settingsOf(m).diagramTheme === 'monochrome');
+    await panel.receiveForTest({ v: 1, type: 'theme/set', payload: { theme: 'monochrome', ui: 'graphite' } } as never);
+    assert.equal(settingsOf(await changed).uiTheme, 'vscode');
+    assert.equal(inspect('theme.ui')?.globalValue, undefined);
+  });
+
+  // Live theme change matrix (spec visual-theme), host rows: the deprecated theme.mode.
+  it('follows a theme.mode change while theme.diagram is unset (R5)', async () => {
     const panel = await openPanel('flow.mmd');
     const changed = nextPost(panel, (m) => m.type === 'settings/changed');
-    await panel.receiveForTest({ v: 1, type: 'theme/set', payload: { mode: 'ivory', key: 'workbench.colorTheme' } } as never);
-    assert.equal(themeOf(await changed), 'ivory');
-    assert.equal(themeMode()?.globalValue, 'ivory');
-    assert.deepEqual(vscode.workspace.getConfiguration('workbench').inspect('colorTheme'), colorTheme);
+    await section().update('theme.mode', 'monochrome', vscode.ConfigurationTarget.Global);
+    assert.equal(settingsOf(await changed).diagramTheme, 'monochrome');
   });
 
-  it('reports a failed write and keeps the palette', async () => {
+  it('ignores a theme.mode change once theme.diagram is set (R6)', async () => {
+    await section().update('theme.diagram', 'forest', vscode.ConfigurationTarget.Global);
+    const panel = await openPanel('flow.mmd');
+    const changed = nextPost(panel, (m) => m.type === 'settings/changed');
+    await section().update('theme.mode', 'monochrome', vscode.ConfigurationTarget.Global);
+    assert.equal(settingsOf(await changed).diagramTheme, 'forest');
+  });
+
+  it('reports a failed write and keeps the drawing', async () => {
     const panel = await openPanel('flow.mmd');
     const errors: string[] = [];
     const workspace = vscode.workspace as { getConfiguration: typeof vscode.workspace.getConfiguration };
@@ -203,13 +226,13 @@ describe('Theme menu (theme/set)', () => {
     }) as typeof showErrorMessage;
     try {
       const quiet = silent(panel, (m) => m.type === 'settings/changed');
-      await panel.receiveForTest({ v: 1, type: 'theme/set', payload: { mode: 'monochrome' } });
-      assert.deepEqual(errors, ['Could not change the Mermaid Animator theme: Unable to write into user settings because the file has unsaved changes.']);
+      await panel.receiveForTest({ v: 1, type: 'theme/set', payload: { theme: 'forest' } });
+      assert.deepEqual(errors, ['Could not change the Mermaid Animator diagram theme: Unable to write into user settings because the file has unsaved changes.']);
       assert.ok(await quiet, 'no settings/changed');
     } finally {
       workspace.getConfiguration = getConfiguration;
       window.showErrorMessage = showErrorMessage;
     }
-    assert.equal(themeMode()?.globalValue, undefined);
+    assert.equal(inspect('theme.diagram')?.globalValue, undefined);
   });
 });

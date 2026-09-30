@@ -6,6 +6,7 @@
 import interLatin from '@fontsource-variable/inter/files/inter-latin-wght-normal.woff2';
 import interLatinExt from '@fontsource-variable/inter/files/inter-latin-ext-wght-normal.woff2';
 import { PALETTES, SVG_NS, type PaletteName } from '@mermaid-animator/renderer';
+import { diagramPalette } from './palette';
 
 export interface Drawing {
   svg: SVGSVGElement;
@@ -56,7 +57,8 @@ export function serializeSvg(drawing: Drawing, options: ExportOptions): string {
   host.setAttribute('aria-hidden', 'true');
   host.className = 'ma-export-host';
   // The token block of the export palette redefines the --ma-* colours for this subtree only.
-  if (options.palette) host.dataset.palette = options.palette;
+  // Always a drawing scope: without it the host would take the controls' (UI theme) colours.
+  host.dataset.palette = options.palette ?? diagramPalette.value;
   host.appendChild(svg);
   document.body.appendChild(host);
   try {
@@ -99,7 +101,7 @@ export function serializeSvg(drawing: Drawing, options: ExportOptions): string {
     bg.setAttribute('y', String(-pad));
     bg.setAttribute('width', '100%');
     bg.setAttribute('height', '100%');
-    bg.setAttribute('fill', options.palette ? PALETTES[options.palette].canvas : getComputedStyle(document.documentElement).getPropertyValue('--ma-canvas').trim() || '#FAF8F3');
+    bg.setAttribute('fill', PALETTES[options.palette ?? diagramPalette.value].canvas);
     svg.insertBefore(bg, style.nextSibling);
   }
   return `<?xml version="1.0" encoding="UTF-8"?>\n${new XMLSerializer().serializeToString(svg)}`;
