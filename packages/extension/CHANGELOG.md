@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.1.0 — 2026-09-30
+
 - **Added — diagram themes.** The diagram now has its own theme, `mermaidAnimator.theme.diagram`, with the Ink & Ivory themes (*Follow editor theme*, *Ivory*, *Graphite*, *High contrast*), Mermaid's own themes (*Default*, *Neutral*, *Dark*, *Forest*, *Base*, *Neo*, *Neo dark*, *Redux*, *Redux dark*, *Redux color*, *Redux dark color*) and *Monochrome*. Mermaid themes also colour the sequence diagrams and topology view the extension draws itself. The *Diagram theme* button in the panel toolbar changes it (saved in the workspace settings if the workspace sets it, otherwise in your user settings) and every open panel switches at once. The new setting `mermaidAnimator.theme.ui` sets the colours of the panel's controls.
 - **Changed:** the panel's controls (toolbar, menus, inspector, transport) follow the VS Code theme by default, and no longer change with the diagram's theme. Set `mermaidAnimator.theme.ui` to `ivory`, `graphite` or `highContrast` for the previous Ink & Ivory look.
 - **Deprecated:** `mermaidAnimator.theme.mode`. Use `mermaidAnimator.theme.diagram`; `theme.mode` still sets the diagram theme while `theme.diagram` is not set.
