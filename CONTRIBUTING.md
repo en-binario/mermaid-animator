@@ -36,6 +36,14 @@ The extension follows Semantic Versioning, and the release level comes from the 
 - `npm run version:check` validates the entries, checks that the manifest, the lockfile and the CHANGELOG agree on the version, and prints the pending release. `npm test` runs it too.
 - Never edit the extension's `version` by hand; `npm run version:bump` applies a release.
 
+## Documentation site
+
+The user documentation at `https://mermaid-animator.enbinario.com` lives in [site/](site/README.md) (Docusaurus, its
+own npm project). Its settings, commands and changelog pages are generated from `packages/extension/package.json`,
+`package.nls.json` and `CHANGELOG.md` on every build, so they need no edit. Its guide pages (`site/docs/`) are written
+by hand: when a change alters what a page describes, update the page in the same change. The site deploys when a `v*`
+tag is pushed.
+
 ## Design
 
 Visual work follows the Ink & Ivory design system (spec §9): colours only from tokens, hairline strokes, no overshoot in the Formal motion profile, and the design QA checklist in §9.11.

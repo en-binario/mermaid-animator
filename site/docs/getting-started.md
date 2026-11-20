@@ -1,0 +1,61 @@
+---
+title: Getting started
+description: Install Mermaid Animator and open your first animated Mermaid diagram from Markdown, a .mmd file, the Explorer or the Mermaid Diagrams view.
+---
+
+# Getting started
+
+## Install
+
+The extension ID is `enbinario.mermaid-animator`.
+
+**From a VSIX file:** download `mermaid-animator.vsix` from the
+[GitHub releases](https://github.com/en-binario/mermaid-animator/releases), then in VS Code open the **Extensions**
+view, click `⋯` and choose **Install from VSIX…**, or run:
+
+```bash
+code --install-extension mermaid-animator.vsix
+```
+
+**From the VS Code Marketplace or Open VSX**, once it's published: search for **Mermaid Animator** in the Extensions
+view.
+
+## Open a diagram
+
+| Where | How |
+|---|---|
+| Markdown | Click **▶ Animate** above any ` ```mermaid ` block |
+| `.mmd` / `.mermaid` files | Click the ▶ button in the editor title bar, or run **Mermaid Animator: Open Animated Preview to the Side** (`Ctrl+K Alt+M`, `Cmd+K Alt+M` on macOS) |
+| Explorer | Right-click a `.md`, `.mdx`, `.mmd` or `.mermaid` file → **Animate Mermaid Diagram** |
+| Several diagrams in one file | **Animate All Diagrams in File**, or switch diagrams from the panel toolbar |
+| Every diagram in the workspace | The **Mermaid Diagrams** view in the Explorer |
+
+### The Mermaid Diagrams view
+
+The **Mermaid Diagrams** view in the Explorer lists each file with its diagrams, by title, `@id` or first line, with a
+type icon. Click a diagram to animate it; its context menu offers *Open Source* and *Export…*, and the title bar has
+*Filter by Diagram Type…* and *Refresh*.
+
+It indexes the files of
+[`mermaidAnimator.files.include`](reference/settings.md#mermaidanimator-files-include), honours `files.exclude` and
+`search.exclude`, updates as files are saved, and stops after
+[`mermaidAnimator.diagramsView.maxFiles`](reference/settings.md#mermaidanimator-diagramsview-maxfiles) files.
+
+## Your first animation
+
+1. Open a Markdown file with a sequence diagram and click **▶ Animate**. The panel opens beside the editor with the
+   complete diagram: that's step 0, the overview.
+2. Press `Space` to play, or `→` and `←` to step. Drag the scrubber to jump anywhere.
+3. Press `T` for the topology view and `S` for split view.
+4. Edit a message label in the source: the panel redraws and keeps your step.
+5. Press `E` to export a GIF or an animated SVG.
+
+**New here?** *Help → Get Started* has the walkthrough **Get started with Mermaid Animator**: open a sample, step
+through it, switch views, add an annotation and export.
+
+## Next steps
+
+- What each control does: [Playing a diagram](guide/playback.md) and [Keyboard shortcuts](guide/keyboard.md).
+- Tell a story with [captions and chapters](guide/narrate-and-present.md#captions-and-chapters), then
+  [present it](guide/narrate-and-present.md#presentation).
+- Fine-tune one diagram with [annotations](authoring/annotations.md).

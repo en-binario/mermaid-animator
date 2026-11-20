@@ -1,0 +1,112 @@
+/*
+ * Mermaid Animator site theme on top of Docusaurus's Infima, from the extension's Ink & Ivory tokens
+ * (packages/renderer/src/tokens.css): Ivory in light mode, Graphite in dark mode. Every text colour meets WCAG 2.2 AA
+ * on its background.
+ */
+:root {
+  --ma-canvas: #faf8f3;
+  --ma-surface: #ffffff;
+  --ma-surface-sunken: #f2efe8;
+  --ma-hairline: #e2ddd2;
+  --ma-rule: #c9c2b4;
+  --ma-ink-1: #1b1e23;
+  --ma-ink-2: #4f555e;
+  --ma-brass: #7a5b2f;
+  --ma-serif: 'Source Serif 4', 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+
+  --ifm-color-primary: #1f3b61;
+  --ifm-color-primary-dark: #1c3557;
+  --ifm-color-primary-darker: #1a3252;
+  --ifm-color-primary-darkest: #152944;
+  --ifm-color-primary-light: #22416b;
+  --ifm-color-primary-lighter: #244470;
+  --ifm-color-primary-lightest: #294d7e;
+  --ifm-background-color: #faf8f3;
+  --ifm-background-surface-color: #ffffff;
+  --ifm-font-color-base: #1b1e23;
+  --ifm-toc-border-color: #e2ddd2;
+  --ifm-font-family-base: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+  --ifm-font-family-monospace: ui-monospace, SFMono-Regular, 'Cascadia Code', Menlo, Consolas, monospace;
+  --ifm-heading-font-family: var(--ma-serif);
+  --ifm-code-font-size: 90%;
+  --ifm-navbar-shadow: none;
+  --docusaurus-highlighted-code-line-bg: rgb(31 59 97 / 10%);
+}
+
+[data-theme='dark'] {
+  --ma-canvas: #121417;
+  --ma-surface: #1a1d21;
+  --ma-surface-sunken: #0e1013;
+  --ma-hairline: #2a2e34;
+  --ma-rule: #3a3f47;
+  --ma-ink-1: #ece9e3;
+  --ma-ink-2: #b3b6bc;
+  --ma-brass: #d4b27c;
+
+  --ifm-color-primary: #9dbce3;
+  --ifm-color-primary-dark: #85acdc;
+  --ifm-color-primary-darker: #79a4d8;
+  --ifm-color-primary-darkest: #548bcd;
+  --ifm-color-primary-light: #b5ccea;
+  --ifm-color-primary-lighter: #c1d4ee;
+  --ifm-color-primary-lightest: #e5edf8;
+  --ifm-background-color: #121417;
+  --ifm-background-surface-color: #1a1d21;
+  --ifm-font-color-base: #ece9e3;
+  --ifm-toc-border-color: #2a2e34;
+  --docusaurus-highlighted-code-line-bg: rgb(157 188 227 / 14%);
+}
+
+.navbar {
+  border-bottom: 1px solid var(--ma-hairline);
+}
+
+.navbar__logo img {
+  border-radius: 6px;
+}
+
+/* Buttons on the light navy of dark mode get dark text. */
+[data-theme='dark'] .button--primary {
+  --ifm-button-color: #121417;
+}
+
+/* Links in running text are underlined, not told apart by colour alone (WCAG 1.4.1). */
+.markdown a,
+.footer__copyright a {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.footer__copyright a {
+  color: var(--ifm-footer-link-color);
+}
+
+kbd {
+  font-size: 0.85em;
+}
+
+/* Mermaid arrows (`->>`, `-->>`) must read as typed: no programming-font ligatures. */
+code,
+pre,
+kbd {
+  font-variant-ligatures: none;
+  font-feature-settings: 'calt' 0, 'liga' 0;
+}
+
+/* Wide tables scroll inside their region (src/rehype-table-region.mjs) instead of widening the page. */
+.table-region {
+  max-width: 100%;
+  overflow-x: auto;
+  margin-bottom: var(--ifm-spacing-vertical);
+}
+
+.table-region table {
+  display: table;
+  margin-bottom: 0;
+}
+
+.table-region:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 2px;
+}

@@ -16,6 +16,7 @@ A VS Code extension that plays the Mermaid diagrams already in your repository a
 | `packages/webview` | Preact application inside the animator webview, plus a browser harness. |
 | `packages/extension` | The VS Code extension (manifest, host code, integration tests). |
 | `scripts/` | Build, type-check, harness server and icon generator. |
+| `site/` | The documentation site, `mermaid-animator.enbinario.com` (Docusaurus; see [site/README.md](site/README.md)). |
 
 ## Development
 

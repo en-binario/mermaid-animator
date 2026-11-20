@@ -9,7 +9,7 @@ const nodeBuiltins = [
 
 export default tseslint.config(
   {
-    ignores: ['**/dist/**', '**/out-test/**', '.playwright-mcp/**', '**/node_modules/**', '**/.vscode-test/**', '**/coverage/**', 'openspec/**', '.claude/**'],
+    ignores: ['site/**', '**/dist/**', '**/out-test/**', '.playwright-mcp/**', '**/node_modules/**', '**/.vscode-test/**', '**/coverage/**', 'openspec/**', '.claude/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
