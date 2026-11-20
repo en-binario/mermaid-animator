@@ -1,7 +1,13 @@
+import { readFileSync } from 'node:fs';
 import type { Config } from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 import { darkCodeTheme, lightCodeTheme } from './src/prism-themes';
 import rehypeTableRegion from './src/rehype-table-region.mjs';
+
+/** The released version, from the extension manifest, for the announcement bar. */
+const { version } = JSON.parse(
+  readFileSync(new URL('../packages/extension/package.json', import.meta.url), 'utf8'),
+) as { version: string };
 
 // The site is served by GitHub Pages at its own custom domain. SITE_URL and BASE_URL let a workflow build it for
 // another location (for example https://en-binario.github.io/mermaid-animator/ before the domain is set up).
@@ -57,6 +63,12 @@ const config: Config = {
 
   themeConfig: {
     image: 'img/social-card.png',
+    announcementBar: {
+      // One id per version, so a new release shows the bar again to people who closed it.
+      id: `release-${version}`,
+      content: `Mermaid Animator ${version} is out. <a href="/docs/changelog/">See what's new</a>.`,
+      isCloseable: true,
+    },
     metadata: [
       { name: 'keywords', content: 'mermaid, vscode extension, sequence diagram, animation, diagrams as code, gif, animated svg' },
     ],
@@ -70,6 +82,7 @@ const config: Config = {
         { to: '/docs/authoring/annotations/', label: 'Annotations', position: 'left' },
         { to: '/docs/reference/settings/', label: 'Settings', position: 'left' },
         { to: '/docs/changelog/', label: 'Changelog', position: 'left' },
+        { href: 'https://enbinario.com', label: 'EnBinario', position: 'right' },
         { href: repo, label: 'GitHub', position: 'right' },
       ],
     },

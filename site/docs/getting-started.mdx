@@ -3,13 +3,19 @@ title: Getting started
 description: Install Mermaid Animator and open your first animated Mermaid diagram from Markdown, a .mmd file, the Explorer or the Mermaid Diagrams view.
 ---
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 # Getting started
 
 ## Install
 
-The extension ID is `enbinario.mermaid-animator`.
+The extension ID is `enbinario.mermaid-animator`. It works in VS Code 1.95 or later, on the desktop and on the web.
 
-**From a VSIX file:** download `mermaid-animator.vsix` from the
+<Tabs groupId="install">
+<TabItem value="vsix" label="VSIX" default>
+
+Download `mermaid-animator.vsix` from the
 [GitHub releases](https://github.com/en-binario/mermaid-animator/releases), then in VS Code open the **Extensions**
 view, click `⋯` and choose **Install from VSIX…**, or run:
 
@@ -17,8 +23,23 @@ view, click `⋯` and choose **Install from VSIX…**, or run:
 code --install-extension mermaid-animator.vsix
 ```
 
-**From the VS Code Marketplace or Open VSX**, once it's published: search for **Mermaid Animator** in the Extensions
-view.
+</TabItem>
+<TabItem value="marketplace" label="VS Code Marketplace">
+
+Once it's published, search for **Mermaid Animator** in the Extensions view, or run:
+
+```bash
+code --install-extension enbinario.mermaid-animator
+```
+
+</TabItem>
+<TabItem value="openvsx" label="Open VSX">
+
+For VSCodium and other editors that use [Open VSX](https://open-vsx.org): once it's published, search for
+**Mermaid Animator** in the Extensions view.
+
+</TabItem>
+</Tabs>
 
 ## Open a diagram
 
