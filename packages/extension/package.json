@@ -5,6 +5,15 @@
   "version": "1.1.0",
   "publisher": "enbinario",
   "license": "MIT",
+  "homepage": "https://mermaid-animator.enbinario.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/en-binario/mermaid-animator",
+    "directory": "packages/extension"
+  },
+  "bugs": {
+    "url": "https://github.com/en-binario/mermaid-animator/issues"
+  },
   "private": true,
   "engines": {
     "vscode": "^1.95.0"
