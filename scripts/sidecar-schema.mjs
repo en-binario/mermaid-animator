@@ -31,7 +31,7 @@ for (const key of keys) {
 const stepKey = { type: 'string', minLength: 1, description: 'A step: `#<step number>`, an `@step-id` slug, a content step id or a structural id.' };
 const schema = {
   $schema: 'http://json-schema.org/draft-07/schema#',
-  $id: 'https://enbinario.dev/schemas/mermaid-animator/animator.schema.json',
+  $id: 'https://mermaid-animator.enbinario.com/schemas/animator.schema.json',
   title: 'Mermaid Animator sidecar',
   description: 'Animation settings, narration and layout for the Mermaid diagrams of the file this sidecar sits beside (`<file>.animator.json`).',
   type: 'object',
