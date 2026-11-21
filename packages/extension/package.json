@@ -4,7 +4,10 @@
   "description": "%description%",
   "version": "1.1.0",
   "publisher": "enbinario",
+  "author": "Jhon Tapia - enbinario.com",
   "license": "MIT",
+  "pricing": "Free",
+  "qna": "marketplace",
   "homepage": "https://mermaid-animator.enbinario.com",
   "repository": {
     "type": "git",
@@ -19,8 +22,7 @@
     "vscode": "^1.95.0"
   },
   "categories": [
-    "Visualization",
-    "Other"
+    "Visualization"
   ],
   "keywords": [
     "mermaid",
